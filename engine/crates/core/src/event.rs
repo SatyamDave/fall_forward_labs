@@ -59,6 +59,11 @@ pub enum OrderEvent {
         client_id: ClientOrderId,
         ts: Timestamp,
     },
+    /// The venue refused a cancel, usually because the order already filled.
+    CancelRejected {
+        client_id: ClientOrderId,
+        ts: Timestamp,
+    },
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
