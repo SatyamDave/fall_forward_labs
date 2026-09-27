@@ -40,9 +40,14 @@ audit:
     set -euo pipefail
     cd {{engine}}
     if command -v cargo-deny >/dev/null && [ -f deny.toml ]; then cargo deny check; else echo "skip: cargo-deny or engine/deny.toml missing (CI runs it; install with 'cargo install cargo-deny')"; fi
-    if command -v cargo-audit >/dev/null; then cargo audit; else echo "skip: cargo-audit not installed (CI runs it; install with 'cargo install cargo-audit')"; fi
+    if command -v cargo-audit >/dev/null; then cargo audit --deny warnings; else echo "skip: cargo-audit not installed (CI runs it; install with 'cargo install cargo-audit')"; fi
     cd ../{{research}}
     if command -v pip-audit >/dev/null; then uv export --format requirements-txt --no-hashes --quiet | pip-audit --strict -r /dev/stdin; else echo "skip: pip-audit not installed (CI runs it; install with 'uv tool install pip-audit')"; fi
+
+# Install the git pre-commit hook and run every hook once over the whole tree
+precommit:
+    uvx pre-commit install
+    uvx pre-commit run --all-files
 
 # Criterion benchmarks for engine hot paths
 bench:
