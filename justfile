@@ -66,4 +66,13 @@ walkforward name:
 
 # Show untriaged session learnings
 learnings:
-    @echo "not implemented yet: knowledge loop phase 5"
+    #!/usr/bin/env bash
+    set -euo pipefail
+    shopt -s nullglob
+    items=(.claude/learnings/inbox/*.md)
+    echo "${#items[@]} untriaged learning(s) in .claude/learnings/inbox"
+    for f in ${items[@]+"${items[@]}"}; do echo "  $f: $(head -1 "$f" | sed 's/^# //')"; done
+
+# Tests for the Claude Code hooks in .claude/hooks (not part of `test`, which other phases own)
+test-hooks:
+    cd {{research}} && uv run pytest ../tests/hooks -q
