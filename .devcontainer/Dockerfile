@@ -29,12 +29,22 @@ RUN cargo install cargo-deny --locked \
 RUN uv tool install pre-commit
 
 # gitleaks: pinned release binary (v8.30.1, latest as of 2026-09-27 per
-# `gh api repos/gitleaks/gitleaks/releases/latest`), not a moving tag.
-# ponytail: linux_x64 asset only, hardcoded — breaks on an arm64 build host. Switch on
-# `dpkg --print-architecture` (x64/arm64) if this devcontainer needs to run on Apple Silicon
-# without Rosetta/amd64 emulation.
-RUN curl -LsSf -o /tmp/gitleaks.tar.gz \
-        https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_linux_x64.tar.gz \
-    && tar -xzf /tmp/gitleaks.tar.gz -C /usr/local/bin gitleaks \
-    && rm /tmp/gitleaks.tar.gz \
-    && gitleaks version
+# `gh api repos/gitleaks/gitleaks/releases/latest`), not a moving tag. TARGETARCH is set
+# automatically by BuildKit (amd64 on Intel/CI runners, arm64 on Apple Silicon Docker Desktop,
+# which builds arm64 by default) — both linux_x64 and linux_arm64 assets were confirmed to exist
+# for this tag via `gh api repos/gitleaks/gitleaks/releases/tags/v8.30.1`. The checksum is
+# verified against the release's own `gitleaks_8.30.1_checksums.txt`, not just trusted from curl.
+ARG TARGETARCH
+RUN set -eu; \
+    case "${TARGETARCH}" in \
+        amd64) asset=gitleaks_8.30.1_linux_x64.tar.gz ;; \
+        arm64) asset=gitleaks_8.30.1_linux_arm64.tar.gz ;; \
+        *) echo "unsupported TARGETARCH for gitleaks: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac; \
+    cd /tmp; \
+    curl -LsSf -o "${asset}" "https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/${asset}"; \
+    curl -LsSf -o checksums.txt "https://github.com/gitleaks/gitleaks/releases/download/v8.30.1/gitleaks_8.30.1_checksums.txt"; \
+    grep -F "  ${asset}" checksums.txt | sha256sum -c -; \
+    tar -xzf "${asset}" -C /usr/local/bin gitleaks; \
+    rm "${asset}" checksums.txt; \
+    gitleaks version
