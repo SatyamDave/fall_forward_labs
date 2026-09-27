@@ -12,6 +12,7 @@
 - `just walkforward <name>`; `just check` before pushing
 
 ## MUST
+- Each study follows docs/process/research-cycle.md: registered before the outcome is measured, with a baseline, manifest and explicit decision.
 - Point-in-time data only: every join is as-of the decision timestamp; a lookahead test covers each new feature.
 - Validation uses purged, embargoed CV plus walk-forward; no plain k-fold on time series.
 - Reports give deflated Sharpe with the true trial count from `trial_count(...)`, and PBO.
@@ -25,6 +26,7 @@
 - Never edit or delete registry lines; the registry is append-only.
 - No venue credentials or live venue connections from research (root rules 1, 2).
 - Never report a Sharpe without its trial count.
+- Retrospective LLM forecasts on historical data are exploratory only, never evidence; prospective timestamped predictions are primary.
 
 ## Gotchas
 _None yet. Each entry links to the PR or postmortem where it bit us._

@@ -22,7 +22,7 @@ Goal: auditable track record → regulated fund. Read docs/VISION.md once.
 engine/      Rust hot path (core, orderbook, gateway, oms, risk★, strategy-runtime, inference)
 strategies/  One folder per strategy; lifecycle gate status in each README
 research/    Python research; sandbox/ for automated factor discovery (no credentials)
-ml/          Self-learning model stack: train → validate → registry → shadow → promote
+ml/          Planned model pipeline: train → validate → registry → shadow → promote
 backtest/    Fill + latency models, configs, reports
 data/        Schemas, recorders, catalog, data-quality checks
 agents/      Offline swarm orchestration; outputs are PRs and reports only
@@ -45,7 +45,32 @@ just replay | just backtest <cfg> | just paper <strategy> | just learnings
 just fmt | just lint | just walkforward <name>
 ```
 `just` finds the root justfile from any subdirectory, so these work wherever you are.
-Run `just check` before every push; CI runs the same recipe.
+Run `just check` before every push. No CI workflow runs it yet (phase 4 adds `ci.yml`).
+
+## How we work
+- Start every session with docs/NOW.md: the current milestone, next task and blockers. If a task
+  does not serve the milestone, say so and ask before proceeding.
+- Research follows docs/process/research-cycle.md (register before measuring, baseline, leakage-free
+  evaluation, independent re-run, explicit decision). A cycle may end in rejection.
+- Tag material claims VERIFIED / HYPOTHESIS / UNKNOWN / REFUTED with the source, file, test or run.
+  "Not measured" is a valid answer.
+- Report work by stage, never just "done": proposed → implemented → executed →
+  independently checked → promoted.
+- Checkpoint in the PR or docs/NOW.md: what changed, what was actually verified, next runnable action.
+
+## Guidance versus enforcement
+This file is guidance loaded into context; Claude Code does not enforce it, and it does not
+override anyone's personal instructions. Controls that enforce, as of 2026-09-27:
+- Enforced on `main`: nothing. Branch protection and rulesets return HTTP 403 on this private
+  repo's current GitHub plan, so the two-approval rule (rules 3, 4) and required checks are unenforced.
+- Built and tested, not merged: `.claude/settings.json` deny rules plus `guard-secrets.sh` and
+  `guard-protected.sh` hooks (#11, 30 script-level tests; never run in a live session; they bind
+  only Claude Code sessions, not humans or other tools); knowledge scope check (#10, 10 tests);
+  autonomy gate (#3, 23 tests; reports only, cannot be made required without branch protection).
+- Not built yet: CI running `just check`, secret scanning, dependency audit in CI (phase 4, in
+  flight); kill switch (rule 11); replay gate (rule 7); two-person approval; CODEOWNERS (#8, one
+  owner, and it cannot require two reviews).
+Risk limits belong in runtime checks and permission boundaries, not in this text.
 
 ## How to work here
 - Plan multi-step work in docs/plans/ before editing.
