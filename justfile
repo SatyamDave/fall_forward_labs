@@ -67,3 +67,8 @@ walkforward name:
 # Show untriaged session learnings
 learnings:
     @echo "not implemented yet: knowledge loop phase 5"
+
+# Study 0001 (favorite-longshot bias): offline analysis from the saved snapshot, then its checks
+study-0001:
+    cd {{research}} && uv run python studies/0001-favorite-longshot/study.py
+    cd {{research}} && uv run pytest studies/0001-favorite-longshot/tests -q
