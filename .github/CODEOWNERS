@@ -1,0 +1,24 @@
+# CODEOWNERS requests review from the listed owner on a matching PR. It does NOT enforce a
+# review *count* — GitHub only supports "require review from code owners" (one approval), not
+# "require two." The root rule that protected-zone changes need two human approvals is enforced
+# by a branch-protection ruleset (added in the Phase 4 security-pipeline lane), not by this file
+# alone. Treat this file as "who gets pinged," not as the two-approval guarantee.
+
+# Protected zones (root CLAUDE.md rule 3, plus autonomy/** per the bootstrap plan)
+/engine/crates/risk/**              @SatyamDave
+/config/limits/**                   @SatyamDave
+/ops/deploy/**                      @SatyamDave
+/fund/**                            @SatyamDave
+/.github/workflows/**               @SatyamDave
+/.claude/hooks/**                   @SatyamDave
+/.claude/settings.json              @SatyamDave
+/autonomy/**                        @SatyamDave
+
+# Autonomy Phase A additions (T3 per autonomy/POLICY.yaml, PR #3): the gate workflow and the
+# tests that pin its behavior are as sensitive as autonomy/ itself.
+/tests/autonomy/**                  @SatyamDave
+/tests/hooks/**                     @SatyamDave
+/.github/workflows/autonomy-gate.yml @SatyamDave
+
+# Everything else, for now
+*                                    @SatyamDave
