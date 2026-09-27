@@ -1,6 +1,6 @@
 [package]
 name = "qc-replay"
-description = "Replays recorded events through a strategy to reproduce its orders"
+description = "Replays recorded market data through strategy, risk, OMS and a simulated venue"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -12,4 +12,9 @@ workspace = true
 
 [dependencies]
 qc-core.workspace = true
+qc-gateway.workspace = true
+qc-oms.workspace = true
+qc-orderbook.workspace = true
+qc-risk.workspace = true
 qc-strategy-runtime.workspace = true
+toml.workspace = true
