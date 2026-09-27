@@ -11,3 +11,8 @@ publish.workspace = true
 workspace = true
 
 [dependencies]
+qc-core.workspace = true
+serde.workspace = true
+# float_roundtrip parses the exporter's shortest-repr floats back to the identical f64.
+serde_json = { version = "1.0.151", features = ["float_roundtrip"] }
+sha2 = "0.11.0"
