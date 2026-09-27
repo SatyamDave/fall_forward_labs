@@ -28,7 +28,8 @@ deterministic; interfaces, limits and open work are written down. Unmet:
 
 1. No reproducible checkout on `main`; everything sits on 16 open, unreviewed PRs.
 2. `just check` fails at the candidate head (RUF100, #16 combined with #12).
-3. Integration blockers: `docs/NOW.md` (#6 vs #14), split registry (#12 vs #16).
+3. Integration blockers: `docs/NOW.md` (#6 vs #14), split registry (#12 vs #16), and a trivy
+   HIGH (DS-0002, root user in `.devcontainer/Dockerfile`) that fails `security` on the combined tree.
 4. Study 0001 cannot be reproduced from a clean clone (raw data gitignored, not stored elsewhere).
 5. Rust toolchain floats on `stable` against ADR-0004's pin; devcontainer never built.
 6. Hook, knowledge, autonomy and study suites run outside `just check` and CI.
@@ -73,8 +74,14 @@ CI evidence exists only for #13's own head (`4144991`): `ci` (rust, python, miri
 passed in run 36357795286; semgrep, trivy, osv-scanner and checkov passed in run 36357795901
 (codeql and sbom skipped by design: `vars.CODE_SCANNING` is unset); `code-review` and
 `security-review` failed in run 36357795340 because no `ANTHROPIC_API_KEY` exists, before any API
-call. #3's `autonomy-gate` failed as designed (0 of 2 approvals). No other PR has run CI, and "no
-checks" means nothing ran.
+call. #3's `autonomy-gate` failed as designed (0 of 2 approvals).
+
+CI on the combined tree ran once, on this PR's head `a0d1ca8` (candidate plus docs), 2026-09-27:
+`ci` run 36360222966 had rust and miri pass, python and just-check fail (the same RUF100);
+`security` run 36360223381 had semgrep, osv-scanner and checkov pass and **trivy fail with one
+HIGH, DS-0002: `.devcontainer/Dockerfile` has no non-root `USER`** (#13 never scanned the
+devcontainer, which comes from #8); codeql and sbom skipped. `ai-review` failed for want of a
+key, before any API call. No other PR has run CI, and "no checks" means nothing ran.
 
 ### Test discovery
 
@@ -108,6 +115,7 @@ merged.
 |---|---|---|---|
 | Red `just check` at candidate | RUF100, `test_recompute.py:44`; #12's ruff config ignores S311 in tests | Remove that noqa in #16 after rebasing on #12 | #16 author |
 | Two NOW.md files | add/add conflict #6 vs #14; #6 excluded from candidate | Human picks one; this PR proposes its version | founders |
+| Trivy HIGH DS-0002 on the combined tree | run 36360223381: `.devcontainer/Dockerfile` has no non-root `USER` | Add a non-root user to the devcontainer and build it once (not done here: docker unavailable, so it could not be tested) | #8 author |
 | Split trial ledger | #12 `research/registry/log/trials.jsonl`; #16 `research/registry/trials.jsonl` | Point #16 at `log/` | #16 author |
 | Demo trials in committed registry | 4 demo trials and 1 challenger committed by #12; each run adds more | Remove demo rows or write demo runs to a scratch path | #12 author |
 | Strategy trait doc drift | `engine/crates/strategy-runtime/CLAUDE.md` (#7) vs #15 trait | Fixed in this PR | done here |

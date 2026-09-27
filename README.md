@@ -46,8 +46,10 @@ Proposed pending the operators' jurisdiction.
   `docs/NOW.md` conflicts with #14's. This PR (#8) is the candidate plus documentation.
 - `just check` exits 0 at candidate commit `f4a4537` and 1 at the head `44d1711` (ruff RUF100 at
   `research/studies/0001-favorite-longshot/tests/test_recompute.py:44`).
-- CI has run only on #13's own head, where `ci` and the scanners passed and the two AI reviews
-  failed for want of an API key. Branch protection and rulesets return HTTP 403 on this plan.
+- CI passed on #13's own head. On the combined tree (this PR's head) `ci` fails on the same
+  RUF100 and `security` fails on one trivy HIGH: `.devcontainer/Dockerfile` runs as root. The AI
+  reviews fail for want of an API key, before any call. Branch protection and rulesets return
+  HTTP 403 on this plan.
 - Unverified: the devcontainer (no docker on the verifying machine), any behavior on Linux or on
   a second founder's machine.
 
@@ -205,8 +207,9 @@ interactive).
 Dated evidence: [docs/reports/base-status.md](docs/reports/base-status.md). In short:
 
 - Passed: setup, Rust tests, pytest, audits, replay determinism, hook/knowledge/autonomy suites.
-- Failed: `just check` at the candidate head (RUF100); `just study-0001` on a fresh clone.
-- Not run or unavailable: devcontainer, CI on the combined tree, fuzzing, bench timings.
+- Failed: `just check` at the candidate head (RUF100); `just study-0001` on a fresh clone; CI
+  `ci` and `security` (trivy DS-0002) on the combined tree.
+- Not run or unavailable: devcontainer, fuzzing, bench timings.
 - False greens: `just backtest` and audit skips exit 0; walk-forward exits 0 on FAIL.
 - Hook, knowledge, autonomy and study suites are outside `just check` and CI.
 - `just walkforward demo` overwrites the committed dated report and appends to the committed
