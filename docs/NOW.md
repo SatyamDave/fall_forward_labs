@@ -9,15 +9,18 @@ Scope rule: general interfaces, one implementation
 Current milestone: M0 — bootstrap merged and base audit complete
 
 Definition of done:
-- [ ] bootstrap-lane PRs merged (#1 skeleton, #2 self-learning phase 1, #3 autonomy phase A)
+- [ ] bootstrap PRs merged (#5 phase-0 ADRs, #1 skeleton, then phases 2-8)
 - [ ] `just check` green on main
 - [ ] ADR-0020 (first vertical) decided by both founders
 - [ ] repo hardening applied (branch protection, CODEOWNERS, secret scanning)
 
 This week's priorities (ranked):
 1. Decide ADR-0020 (first vertical) so downstream phases can stop branching on PENDING
-2. Merge open bootstrap-lane PRs (#1, #2, #3) in the order each PR's body states
+2. Merge bootstrap PRs (#5, #1, then phases 2-8) in the order each PR's body states
 3. Add Founder B as a GitHub collaborator (unblocks T3 two-human approvals; see PR #3 decision 1)
+
+Later-layer drafts already open (#2 self-learning, #3 autonomy, #4 decision
+layer) build on top of bootstrap and merge after it, not as part of it.
 
 Not now (do not work on):
 - second vertical, new venues
