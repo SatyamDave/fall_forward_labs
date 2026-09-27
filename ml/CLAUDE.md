@@ -1,4 +1,4 @@
-# ml/ — self-learning model stack: dataset → features → train → validate → registry → shadow → promote
+# ml/ — planned model pipeline: dataset → features → train → validate → registry → shadow → promote
 
 ## Owns / does not own
 - Plain Python package run from the research/ uv environment (`import ml`); no pyproject of its own.
@@ -23,6 +23,8 @@
 - Discovery candidates from research/sandbox count toward the trial total.
 
 ## NEVER
+- Retraining produces a challenger candidate, never authority to deploy or raise risk.
+- No online adaptation until simpler offline methods have been tried and measured to fail.
 - Never promote automatically. Check: `grep -rniE 'promote' --include='*.py' .` hits only dossier generation, never a registry state change to champion.
 - Online adaptation (intraday spread or skew) never leaves the bounds in config/limits/ and never changes a risk limit.
 - Never export a model without its registry hash.
