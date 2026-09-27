@@ -78,7 +78,7 @@ Scores run from 1 (worst) to 5 (best). Legal access assumes a US person in a sta
 | Time to first live trade | 4: self-serve keys, demo on day one | 2: access gated | 3: certification or retail route | 2: broker account, data subscriptions, larger contract margin (UNVERIFIED) |
 | Unweighted total | 20 | 15 | 20 | 20 |
 
-A, C and D tie on the unweighted total, and D's total leans on the capacity judgment. The deciding factors are the base-complete spec's own priorities: test without real money against an official demo, build the adapter from pinned official specs, and seek an edge from forecasting and market-making discipline rather than latency. Only A combines a self-serve demo (REST, WebSocket and FIX) with open production access today; B has a demo but gated production, and C's integration environment requires certification.
+A, C and D tie on the unweighted total, and D's total leans on the capacity judgment. The deciding factors are the base-complete spec's own priorities: test without real money against an official demo, build the adapter from pinned official specs, and seek an edge from forecasting and market-making discipline rather than latency. Only A combines a self-serve demo (REST and WebSocket; FIX demo hosts exist, access terms UNVERIFIED) with open production access today; B has a demo but gated production, and C's integration environment requires certification.
 
 ## Decision
 
