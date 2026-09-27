@@ -5,8 +5,10 @@ A cycle may end in REJECT or INSUFFICIENT EVIDENCE. Never manufacture a winner.
 
 ## Where things live
 
-- Study folder: `research/studies/NNNN-<slug>/`, one per cycle. research/0001 creates the first;
-  if its layout differs from the files named below, that PR updates this section.
+- Study folder: `research/studies/NNNN-<slug>/`, one per cycle (first: `0001-favorite-longshot`).
+  `REGISTRATION.md` (prose) and `config.json` (frozen; wins on conflict) are committed before any
+  outcome is fetched. Raw requests go to `data/raw/study-NNNN/requests.jsonl`. The manifest and
+  report names below are this doc's proposal until study 0001 adds its own.
 - Registry: `research/registry/` (append-only JSONL; `record()`, `trial_count()`). Every trial,
   failures included (root rule 6).
 - Graveyard: `docs/research/graveyard.md`. Check it before step A; add a row at step I on rejection.
@@ -20,7 +22,7 @@ A cycle may end in REJECT or INSUFFICIENT EVIDENCE. Never manufacture a winner.
 - [ ] Say which it is: forecasting skill, execution quality, or software reliability.
 - [ ] Ranked by decision value against cost. The first cycle runs one primary experiment.
 
-**B. Register before measuring the outcome** (`registration.md`, committed before results)
+**B. Register before measuring the outcome** (`REGISTRATION.md` + `config.json`, committed before results)
 - [ ] Hypothesis, baseline, dataset with availability times, target and label horizon, split rules.
 - [ ] Candidate search budget, primary metric, minimum useful effect (from task economics, not a copied target).
 - [ ] Evaluation method, failure criteria, compute limit, decision rule.

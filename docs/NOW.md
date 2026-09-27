@@ -4,13 +4,13 @@ Process: docs/process/research-cycle.md. Audit: docs/audits/0001-reality-audit.m
 
 ## Current milestone: M0
 Bootstrap merged and the first research cycle recorded.
-- [ ] Bootstrap PRs merged in their stated order (#5, #1, then #7, #11, #10, #8, phases 4, 6, 8)
+- [ ] Bootstrap PRs merged in their stated order (#5, #1, then #7, #11, #10, #8, #13, #12, phase 8)
 - [ ] `just check` green on `main`
 - [ ] research/0001 recorded: registration, baseline, manifest, and a decision (reject is fine)
 
 ## Next task
-Finish research/0001 (`research/0001-favorite-longshot`): one registered test of one mechanism
-against a baseline on Kalshi data, as a candidate market only.
+Finish study 0001 (`research/studies/0001-favorite-longshot/`, pre-registered): favorite-longshot
+bias on settled Kalshi markets against the market-implied baseline. Kalshi is a candidate only.
 
 ## Blockers (human decisions)
 1. Operators' jurisdiction and entity; first vertical (ADR-0020 vs ADR-0003).

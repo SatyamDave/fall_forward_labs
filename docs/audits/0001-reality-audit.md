@@ -1,7 +1,7 @@
 # 0001 Reality audit (2026-09-27)
 
 Deliverable 1 of the research-loop process (owner prompt, 2026-09-27, "research-loop" below).
-Scope: every pushed branch and PR #1-#11 of `SatyamDave/fall_forward_labs`, checked against the six
+Scope: every pushed branch and PR #1-#13 of `SatyamDave/fall_forward_labs`, checked against the six
 earlier prompts. The earlier prompts were read as condensations written by the coordinating agent,
 not the owner's full text; the research-loop prompt's author also said the full files were
 unavailable. Nothing is merged: `main` holds only the initial commit (`4975ec3`).
@@ -27,10 +27,11 @@ Status words: VERIFIED (I ran it, or a CI run shows it), HYPOTHESIS, UNKNOWN, RE
 | Decision layer ADR-0010/0011, data classes (#4) | | Vendor facts cited, many UNVERIFIED | Phases 2-7 | Distillation vs MCA (C2) | defer; keep data-classes.md |
 | Team plan + NOW.md (#6) | | NOW.md draft | Phases 2-7 | Override rule (C4), ratchet (C5), sops (C8) | NOW.md superseded here |
 | ADR-0020 first vertical, plan 0005 (#9) | Kalshi OpenAPI/AsyncAPI SHA-256 recorded | Fee coefficients UNVERIFIED (PDF 429) | Base phases 1-6 | Venue (C1) | fix: human decides |
-| Security CI, deny.toml, harden script (phase 4) | | | In flight, not pushed, not inspected | | — |
-| ML stack (phase 6), engine core (phase 8) | | | In flight, not pushed, not inspected | | — |
-| Research cycle `research/0001-favorite-longshot` | | | In flight, no commits yet | | — |
-| CI running `just check` on PRs | | | No `ci.yml` on any pushed branch | Root CLAUDE.md says "CI runs the same recipe" | fix in phase 4 |
+| Security CI, `deny.toml`, pre-commit, harden script (#13, `4144991`) | `just check` exit 0 locally; cargo-deny "advisories ok, bans ok, licenses ok, sources ok" | `ci.yml`/`security.yml` CI results not inspected; `scripts/harden-repo.sh` not applied and blocked by plan (403) | | | keep |
+| ML stack: data schemas, tob-v1 features, walk-forward, inference parity (#12, `cbeb5a0`) | `just check` exit 0 locally; pytest 20 passed | Only run is on a synthetic day (`backtest/reports/demo/2026-09-27.md`): mechanics, not evidence | | | keep; plumbing only |
+| Engine core (phase 8) | | | In flight, not pushed, not inspected | | — |
+| Research cycle 0001 (`research/0001-favorite-longshot`, `a299ba1`) | | Pre-registration only: `REGISTRATION.md`, frozen `config.json`, public-API client | Baseline, run, decision | | keep; finish |
+| CI running `just check` on PRs | | `ci.yml` exists only on #13 (unmerged) | | Root CLAUDE.md said "CI runs the same recipe" | fixed in root CLAUDE.md |
 
 ## Missing inputs
 
@@ -102,4 +103,4 @@ evidence says otherwise.
 
 There is no verified evidence that any edge exists in the candidate market. Infrastructure, agents
 and learning loops cannot fix that. The first research cycle (`research/0001-favorite-longshot`,
-in flight) tests one mechanism against a baseline and may end in rejection.
+pre-registered in `a299ba1`) tests one mechanism, favorite-longshot bias on settled Kalshi markets, against a baseline and may end in rejection.

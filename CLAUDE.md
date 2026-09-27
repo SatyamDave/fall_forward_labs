@@ -45,7 +45,7 @@ just replay | just backtest <cfg> | just paper <strategy> | just learnings
 just fmt | just lint | just walkforward <name>
 ```
 `just` finds the root justfile from any subdirectory, so these work wherever you are.
-Run `just check` before every push. No CI workflow runs it yet (phase 4 adds `ci.yml`).
+Run `just check` before every push. No CI workflow runs it until #13 (`ci.yml`) merges.
 
 ## How we work
 - Start every session with docs/NOW.md: the current milestone, next task and blockers. If a task
@@ -67,8 +67,9 @@ override anyone's personal instructions. Controls that enforce, as of 2026-09-27
   `guard-protected.sh` hooks (#11, 30 script-level tests; never run in a live session; they bind
   only Claude Code sessions, not humans or other tools); knowledge scope check (#10, 10 tests);
   autonomy gate (#3, 23 tests; reports only, cannot be made required without branch protection).
-- Not built yet: CI running `just check`, secret scanning, dependency audit in CI (phase 4, in
-  flight); kill switch (rule 11); replay gate (rule 7); two-person approval; CODEOWNERS (#8, one
+- Built, not merged, CI results not inspected: `ci.yml`, `security.yml`, pre-commit, `deny.toml`,
+  `scripts/harden-repo.sh` (#13; the harden script cannot apply branch protection on this plan).
+- Not built yet: kill switch (rule 11); replay gate (rule 7); two-person approval; CODEOWNERS (#8, one
   owner, and it cannot require two reviews).
 Risk limits belong in runtime checks and permission boundaries, not in this text.
 
