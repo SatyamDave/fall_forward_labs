@@ -25,7 +25,7 @@
 _None yet. Each entry links to the PR or postmortem where it bit us._
 
 ## Learned
-_None yet. Entries arrive only through knowledge-sync PRs: `YYYY-MM-DD: <lesson> (<PR link>)`, newest first, max 15._
+<!-- None yet. Entries arrive only through knowledge-sync PRs, newest first, max 15, format: - YYYY-MM-DD: <lesson> ([#N](https://github.com/SatyamDave/fall_forward_labs/pull/N)) -->
 
 ## See also
 - ../CLAUDE.md, ADR-0001, ml/CLAUDE.md (automated discovery joins the same validation path)
