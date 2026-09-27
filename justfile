@@ -61,8 +61,9 @@ paper strategy:
     @echo "not implemented yet: paper-trading phase ({{strategy}})"
 
 # Purged, embargoed walk-forward validation for a strategy or model
+# Writes backtest/reports/<name>/<date>.md and appends trials + a challenger to the registry.
 walkforward name:
-    @echo "not implemented yet: research/ml phase 6 ({{name}})"
+    cd {{research}} && PYTHONPATH=..:. uv run --locked python -m ml.validation.walkforward {{name}}
 
 # Show untriaged session learnings
 learnings:
