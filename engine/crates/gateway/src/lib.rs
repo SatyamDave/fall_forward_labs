@@ -1,7 +1,16 @@
 //! The adapter trait every venue module implements. Credentials are injected at
 //! runtime by the caller, never read from files in the repository.
 
+pub mod pacing;
+pub mod record;
+pub mod sim;
+
+pub use pacing::{TokenBucket, reconnect_delay_ms};
+pub use record::{ParseError, Record};
+pub use sim::SimVenue;
+
 use qc_core::{ClientOrderId, Event, InstrumentId, OrderRequest, VenueId};
+use qc_oms::VenueOrder;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum GatewayError {
@@ -29,6 +38,12 @@ pub trait VenueAdapter {
 
     /// Next market or order event, if one is ready. Never blocks.
     fn poll(&mut self) -> Option<Event>;
+
+    /// Every order the venue knows for this key, for reconciliation.
+    ///
+    /// # Errors
+    /// Returns [`GatewayError`] if the venue could not be asked.
+    fn order_snapshot(&mut self) -> Result<Vec<VenueOrder>, GatewayError>;
 }
 
 #[cfg(test)]
@@ -47,6 +62,9 @@ mod tests {
             Err(GatewayError::Disconnected)
         }
         fn cancel(&mut self, _: ClientOrderId) -> Result<(), GatewayError> {
+            Err(GatewayError::Disconnected)
+        }
+        fn order_snapshot(&mut self) -> Result<Vec<VenueOrder>, GatewayError> {
             Err(GatewayError::Disconnected)
         }
         fn poll(&mut self) -> Option<Event> {
