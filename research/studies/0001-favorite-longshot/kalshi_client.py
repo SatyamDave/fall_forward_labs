@@ -50,7 +50,7 @@ class Client:
                 time.sleep(wait)
             self._last = time.monotonic()
             fetched_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-            req = urllib.request.Request(url, headers={"Accept": "application/json"})
+            req = urllib.request.Request(url, headers={"Accept": "application/json"})  # noqa: S310
             try:
                 with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310 (fixed https host)
                     status, body = resp.status, resp.read()
