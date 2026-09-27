@@ -50,7 +50,7 @@ main
 
 | Phase | Branch | PR | Status |
 |---|---|---|---|
-| 0 Decisions (plan, ADR-0000 to ADR-0005) | bootstrap/phase-0-decisions | this PR | Ready for review. All ADRs are "Proposed" and wait for human approval. |
+| 0 Decisions (plan, ADR-0000 to ADR-0005) | bootstrap/phase-0-decisions | [#5](https://github.com/SatyamDave/fall_forward_labs/pull/5) | Ready for review. All ADRs are "Proposed" and wait for human approval. |
 | 1 Skeleton | bootstrap/phase-1-skeleton | [#1](https://github.com/SatyamDave/fall_forward_labs/pull/1) | In progress |
 | 2 CLAUDE.md hierarchy | bootstrap/phase-2-claude-md | not opened | In progress |
 | 3 .claude/ configuration | bootstrap/phase-3-claude-config | not opened | In progress |
