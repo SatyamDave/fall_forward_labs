@@ -35,7 +35,9 @@ or quantities anywhere near the hot path.
 **Deflated Sharpe ratio.** A Sharpe ratio adjusted downward for how many independent trials were
 run to find it — the more ideas you tried, the more likely a good-looking Sharpe is luck, and the
 correction requires the true trial count from the experiment registry, not just "how many you
-remember trying."
+remember trying." In this repo `ml.validation.deflated_sharpe` returns a probability in [0, 1] (the
+chance the true Sharpe beats the best of N trials by luck), so it is not on the same scale as a
+Sharpe ratio.
 
 **PBO (probability of backtest overfitting).** The estimated probability that a strategy's
 in-sample ranking against alternatives would not hold out-of-sample — a direct estimate of how
@@ -66,12 +68,14 @@ to champion or to "no signal" can be automatic.
 tiny capital, so a failure is cheap, before it can be scaled up.
 
 **Kill switch.** A single control that halts new order entry (and optionally cancels working
-orders) across a strategy, a venue, or the whole system. Every live process must honor it within
-one second (root rule 11); this is tested in CI, not just documented.
+orders) across a strategy, a venue, or the whole system. Root rule 11 requires every live process
+to honor it within one second. In this repo it is `qc_risk::KillSwitch`: the simulated engine
+stops new orders and sends cancel requests on the next event; chaos tests in `cargo test` cover
+it. It does not flatten positions or confirm cancels.
 
 **Replay determinism.** The property that replaying the same recorded sequence of market events
 through the engine twice produces byte-identical output (specifically, an identical order-log
-hash). A replay-test failure blocks merge because it means behavior isn't reproducible, which
+hash). `just replay` checks this on a synthetic fixture; it says nothing about fill realism. A replay-test failure blocks merge because it means behavior isn't reproducible, which
 means it isn't auditable.
 
 **ADR (architecture decision record).** A short, dated document (`docs/adr/`) that records a

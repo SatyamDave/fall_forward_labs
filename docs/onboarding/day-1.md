@@ -5,21 +5,25 @@ protected.
 
 ## 1. Get the environment working
 
-```sh
-just setup
-just check
-just replay
-```
+`main` has only a README until the PRs merge; check out `bootstrap/phase-7-contributor` first
+(README §5 lists prerequisites).
 
-If any of these fail on a fresh clone, that's a bug — open an issue with the failing command's
-output, don't work around it silently. If you don't have `just`, `cargo`, or `uv` installed
-locally, use `.devcontainer/` instead of installing them by hand.
+| Command | Purpose | Expected output |
+|---|---|---|
+| `just setup` | download crates and PyPI packages, create `research/.venv` | exit 0 |
+| `just check` | fmt, lint, tests, audits | exit 0, or exit 1 with ruff `RUF100` at candidate `44d1711` (a known integration defect) |
+| `just replay` | replay the synthetic day twice | two identical `order-log sha256` lines and `replay deterministic` |
+
+Any other failure on a fresh clone is a bug: open an issue with the command's output rather than
+working around it. The devcontainer (`.devcontainer/`) has never been built, so treat it as
+unverified.
 
 ## 2. Read, in this order
 
 1. `docs/VISION.md` — the mission and the constraints that shape every other decision here
    (no live agent in the order path, no secrets in git, gated strategy lifecycle, kill switch).
-2. Root `CLAUDE.md` — the twelve non-negotiable rules, verbatim, plus the repo map.
+2. Root `CLAUDE.md` — the twelve non-negotiable rules, verbatim, plus the repo map. Then
+   `docs/NOW.md` and `docs/reports/base-status.md` for what is actually true today.
 3. `docs/ARCHITECTURE.md` — how `engine/`, `research/`, `ml/`, and `agents/` fit together.
 4. `docs/GLOSSARY.md` — skim it once now; you'll come back to it.
 
@@ -27,7 +31,10 @@ locally, use `.devcontainer/` instead of installing them by hand.
 
 - Read `engine/crates/core/` — the fixed-point `Price`/`Qty` types and events everything else is
   built from. Notice there's no `f64` anywhere near money.
-- Skim `engine/crates/risk/` (protected — read-only for now) to see the shape of a risk check.
+- Skim `engine/crates/risk/` (protected — read-only for now) to see the order of the risk
+  checks and their boundary tests (`cargo test -p qc-risk`).
+- Read `engine/crates/replay/src/lib.rs` for the loop that ties book, strategy, risk, OMS and
+  SimVenue together.
 - Look at `strategies/_template/` — this is what a strategy looks like at every lifecycle gate.
 
 ## 4. Understand what you can and can't touch

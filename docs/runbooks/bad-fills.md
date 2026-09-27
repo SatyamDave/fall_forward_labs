@@ -1,5 +1,8 @@
 # Runbook: bad fills
 
+> Status 2026-09-27: planned procedure. No venue adapter, venue key or live process exists, so
+> none of these steps can be exercised yet. Owner: @SatyamDave. Blocked on M1 ([ROADMAP](../ROADMAP.md)).
+
 **Recognize.** A fill at a price far from the reference price (should have been rejected by the
 `price_band_bps` fat-finger check), a fill that doesn't match an order this system sent, a burst
 of fills with markout that's sharply worse than the strategy's expected edge, or a reconciliation

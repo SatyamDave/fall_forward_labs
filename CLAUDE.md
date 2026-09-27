@@ -46,10 +46,13 @@ just fmt | just lint | just walkforward <name>
 ```
 `just` finds the root justfile from any subdirectory, so these work wherever you are.
 Run `just check` before every push. No CI workflow runs it until #13 (`ci.yml`) merges.
+`just backtest` is a placeholder that exits 0 and `just paper` refuses; hook, knowledge, autonomy
+and study tests run outside `just check` (commands in CONTRIBUTING.md).
 
 ## How we work
-- Start every session with docs/NOW.md: the current milestone, next task and blockers. If a task
-  does not serve the milestone, say so and ask before proceeding.
+- Start every session with docs/NOW.md: the current milestone (M0, offline foundation; see
+  docs/ROADMAP.md), next task and blockers. If a task does not serve the milestone, say so and ask
+  before proceeding. Owners and handoffs: docs/TEAM.md. Governing specs: docs/specs/README.md.
 - Research follows docs/process/research-cycle.md (register before measuring, baseline, leakage-free
   evaluation, independent re-run, explicit decision). A cycle may end in rejection.
 - Tag material claims VERIFIED / HYPOTHESIS / UNKNOWN / REFUTED with the source, file, test or run.
@@ -67,10 +70,12 @@ override anyone's personal instructions. Controls that enforce, as of 2026-09-27
   `guard-protected.sh` hooks (#11, 30 script-level tests; never run in a live session; they bind
   only Claude Code sessions, not humans or other tools); knowledge scope check (#10, 10 tests);
   autonomy gate (#3, 23 tests; reports only, cannot be made required without branch protection).
-- Built, not merged, CI results not inspected: `ci.yml`, `security.yml`, pre-commit, `deny.toml`,
-  `scripts/harden-repo.sh` (#13; the harden script cannot apply branch protection on this plan).
-- Not built yet: kill switch (rule 11); replay gate (rule 7); two-person approval; CODEOWNERS (#8, one
-  owner, and it cannot require two reviews).
+- Built, not merged: `ci.yml`, `security.yml`, pre-commit, `deny.toml`, `scripts/harden-repo.sh`
+  (#13; CI passed on #13's own head; the harden script cannot apply branch protection on this plan).
+- Built in #15, not enforced: kill switch (rule 11; chaos test in `cargo test`, halts new orders and
+  requests cancels, never flattens) and `just replay` (rule 7; synthetic fixture, no required check).
+- Not built: two-person approval; CODEOWNERS (#8) has one owner and cannot require two reviews.
+Current state, verification and open defects: docs/reports/base-status.md.
 Risk limits belong in runtime checks and permission boundaries, not in this text.
 
 ## How to work here

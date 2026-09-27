@@ -1,27 +1,30 @@
 # NOW  (updated: 2026-09-27)
 
-Process: docs/process/research-cycle.md. Audit: docs/audits/0001-reality-audit.md.
+Status: [docs/reports/base-status.md](reports/base-status.md). Process: [docs/process/research-cycle.md](process/research-cycle.md).
+Replaces the NOW.md drafts in #6 and #14; the founders confirm or edit it when merging.
 
-## Current milestone: M0
-Bootstrap merged and the first research cycle recorded.
-- [ ] Bootstrap PRs merged in their stated order (#5, #1, then #7, #11, #10, #8, #13, #12, phase 8)
-- [ ] `just check` green on `main`
-- [ ] research/0001 recorded: registration, baseline, manifest, and a decision (reject is fine)
+## Milestone M0: offline engineering foundation ([ROADMAP](ROADMAP.md))
+- [ ] Bootstrap PRs merged into `main` in the base-status merge sequence
+- [ ] `just setup` and `just check` exit 0 on a fresh clone of `main`; CI passes on `main`
+- [ ] `just replay` deterministic on `main`; `just walkforward demo` runs without touching committed records
+- [ ] Known defects recorded with owners (DSR gate, SimVenue limits, unenforced review)
+- [x] Study 0001 recorded with a decision: INSUFFICIENT EVIDENCE (#16)
 
-## Next task
-Finish study 0001 (`research/studies/0001-favorite-longshot/`, pre-registered): favorite-longshot
-bias on settled Kalshi markets against the market-implied baseline. Kalshi is a candidate only.
+## Next steps (in dependency order)
+1. Fix the candidate's red `just check`: drop the `# noqa: S311` in #16 and point it at `research/registry/log/`.
+2. Merge #5, #1, then the stack per base-status; pick this NOW.md over #6 and #14.
+3. Register study 0001 v2 as a new trial with a population bounded by series or category.
 
 ## Blockers (human decisions)
-1. Operators' jurisdiction and entity; first vertical (ADR-0020 vs ADR-0003).
-2. Second founder's identity and GitHub handle. T3 two-approval cannot pass with one maintainer (#3).
-3. Branch protection needs a GitHub plan that allows it on a private repo (API returns 403).
-4. Repository secrets (`ANTHROPIC_API_KEY`) if the knowledge loop should run (#10).
-5. Research or compute budget. None is configured, so work stays local, paid calls off.
+1. Operators' jurisdiction and first vertical (ADR-0020 vs ADR-0003).
+2. Second founder's identity and GitHub handle.
+3. A GitHub plan or organization where branch protection and rulesets work (API returns 403).
+4. Whether to add `ANTHROPIC_API_KEY`: four workflows would then make paid calls regardless of `autonomy/POLICY.yaml`.
+5. Redefine the deflated-Sharpe gate in `strategies/_template/GATES.md`.
+6. Research or compute budget: none configured, so work stays local and paid calls stay off.
 
-## Deferred (not M0)
-Autonomy loops, decision layer and Jev, L0-L3 learning, RD-Agent/qlib sandbox, 30-100 task eval
-suite, plugin marketplace, managed settings, sops encryption, metric ratchet, second vertical,
-live trading, UI. Reasons: docs/audits/0001-reality-audit.md.
+## Not now
+Live or paper trading, venue adapters, autonomy loops, decision layer and Jev, L0-L3 learning,
+RD-Agent/qlib, sops encryption, metric ratchet, second vertical, UI. Reasons: [ROADMAP](ROADMAP.md#deferred).
 
-Owners: Satyam (`@SatyamDave`) · second founder: unknown
+Owners: Satyam (@SatyamDave), all areas · second founder: UNKNOWN ([TEAM](TEAM.md))

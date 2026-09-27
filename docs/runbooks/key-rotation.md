@@ -1,5 +1,8 @@
 # Runbook: venue API key rotation
 
+> Status 2026-09-27: planned procedure. No venue adapter, venue key or live process exists, so
+> none of these steps can be exercised yet. Owner: @SatyamDave. Blocked on M1 ([ROADMAP](../ROADMAP.md)).
+
 Applies to venue API keys (root rule 9: trade-only, withdrawal disabled, IP-allowlisted, scoped
 per strategy and per environment). Rotate on a schedule, on suspected compromise, or when a
 strategy or environment is retired.
@@ -30,5 +33,5 @@ strategy or environment is retired.
 
 ## If this is a suspected compromise, not a scheduled rotation
 
-Treat as an incident (`.github/ISSUE_TEMPLATE/incident.md`): halt trading on that key immediately
+Treat as an incident (`.github/ISSUE_TEMPLATE/incident.yml`): halt trading on that key immediately
 (don't wait for the new key to be ready — see `kill-switch.md`), revoke first, then rotate.

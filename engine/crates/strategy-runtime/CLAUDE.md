@@ -1,8 +1,8 @@
 # engine/crates/strategy-runtime — qc-strategy-runtime: Strategy trait and the event loop that drives it
 
 ## Owns / does not own
-- Owns: the `Strategy` trait (`on_event(&Event, &mut Vec<OrderRequest>)`), the loop that feeds events in order and hands requests to risk and the OMS, kill-switch propagation to strategies.
-- Does not own: strategy logic (strategies/<name>/), risk checks (qc-risk), replay harness (qc-replay).
+- Owns: the `Strategy` trait (`on_event(&mut self, &Event, &OrderBook, &mut Vec<Command>)`, `Command::{Submit, Cancel}`) and the example `InsideQuoter` test fixture.
+- Does not own: strategy logic (strategies/<name>/), risk checks (qc-risk), the event loop that hands commands to risk, the OMS and the venue (`Engine` in qc-replay).
 
 ## Commands
 - `cargo test -p qc-strategy-runtime --locked`
@@ -13,7 +13,7 @@
 - Same events in the same order produce the same requests; `just replay` proves it (root rule 7).
 - Strategies write into the caller's `out` buffer; the loop clears and reuses it.
 - Every request a strategy emits goes through `RiskCheck::check` before the OMS sees it.
-- The loop honors the global kill switch within one second (root rule 11); tests/chaos covers it.
+- The loop honors the global kill switch within one second (root rule 11); `engine/crates/replay/tests/chaos.rs` covers it.
 - Time reaches strategies only through events or a `Clock`, so replay can drive it.
 
 ## NEVER

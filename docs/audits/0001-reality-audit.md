@@ -1,10 +1,14 @@
 # 0001 Reality audit (2026-09-27)
 
 Deliverable 1 of the research-loop process (owner prompt, 2026-09-27, "research-loop" below).
-Scope: every pushed branch and PR #1-#13 of `SatyamDave/fall_forward_labs`, checked against the six
+Scope: every pushed branch and PR #1-#16 of `SatyamDave/fall_forward_labs`, checked against the six
 earlier prompts. The earlier prompts were read as condensations written by the coordinating agent,
 not the owner's full text; the research-loop prompt's author also said the full files were
 unavailable. Nothing is merged: `main` holds only the initial commit (`4975ec3`).
+
+Refreshed 2026-09-27 (later the same day) for #12, #13, #15, #16 and the integration candidate
+`integration/base-candidate-2026-09-27` at `44d1711`; command evidence is in
+[docs/reports/base-status.md](../reports/base-status.md). Rows marked *refreshed* replace earlier text.
 
 Status words: VERIFIED (I ran it, or a CI run shows it), HYPOTHESIS, UNKNOWN, REFUTED.
 
@@ -12,26 +16,27 @@ Status words: VERIFIED (I ran it, or a CI run shows it), HYPOTHESIS, UNKNOWN, RE
 
 | Component | Implemented and verified | Partial | Proposed only | Contradictory | Decision |
 |---|---|---|---|---|---|
-| Engine workspace, `qc-*` seams (#1) | `just check` exit 0 on #7 tree (includes #1), run 2026-09-27; cargo-audit: no known vulnerabilities in 93 crates | Traits and types only; no replay, OMS logic, gateway | | Rust channel (C6), resolver (C7) | keep |
-| Order-book bench (#1) `engine/benches/benches/orderbook.rs` | Compiles (in `just check` via clippy all-targets) | Never run for numbers; synthetic deltas, local apply only | | | keep; not a latency claim |
-| Experiment registry stub (#1) `research/registry/__init__.py` | `tests/test_registry.py` 1 passed | JSONL append, no schema, no manifest fields | | | keep; extend in research/0001 |
+| Engine workspace, `qc-*` seams (#1) | `just check` exit 0 on #7 tree (includes #1), run 2026-09-27; cargo-audit: no known vulnerabilities in 93 crates | Traits and types only in #1; logic arrives in #15 | | Rust channel (C6), resolver (C7) | keep |
+| Order-book and risk benches (#1, #15) `engine/benches/benches/` | *Refreshed:* both build (`cargo bench --no-run`, candidate) | Never run for numbers; synthetic deltas, local apply only | | | keep; not a latency claim |
+| Experiment registry (#1, #12) `research/registry/`, `ml/registry/` | `tests/test_registry.py` 1 passed | *Refreshed:* JSONL, not MLflow; #12 logs to `research/registry/log/`, #16 to `research/registry/trials.jsonl` (two ledgers); committed log holds 4 demo trials + 1 demo challenger | | ADR-0005 says MLflow | fix: one ledger path; keep JSONL until MLflow is decided |
 | Risk limits `config/limits/default.toml` (#1) | Parsed by `qc-risk` test | Values are unreviewed defaults | | | keep; human sets values |
 | Graveyard `docs/research/graveyard.md` (#1) | | Empty table | | | keep |
 | Plan + ADR-0001..0005 (#5) | | | All Proposed | Venue (C1), Rust pin (C6) | fix: decide after jurisdiction |
 | CLAUDE.md hierarchy, VISION, ARCHITECTURE (#7) | `just check` exit 0; root 64 lines, nested ≤80 | Many MUST checks point at code other lanes own | | Learned format (C12, fixed in #7 `f9bf682`) | keep |
 | `.claude/` settings, hooks, rules, agents, skills (#11, `bootstrap/phase-3-claude-config`) | `just test-hooks` 30 passed on `e0f104d`, run 2026-09-27 | Hooks never exercised in a live Claude Code session | | | keep |
 | Knowledge loop workflows (#10) | `python3 -m unittest discover -s tests/knowledge` 10 OK on `d0ee3fb` | Claude steps never ran (no `ANTHROPIC_API_KEY`); scope-check run 36357505012 skipped (no label) | | GITHUB_TOKEN PRs trigger no checks (C10) | keep, dormant |
-| Contributor kit, CODEOWNERS, devcontainer (#8) | | Devcontainer never built (no docker) | | CODEOWNERS vs two approvals (C11) | keep; build devcontainer once |
+| Contributor kit, CODEOWNERS, devcontainer (#8) | *Refreshed:* docs rewritten against the candidate (this PR) | Devcontainer never built (no docker); CODEOWNERS catch-all `*` is last and overrides the protected lines | | CODEOWNERS vs two approvals (C11) | fix: reorder CODEOWNERS (in #8, for review); build devcontainer once |
 | Autonomy POLICY, classifier, gate (#3) | pytest 23 passed; gate run 36356358758 exits 1 as designed | Reports only; loops disabled | Phases B-H | T3 two humans (C3); scorecards tier (C9) | defer loops |
 | Self-learning ADR-0013, plan 0004 (#2) | | | L0-L3 all | | defer |
 | Decision layer ADR-0010/0011, data classes (#4) | | Vendor facts cited, many UNVERIFIED | Phases 2-7 | Distillation vs MCA (C2) | defer; keep data-classes.md |
 | Team plan + NOW.md (#6) | | NOW.md draft | Phases 2-7 | Override rule (C4), ratchet (C5), sops (C8) | NOW.md superseded here |
 | ADR-0020 first vertical, plan 0005 (#9) | Kalshi OpenAPI/AsyncAPI SHA-256 recorded | Fee coefficients UNVERIFIED (PDF 429) | Base phases 1-6 | Venue (C1) | fix: human decides |
-| Security CI, `deny.toml`, pre-commit, harden script (#13, `4144991`) | `just check` exit 0 locally; cargo-deny "advisories ok, bans ok, licenses ok, sources ok" | `ci.yml`/`security.yml` CI results not inspected; `scripts/harden-repo.sh` not applied and blocked by plan (403) | | | keep |
-| ML stack: data schemas, tob-v1 features, walk-forward, inference parity (#12, `cbeb5a0`) | `just check` exit 0 locally; pytest 20 passed | Only run is on a synthetic day (`backtest/reports/demo/2026-09-27.md`): mechanics, not evidence | | | keep; plumbing only |
-| Engine core (phase 8) | | | In flight, not pushed, not inspected | | — |
-| Research cycle 0001 (`research/0001-favorite-longshot`, `a299ba1`) | | Pre-registration only: `REGISTRATION.md`, frozen `config.json`, public-API client | Baseline, run, decision | | keep; finish |
-| CI running `just check` on PRs | | `ci.yml` exists only on #13 (unmerged) | | Root CLAUDE.md said "CI runs the same recipe" | fixed in root CLAUDE.md |
+| Security CI, `deny.toml`, pre-commit, harden script (#13, `4144991`) | *Refreshed:* on #13's head, ci (rust, python, miri, just-check) passed, run 36357795286; semgrep, trivy, osv-scanner, checkov passed, run 36357795901 | codeql and sbom skipped (`vars.CODE_SCANNING` unset); `code-review`/`security-review` fail without `ANTHROPIC_API_KEY` (run 36357795340); `scripts/harden-repo.sh` not applied and blocked by plan (403); audit skips exit 0 | | | keep; CI has run only on #13's own head |
+| ML stack: data schemas, tob-v1 features, walk-forward, inference parity (#12, `cbeb5a0`) | `just check` exit 0 locally; pytest 20 passed; *refreshed:* `just walkforward demo` exit 0, Verdict FAIL | Synthetic day only: mechanics, not evidence. `deflated_sharpe` returns a probability, so GATES.md "≥ 1.0" is effectively unreachable; walk-forward overwrites the committed report, appends to the committed registry, exits 0 on FAIL | | GATES.md thresholds unreviewed | keep; plumbing only; human redefines the DSR gate |
+| Engine core (#15, `4556880`) | *Refreshed:* `cargo test --workspace` 42 passed on the candidate; `just replay` twice gives `d3400a1a...b8e0` both runs | Replay fixture `tests/replay/sample_day.csv` is synthetic; SimVenue ignores queue position and reuses displayed size; kill switch stops new orders and requests cancels (unconfirmed, no flattening, no external trigger); fuzz target not written; token-bucket test history not recoverable | | ADR-0001 proposes NautilusTrader; not used | keep; never cite as fill evidence |
+| Research cycle 0001 (#16, `210ee77`; registered `a299ba1`) | *Refreshed:* ran; decision INSUFFICIENT EVIDENCE (listing cap dropped all 40 days, 0 markets analysed); 504 of 3000 requests; leakage tests 6 passed | `just study-0001` exits 1 on a fresh clone (raw data gitignored); recompute test only on a synthetic fixture; fees UNVERIFIED | | | fix: register v2 with a bounded population and keep raw pages |
+| CI running `just check` on PRs | | `ci.yml` exists only on #13 (unmerged); hook, knowledge, autonomy and study suites are in neither `just check` nor CI | | Root CLAUDE.md said "CI runs the same recipe" | fixed in root CLAUDE.md |
+| Integration candidate (`44d1711`) | `just check` exit 0 at `f4a4537` | *Refreshed:* `just check` exit 1 at head (RUF100, #16 with #12); #6 excluded (NOW.md conflict) | | | fix before merge; see base-status |
 
 ## Missing inputs
 
@@ -60,7 +65,7 @@ Status words: VERIFIED (I ran it, or a CI run shows it), HYPOTHESIS, UNKNOWN, RE
 | C10 | Knowledge PRs must pass required checks | PRs opened with `GITHUB_TOKEN` trigger no workflows (#10) | Needs a GitHub App token (autonomy Phase B) |
 | C11 | Protected paths need two approvals (root rule 3, 4) | CODEOWNERS requests one review and cannot set a count (#8); rulesets unavailable on this plan | Unenforced today |
 | C12 | #7 Learned placeholders as plain text | #10 `scope_check.py` fails non-comment Learned text | Fixed in #7 `f9bf682` |
-| C13 | Rule 11: kill switch "tested in CI"; rule 7 replay blocks merge | No kill switch, no replay harness, no CI | Rules are targets, unenforced |
+| C13 | Rule 11: kill switch "tested in CI"; rule 7 replay blocks merge | *Refreshed:* #15 adds a kill switch (chaos tests in `cargo test`) and `just replay`; CI (#13) runs `cargo test` but is unmerged and cannot be required (403) | Tested on branches; still unenforced on `main` |
 | C14 | Decision spec: Jev latency "~70-500 ms" | #4: only a self-reported vendor benchmark exists | UNVERIFIED |
 
 ## Rejected or unsupported claims
@@ -70,7 +75,7 @@ Status words: VERIFIED (I ran it, or a CI run shows it), HYPOTHESIS, UNKNOWN, RE
 - HFT framing: nothing has been measured against a venue. See the definition below.
 - Jev latency figures: vendor-reported only (C14).
 - "Self-learning model stack" (root `CLAUDE.md` repo map, `docs/VISION.md:13`, `ml/__init__.py`, README in #8): no model, label or validated signal exists; describe `ml/` as the planned model pipeline.
-- "CI runs the same recipe" (root CLAUDE.md, justfile skip messages): no CI workflow exists on any pushed branch.
+- "CI runs the same recipe" (root CLAUDE.md, justfile skip messages): `ci.yml` exists only on #13 and has run only on that PR.
 
 ## Deferred scope (not needed for M0)
 
@@ -104,3 +109,4 @@ evidence says otherwise.
 There is no verified evidence that any edge exists in the candidate market. Infrastructure, agents
 and learning loops cannot fix that. The first research cycle (`research/0001-favorite-longshot`,
 pre-registered in `a299ba1`) tests one mechanism, favorite-longshot bias on settled Kalshi markets, against a baseline and may end in rejection.
+*Refreshed:* it ended INSUFFICIENT EVIDENCE (#16); the bottleneck stands, and v2 needs a population sized with metadata-only calls first.

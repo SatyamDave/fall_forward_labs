@@ -9,8 +9,8 @@ Build the most correct, auditable, and fastest-learning trading system a small t
 - No nanosecond latency races early (top HFT = FPGA, hundreds of ns, millions/yr). Edge = signal quality, market-making quality, execution discipline, risk control, iteration speed.
 - Initial arena: liquid crypto perps + spot, software-only execution, Rust on cloud/bare metal co-regioned with venue. Architecture venue- and asset-agnostic.
 - LLMs/agents never in the live order path. Agents do research, code, review, testing, monitoring summaries, docs. Hot path is deterministic Rust.
-- "Zero vulnerabilities" = zero known High/Critical reach main, secrets never in git, automated gate at every layer. Defense in depth.
-- "Self-learning" = models retrain and challenge each other automatically; promotion to real capital always passes statistical gates AND human approval.
+- Security goal: no known High/Critical vulnerability reaches main, secrets never in git, an automated gate at every layer. Today the scanners pass on #13's branch only and nothing is enforced on main (docs/reports/base-status.md).
+- Learning goal: models retrain and challenge each other automatically; promotion to real capital always passes statistical gates AND human approval. Today only an offline pipeline on synthetic data exists; nothing retrains on its own.
 
 ## What this document is not
 
