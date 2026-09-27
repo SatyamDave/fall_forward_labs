@@ -7,6 +7,10 @@ Sharpe is honest from the first experiment. ADR-0005 picks the real backend.
 import json
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from _typeshed import DataclassInstance
 
 
 @dataclass(frozen=True)
@@ -18,16 +22,21 @@ class Trial:
     notes: str = ""
 
 
-def record(path: Path, trial: Trial) -> None:
-    """Append one trial. The file is only ever appended to, never rewritten."""
+def record(path: Path, entry: "DataclassInstance") -> None:
+    """Append one record (a Trial, or ml.registry.ModelRecord). The file is only ever appended."""
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as f:
-        f.write(json.dumps(asdict(trial), sort_keys=True) + "\n")
+        f.write(json.dumps(asdict(entry), sort_keys=True) + "\n")
+
+
+def read(path: Path) -> list[dict[str, Any]]:
+    """All records in append order; an absent file is an empty registry."""
+    if not path.exists():
+        return []
+    with path.open(encoding="utf-8") as f:
+        return [json.loads(line) for line in f]
 
 
 def trial_count(path: Path, experiment: str) -> int:
     """Number of recorded trials for an experiment, failures included."""
-    if not path.exists():
-        return 0
-    with path.open(encoding="utf-8") as f:
-        return sum(1 for line in f if json.loads(line)["experiment"] == experiment)
+    return sum(1 for r in read(path) if r["experiment"] == experiment)
