@@ -1,0 +1,11 @@
+# Default per-strategy risk limits. Protected zone: human approval required.
+# Limits may be tightened automatically; loosening needs two human approvals.
+# Amounts are decimal strings parsed as fixed-point, never floats.
+# These are deliberately tiny: a strategy gets larger limits only through its own file and the gates.
+
+max_position = "0.01"        # base units per instrument (e.g. 0.01 BTC)
+max_notional = "500"         # quote currency per order
+max_order_rate_per_sec = 5
+max_daily_loss = "100"       # quote currency; trading halts at this loss
+price_band_bps = 50          # reject orders more than 0.5% from the reference price
+stale_data_ms = 1000         # halt order entry when market data is older than this
