@@ -4,7 +4,10 @@
 
 Proposed. Date proposed: 2026-09-27. Not yet approved by a human.
 
-This ADR conflicts with the bootstrap's initial arena. The bootstrap spec (§1) and ADR-0003 (venue selection, being written on branch `bootstrap/phase-0-decisions` and not yet pushed when this ADR was drafted) assume liquid crypto perps plus spot as the first arena. The base-complete spec proposes kalshi-events as the default to validate. A human must pick one. If kalshi-events is approved, this ADR supersedes the arena part of ADR-0003 and of `docs/VISION.md`; both stay in place, marked as partly superseded. If crypto perps are chosen, this ADR is marked Deprecated and ADR-0003 stands.
+This ADR conflicts with the bootstrap's initial arena. The bootstrap spec (§1) sets the initial arena as liquid crypto perpetuals and spot, and ADR-0003 (venue selection, Proposed, [PR #5](https://github.com/SatyamDave/fall_forward_labs/pull/5)) reviews venues inside that arena. ADR-0003 selects no venue until the operators confirm their jurisdiction. If they are US persons, its shortlist is Coinbase Derivatives (US perpetual-style futures), Kraken Derivatives US (perps on Bitnomial through NinjaTrader Clearing) and CME crypto futures through an FCM, plus spot on Coinbase Exchange, Kraken and Binance.US. It does not consider event contracts. The base-complete spec proposes kalshi-events instead. A human must pick one:
+
+- If kalshi-events is approved, this ADR supersedes the arena part of ADR-0003 (its Context and its shortlist, not its eligibility research or selection criteria) and of `docs/VISION.md`. Both stay in place, marked as partly superseded.
+- If crypto perps are chosen, this ADR is marked Deprecated and ADR-0003 governs the venue choice. Candidate C below is one entry on ADR-0003's US shortlist; Kraken Derivatives US is on that shortlist too but is not scored here.
 
 ## Context
 
@@ -43,7 +46,7 @@ APIs (from [docs.kalshi.com](https://docs.kalshi.com/llms.txt)).
 - Market maker program: Kalshi grants status after reviewing financial resources, trading experience and reputation, in return for quoting obligations, reduced fees and adjusted position limits. [Kalshi help: become a market maker](https://help.kalshi.com/en/articles/13823819-how-to-become-a-market-maker-on-kalshi), [2025 program terms filed with the CFTC](https://www.cftc.gov/sites/default/files/filings/orgrules/25/04/rules04212519494.pdf). Current eligibility thresholds are UNVERIFIED.
 - Historical data: `/historical/markets`, candlesticks, trades, fills, orders and positions, split from live endpoints at cutoffs returned by `GET /historical/cutoff`, with cursor pagination. No bulk download is documented. [Historical data](https://docs.kalshi.com/getting_started/historical_data.md). Whether historical order-book depth is available at all is UNVERIFIED; plan on recording our own.
 
-Stack fit. NautilusTrader has no Kalshi adapter: RFC [#4780](https://github.com/nautechsystems/nautilus_trader/issues/4780) is open and PR [#5010](https://github.com/nautechsystems/nautilus_trader/pull/5010) (Kalshi adapter plus prediction-market core types) was closed unmerged on 2026-09-17. It does ship a Polymarket adapter (`crates/adapters/polymarket` on `develop`). hftbacktest's live support is Binance Futures and Bybit only ([README](https://github.com/nkaz001/hftbacktest)), and it has no binary-contract settlement model. So the gateway is ours, generated from the pinned specs, and the event-family fill and settlement models are ours too.
+Stack fit. ADR-0001 (Proposed) makes NautilusTrader the engine foundation and source of live venue adapters, and limits hftbacktest to fill simulation behind our own `backtest/fill_models/` interface. NautilusTrader has no Kalshi adapter: RFC [#4780](https://github.com/nautechsystems/nautilus_trader/issues/4780) is open and PR [#5010](https://github.com/nautechsystems/nautilus_trader/pull/5010) (Kalshi adapter plus prediction-market core types) was closed unmerged on 2026-09-17. It does ship a Polymarket adapter (`crates/adapters/polymarket` on `develop`). hftbacktest's live support is Binance Futures and Bybit only ([README](https://github.com/nkaz001/hftbacktest)), and it has no binary-contract settlement model. So under ADR-0001 the Kalshi gateway is ours, generated from the pinned specs behind the VenueAdapter interface, and the event-family fill and settlement models are ours too; hftbacktest's queue model is at most a starting point for the binary-book fill model.
 
 ### Candidate B: Kalshi perpetual futures
 
@@ -94,7 +97,7 @@ Checkable consequences in the repository:
 ## Alternatives
 
 - **B: Kalshi perps.** Would reuse A's gateway and auth and fit the orderbook family, but production access is rolling out member by member and the history is short. Candidate for a second vertical by later ADR, not now.
-- **C: CDE crypto perps.** Matches the bootstrap arena and has the best off-the-shelf stack fit through NautilusTrader. Not chosen by default because direct access needs certification through an FCM, and the retail route's sandbox is UNVERIFIED. If the human weights stack fit and the original VISION arena over demo-first testing, this is the alternative to pick, and ADR-0003 governs.
+- **C: CDE crypto perps.** Matches the bootstrap arena and has the best off-the-shelf stack fit through NautilusTrader. Not chosen by default because direct access needs certification through an FCM, and the retail route's sandbox is UNVERIFIED. It is the candidate where ADR-0001 applies most directly, since NautilusTrader's Coinbase adapter is the live adapter. If the human weights stack fit and the original VISION arena over demo-first testing, pick the crypto-perps arena and let ADR-0003 choose among its US shortlist.
 - **D: CME via broker.** Most capacity, but the most contested market and the highest fixed cost for a small team; the edge sources the spec names are weakest there.
 
 ## Consequences

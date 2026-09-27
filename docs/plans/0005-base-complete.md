@@ -32,10 +32,10 @@ The core must support any market family (order-book markets, event contracts, la
 
 **ADR-0020, first vertical.** Compares kalshi-events, Kalshi perps, crypto perps on Coinbase Derivatives Exchange, and CME futures via a broker on legal access, data availability, capacity, competition, stack fit and time to first live trade. It proposes kalshi-events, conditional on the human confirming jurisdiction, and lists every unverified fact as a question.
 
-**Conflict the human must resolve.** The bootstrap spec (§1) and ADR-0003 (venue selection, on branch `bootstrap/phase-0-decisions`, not yet pushed when this plan was written) assume liquid crypto perps plus spot as the initial arena. This plan's default is kalshi-events. The human picks one:
+**Conflict the human must resolve.** The bootstrap spec (§1) sets liquid crypto perps plus spot as the initial arena. ADR-0003 (venue selection, Proposed, PR #5) works inside that arena and selects no venue until jurisdiction is confirmed; for US persons its shortlist is Coinbase Derivatives, Kraken Derivatives US and CME crypto futures through an FCM, and it does not consider event contracts. This plan's default is kalshi-events. The human picks one:
 
-- If kalshi-events: ADR-0020 is Accepted and supersedes the arena part of ADR-0003 and `docs/VISION.md`. Both get a "partly superseded by ADR-0020" note; neither is deleted.
-- If crypto perps: ADR-0020 is marked Deprecated, ADR-0003 governs, and Phases 1 to 5 use the orderbook family and ADR-0003's venue in place of the Kalshi paths named below.
+- If kalshi-events: ADR-0020 is Accepted and supersedes the arena part of ADR-0003 (Context and shortlist; its eligibility research and selection criteria still apply to any later venue) and of `docs/VISION.md`. Both get a "partly superseded by ADR-0020" note; neither is deleted.
+- If crypto perps: ADR-0020 is marked Deprecated, ADR-0003 governs, the human picks a venue from its shortlist once jurisdiction is known, and Phases 1 to 5 use the orderbook family and that venue's NautilusTrader adapter (ADR-0001) in place of the Kalshi paths named below.
 
 **Audit, pending.** `docs/audits/0001-base-audit.md` maps every major item from the four prompts to done (exists and tested), partial (what is missing), not started, cut (with reason) or defer (to roadmap, with reason). It flags duplication, components with no tests, CLAUDE.md files over budget, workflows that never ran, and secret-handling gaps. It cannot be written yet: the bootstrap, autonomy, decision-layer and self-learning PRs are still being built by parallel agents (open at the time of writing: #1 skeleton, #2 self-learning Phase 1, #3 autonomy Phase A, with more incoming). Another agent writes the audit after those land, as its own PR.
 
