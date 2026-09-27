@@ -13,6 +13,11 @@ publish = false
 qc-core = { path = "crates/core" }
 qc-orderbook = { path = "crates/orderbook" }
 qc-strategy-runtime = { path = "crates/strategy-runtime" }
+qc-gateway = { path = "crates/gateway" }
+qc-oms = { path = "crates/oms" }
+qc-risk = { path = "crates/risk" }
+qc-replay = { path = "crates/replay" }
+proptest = "1.11"
 criterion = "0.8"
 serde = { version = "1", features = ["derive"] }
 toml = "1"
