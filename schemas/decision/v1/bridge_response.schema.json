@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fall-forward-labs.local/schemas/decision/v1/bridge_response.schema.json",
+  "title": "BridgeResponse",
+  "type": "object",
+  "required": [
+    "v",
+    "id",
+    "ok"
+  ],
+  "properties": {
+    "v": {
+      "const": 1
+    },
+    "id": {
+      "type": "string"
+    },
+    "ok": {
+      "type": "boolean"
+    },
+    "decision_request": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "decision_request.schema.json"
+        }
+      ]
+    },
+    "result": {
+      "$ref": "intent_result.schema.json"
+    },
+    "status": {
+      "type": "object"
+    },
+    "error": {
+      "type": "object",
+      "required": [
+        "code",
+        "message"
+      ],
+      "properties": {
+        "code": {
+          "type": "string"
+        },
+        "message": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,55 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fall-forward-labs.local/schemas/decision/v1/decision_ledger_entry.schema.json",
+  "title": "DecisionLedgerEntry",
+  "type": "object",
+  "required": [
+    "request",
+    "decision",
+    "mode",
+    "prompt_version",
+    "model"
+  ],
+  "properties": {
+    "request": {
+      "$ref": "decision_request.schema.json"
+    },
+    "decision": {
+      "$ref": "decision.schema.json"
+    },
+    "result": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "intent_result.schema.json"
+        }
+      ]
+    },
+    "mode": {
+      "enum": [
+        "fake",
+        "live",
+        "replay"
+      ]
+    },
+    "prompt_version": {
+      "type": "string"
+    },
+    "model": {
+      "type": "string"
+    },
+    "raw": {
+      "description": "Full SDK request/response in live mode; null in fake mode."
+    },
+    "cost_usd": {
+      "type": "number",
+      "minimum": 0
+    },
+    "latency_ms": {
+      "type": "number",
+      "minimum": 0
+    }
+  }
+}
