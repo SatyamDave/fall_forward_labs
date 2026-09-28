@@ -6,7 +6,7 @@ Regenerated automatically by `.github/workflows/docs-status.yml` on every merge 
 Narrative docs: [project guide](guide/quant-core-guide.html) ·
 [base status](reports/base-status.md) · [NOW](NOW.md).
 
-Generated from `main` at **aa603d1 2026-09-28**. Latest CI on `main`: **queued on aa603d1**.
+Generated from `main` at **c0958a5 2026-09-28**. Latest CI on `main`: **in_progress on c0958a5**.
 Paid AI loops: **off**.
 
 ## Open pull requests (0)
@@ -17,6 +17,7 @@ None.
 
 | PR | Title | Merged |
 |---|---|---|
+| [#87](https://github.com/SatyamDave/fall_forward_labs/pull/87) | The kill switch cancels everything at the broker, even if the agent is stuck | 2026-09-28 |
 | [#86](https://github.com/SatyamDave/fall_forward_labs/pull/86) | The PR checklist check accepts sections written as headings | 2026-09-28 |
 | [#84](https://github.com/SatyamDave/fall_forward_labs/pull/84) | Wire the gateway to protocol v1.2: reconciliation, cancel, market clock | 2026-09-28 |
 | [#85](https://github.com/SatyamDave/fall_forward_labs/pull/85) | External kill switch, real instrument, and protocol v1.2 for qc-bridge | 2026-09-28 |
@@ -31,12 +32,16 @@ None.
 | [#80](https://github.com/SatyamDave/fall_forward_labs/pull/80) | Replaying a recorded decision gives the same ledger every time | 2026-09-28 |
 | [#74](https://github.com/SatyamDave/fall_forward_labs/pull/74) | Prove the agent can only place orders one way, replay decisions for free, write the live prompt | 2026-09-28 |
 | [#73](https://github.com/SatyamDave/fall_forward_labs/pull/73) | Build the broker gateway door and a mock Robinhood connection | 2026-09-28 |
-| [#76](https://github.com/SatyamDave/fall_forward_labs/pull/76) | Stamp approved orders and prove the bridge refuses what it doesn't understand | 2026-09-28 |
 
 ## Recent commits on main
 
 | Commit | Date | Subject |
 |---|---|---|
+| `c0958a5` | 2026-09-28 | Merge pull request #87 from SatyamDave/safety/halt-path |
+| `49d66dd` | 2026-09-28 | Merge main into safety/halt-path before merging #87 |
+| `30d58ad` | 2026-09-28 | test(agent): run test files one at a time |
+| `a75ef5d` | 2026-09-28 | The kill switch cancels everything at the broker, even if the agent is stuck |
+| `9b0e697` | 2026-09-28 | docs(status): regenerate live status from aa603d1 [skip ci] |
 | `aa603d1` | 2026-09-28 | Merge pull request #86 from SatyamDave/fix/arch-check-headings |
 | `fa306e1` | 2026-09-28 | fix(ci): accept PR-template sections written as headings without a colon |
 | `e743334` | 2026-09-28 | docs(status): regenerate live status from 13866c8 [skip ci] |
@@ -44,11 +49,6 @@ None.
 | `249fc10` | 2026-09-28 | Merge main into wave2/gateway-integration before merging #84 |
 | `69ea482` | 2026-09-28 | test(recorder): give the replay-integration test realistic poll timing |
 | `b720f0f` | 2026-09-28 | docs(status): regenerate live status from 525399d [skip ci] |
-| `6eb4a03` | 2026-09-28 | Merge main into wave2/gateway-integration before merging #84 |
-| `525399d` | 2026-09-28 | Merge pull request #85 from SatyamDave/wave2/bridge-control |
-| `4714a5c` | 2026-09-28 | chore: re-run PR checks after description fix |
-| `9c52c85` | 2026-09-28 | Merge main into wave2/bridge-control before merging #85 |
-| `1cfbed8` | 2026-09-28 | feat(agent): run just agent-sim-external against the real qc-bridge binary |
 
 ## Decisions (ADRs)
 
@@ -69,6 +69,6 @@ None.
 ## Code and research
 
 - Engine crates: `bridge`, `core`, `gateway`, `inference`, `oms`, `orderbook`, `replay`, `risk`, `strategy-runtime`, `telemetry`
-- Rust #[test] functions: 128
+- Rust #[test] functions: 133
 - Python test functions: 253
 - Registry trials: `demo` 4, `study-0001-favorite-longshot` 1, `study-0002-favorite-longshot-v2` 1
