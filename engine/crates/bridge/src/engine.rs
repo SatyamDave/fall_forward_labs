@@ -33,8 +33,11 @@ pub fn risk_reject_code(reject: RiskReject) -> &'static str {
         RiskReject::StaleData => "stale_data",
         RiskReject::MaxDailyLoss => "max_daily_loss",
         RiskReject::PriceBand => "price_band",
+        RiskReject::SelfCross => "self_cross",
         RiskReject::MaxNotional => "max_notional",
+        RiskReject::MaxDailyNotional => "max_daily_notional",
         RiskReject::MaxPosition => "max_position",
+        RiskReject::WashTrade => "wash_trade",
         RiskReject::MaxOrderRate => "max_order_rate",
     }
 }
@@ -132,10 +135,21 @@ impl BridgeEngine {
 
     fn context(&self) -> RiskContext {
         let (mut open_buy, mut open_sell) = (0_i64, 0_i64);
+        let (mut own_best_bid, mut own_best_ask) = (None, None);
         for o in self.oms.open_orders() {
             match o.request.side {
-                Side::Buy => open_buy += o.open_qty().raw(),
-                Side::Sell => open_sell += o.open_qty().raw(),
+                Side::Buy => {
+                    open_buy += o.open_qty().raw();
+                    own_best_bid = Some(
+                        own_best_bid.map_or(o.request.price, |b: Price| b.max(o.request.price)),
+                    );
+                }
+                Side::Sell => {
+                    open_sell += o.open_qty().raw();
+                    own_best_ask = Some(
+                        own_best_ask.map_or(o.request.price, |a: Price| a.min(o.request.price)),
+                    );
+                }
             }
         }
         RiskContext {
@@ -149,6 +163,8 @@ impl BridgeEngine {
                 .mid()
                 .filter(|_| self.book.status() == BookStatus::Synced),
             daily_pnl: self.daily_pnl(),
+            own_best_bid,
+            own_best_ask,
         }
     }
 
@@ -169,7 +185,7 @@ impl BridgeEngine {
                 client_id,
                 price,
                 qty,
-                ..
+                ts,
             } = order_event
                 && let Some(order) = self.oms.get(client_id)
             {
@@ -180,6 +196,10 @@ impl BridgeEngine {
                 };
                 self.position = Qty::from_raw(self.position.raw() + dq);
                 self.cash += dc;
+                // #40: a wash-trade pattern is about completed trades, not merely
+                // accepted-then-canceled quotes, so this is fed on fill, not on submit.
+                self.risk
+                    .record_fill(order.request.instrument, order.request.side, price, qty, ts);
             }
         }
         self.check_daily_loss();

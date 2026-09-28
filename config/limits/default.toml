@@ -9,3 +9,16 @@ max_order_rate_per_sec = 5
 max_daily_loss = "100"       # quote currency; trading halts at this loss
 price_band_bps = 50          # reject orders more than 0.5% from the reference price
 stale_data_ms = 1000         # halt order entry when market data is older than this
+
+# Agentic dollar cap (#41): Robinhood's agentic accounts have no platform-side spending
+# cap, so this is the only enforcement. A placeholder pending #23 (the founders' actual
+# agreed number, likely much smaller for a real canary account); set here above the
+# existing tests/replay/sample_day.csv fixture's exercised volume (~$92k of accepted-order
+# notional across the simulated day, engine/crates/replay/tests/replay.rs) so this
+# unrelated, pre-existing determinism fixture is not broken by a brand-new check. Tighten
+# only, per rule 4, once #23 lands.
+max_daily_notional = "150000" # quote currency; cumulative notional of accepted orders per exchange day. pending #23
+
+# Wash-trade detection window (#40): a completed fill of the opposite side, same price and
+# same quantity, inside this window after one of our own fills is a wash-trade pattern.
+wash_trade_window_ms = 2000
