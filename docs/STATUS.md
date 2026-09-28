@@ -6,22 +6,22 @@ Regenerated automatically by `.github/workflows/docs-status.yml` on every merge 
 Narrative docs: [project guide](guide/quant-core-guide.html) ·
 [base status](reports/base-status.md) · [NOW](NOW.md).
 
-Generated from `main` at **6c776c6 2026-09-28**. Latest CI on `main`: **in_progress on 6c776c6**.
+Generated from `main` at **88064aa 2026-09-28**. Latest CI on `main`: **in_progress on 88064aa**.
 Paid AI loops: **off**.
 
-## Open pull requests (4)
+## Open pull requests (3)
 
 | PR | Title | Author | Draft |
 |---|---|---|---|
 | [#79](https://github.com/SatyamDave/fall_forward_labs/pull/79) | Baseline-checked evals, decision/PnL reports, and a stop rule | SatyamDave | no |
 | [#78](https://github.com/SatyamDave/fall_forward_labs/pull/78) | Redo study 0001 favorite-longshot v2, bounded population, real sample | SatyamDave | no |
 | [#77](https://github.com/SatyamDave/fall_forward_labs/pull/77) | ops: give live trading a safe home and alert on it breaking | SatyamDave | no |
-| [#72](https://github.com/SatyamDave/fall_forward_labs/pull/72) | Make SimVenue consume liquidity and respect queue position | SatyamDave | no |
 
 ## Recently merged
 
 | PR | Title | Merged |
 |---|---|---|
+| [#72](https://github.com/SatyamDave/fall_forward_labs/pull/72) | Make SimVenue consume liquidity and respect queue position | 2026-09-28 |
 | [#75](https://github.com/SatyamDave/fall_forward_labs/pull/75) | Add self-cross, wash-trade and daily-notional dollar caps to qc-risk | 2026-09-28 |
 | [#80](https://github.com/SatyamDave/fall_forward_labs/pull/80) | Replaying a recorded decision gives the same ledger every time | 2026-09-28 |
 | [#74](https://github.com/SatyamDave/fall_forward_labs/pull/74) | Prove the agent can only place orders one way, replay decisions for free, write the live prompt | 2026-09-28 |
@@ -36,12 +36,15 @@ Paid AI loops: **off**.
 | [#19](https://github.com/SatyamDave/fall_forward_labs/pull/19) | Add an illustrated project guide and the Robinhood trading path | 2026-09-28 |
 | [#18](https://github.com/SatyamDave/fall_forward_labs/pull/18) | build(deps): Bump bridgecrewio/checkov-action from 12.1347.0 to 12.3125.0 in the actions group | 2026-09-28 |
 | [#8](https://github.com/SatyamDave/fall_forward_labs/pull/8) | Document the actual base state and consolidate the repo guide | 2026-09-28 |
-| [#17](https://github.com/SatyamDave/fall_forward_labs/pull/17) | Fix base integration failures and make checks cover every suite | 2026-09-28 |
 
 ## Recent commits on main
 
 | Commit | Date | Subject |
 |---|---|---|
+| `88064aa` | 2026-09-28 | Merge pull request #72 from SatyamDave/wave1/simvenue |
+| `1b02f70` | 2026-09-28 | Merge main into wave1/simvenue before merging #72 |
+| `81c1f9a` | 2026-09-28 | Merge main into wave1/simvenue before merging #72 |
+| `a4456d8` | 2026-09-28 | docs(status): regenerate live status from 6c776c6 [skip ci] |
 | `6c776c6` | 2026-09-28 | Merge pull request #75 from SatyamDave/wave1/risk |
 | `abbe049` | 2026-09-28 | docs(status): regenerate live status from 1ac55f3 [skip ci] |
 | `212b43f` | 2026-09-28 | Merge main into wave1/risk before merging #75 |
@@ -50,10 +53,6 @@ Paid AI loops: **off**.
 | `33cc3ea` | 2026-09-28 | docs(risk): record the new checks and their invariants in the crate CLAUDE.md |
 | `1769332` | 2026-09-28 | Merge main into wave1/risk before merging #75 |
 | `8519a7d` | 2026-09-28 | docs(status): regenerate live status from 502df0f [skip ci] |
-| `502df0f` | 2026-09-28 | Merge pull request #74 from SatyamDave/wave1/agent-core |
-| `f1130db` | 2026-09-28 | fix(risk): make max_daily_notional a conservative default, not a fixture-fit value |
-| `694a8ed` | 2026-09-28 | docs(status): regenerate live status from 153f09e [skip ci] |
-| `65478d5` | 2026-09-28 | Merge main into wave1/agent-core before merging #74 |
 
 ## Decisions (ADRs)
 
@@ -74,6 +73,6 @@ Paid AI loops: **off**.
 ## Code and research
 
 - Engine crates: `bridge`, `core`, `gateway`, `inference`, `oms`, `orderbook`, `replay`, `risk`, `strategy-runtime`, `telemetry`
-- Rust #[test] functions: 92
+- Rust #[test] functions: 95
 - Python test functions: 134
 - Registry trials: `demo` 4, `study-0001-favorite-longshot` 1
