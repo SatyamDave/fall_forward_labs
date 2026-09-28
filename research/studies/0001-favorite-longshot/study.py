@@ -21,8 +21,10 @@ ROOT = HERE.parents[2]
 RAW = ROOT / "data" / "raw" / "study-0001"
 CATALOG = ROOT / "data" / "catalog" / "study-0001.json"
 REPRODUCIBILITY = (
-    "UNREPRODUCIBLE-FROM-CLEAN-CLONE: the raw snapshot is gitignored in data/raw/study-0001 and "
-    "stored nowhere else; data/catalog/study-0001.json holds only its hashes (see README.md)."
+    "NOT REPRODUCIBLE FROM A CLEAN CLONE; reproducible from the preserved snapshot. "
+    "The raw snapshot is gitignored and held outside git on one founder's machine "
+    "(not an approved shared store); data/catalog/study-0001.json holds its hashes "
+    "(see README.md)."
 )
 CONFIG: dict[str, Any] = json.loads((HERE / "config.json").read_text())
 SEED: int = CONFIG["seed"]
