@@ -83,6 +83,10 @@ replay:
     if [ "$first" != "$expected" ]; then echo "FAIL: order log does not match tests/replay/expected_order_log.sha256 ($expected)"; exit 1; fi
     echo "replay deterministic and matches the committed order log"
 
+# Build the qc-bridge release binary (protocol v1 stdio bridge, schemas/decision/v1)
+bridge:
+    cd {{engine}} && cargo build --release --locked -p qc-bridge
+
 # Run a backtest from backtest/configs/<cfg>.yaml (not implemented: exits 2 so nothing mistakes it for a pass)
 backtest cfg:
     @echo "not implemented: no execution backtest exists yet ({{cfg}}); 'just walkforward <name>' is the label-level evaluation" >&2

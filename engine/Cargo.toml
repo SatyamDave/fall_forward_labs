@@ -17,6 +17,7 @@ qc-gateway = { path = "crates/gateway" }
 qc-oms = { path = "crates/oms" }
 qc-risk = { path = "crates/risk" }
 qc-replay = { path = "crates/replay" }
+qc-inference = { path = "crates/inference" }
 proptest = "1.11"
 sha2 = "0.10"
 criterion = "0.8"
