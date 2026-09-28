@@ -6,20 +6,20 @@ Regenerated automatically by `.github/workflows/docs-status.yml` on every merge 
 Narrative docs: [project guide](guide/quant-core-guide.html) ·
 [base status](reports/base-status.md) · [NOW](NOW.md).
 
-Generated from `main` at **836a1ab 2026-09-28**. Latest CI on `main`: **in_progress on 836a1ab**.
+Generated from `main` at **0fcf59a 2026-09-28**. Latest CI on `main`: **queued on 0fcf59a**.
 Paid AI loops: **off**.
 
-## Open pull requests (2)
+## Open pull requests (1)
 
 | PR | Title | Author | Draft |
 |---|---|---|---|
 | [#78](https://github.com/SatyamDave/fall_forward_labs/pull/78) | Redo study 0001 favorite-longshot v2, bounded population, real sample | SatyamDave | no |
-| [#77](https://github.com/SatyamDave/fall_forward_labs/pull/77) | ops: give live trading a safe home and alert on it breaking | SatyamDave | no |
 
 ## Recently merged
 
 | PR | Title | Merged |
 |---|---|---|
+| [#77](https://github.com/SatyamDave/fall_forward_labs/pull/77) | ops: give live trading a safe home and alert on it breaking | 2026-09-28 |
 | [#79](https://github.com/SatyamDave/fall_forward_labs/pull/79) | Baseline-checked evals, decision/PnL reports, and a stop rule | 2026-09-28 |
 | [#72](https://github.com/SatyamDave/fall_forward_labs/pull/72) | Make SimVenue consume liquidity and respect queue position | 2026-09-28 |
 | [#75](https://github.com/SatyamDave/fall_forward_labs/pull/75) | Add self-cross, wash-trade and daily-notional dollar caps to qc-risk | 2026-09-28 |
@@ -34,12 +34,14 @@ Paid AI loops: **off**.
 | [#59](https://github.com/SatyamDave/fall_forward_labs/pull/59) | Record ADR-0040 in every CLAUDE.md and add the arch-check gate | 2026-09-28 |
 | [#60](https://github.com/SatyamDave/fall_forward_labs/pull/60) | Record ADR-0040, the agentic decision, across the docs | 2026-09-28 |
 | [#19](https://github.com/SatyamDave/fall_forward_labs/pull/19) | Add an illustrated project guide and the Robinhood trading path | 2026-09-28 |
-| [#18](https://github.com/SatyamDave/fall_forward_labs/pull/18) | build(deps): Bump bridgecrewio/checkov-action from 12.1347.0 to 12.3125.0 in the actions group | 2026-09-28 |
 
 ## Recent commits on main
 
 | Commit | Date | Subject |
 |---|---|---|
+| `0fcf59a` | 2026-09-28 | Merge pull request #77 from SatyamDave/wave1/ops |
+| `314bdbe` | 2026-09-28 | Merge main into wave1/ops before merging #77 |
+| `e774b4c` | 2026-09-28 | docs(status): regenerate live status from 836a1ab [skip ci] |
 | `836a1ab` | 2026-09-28 | Merge pull request #79 from SatyamDave/wave1/evals-reports |
 | `7cfe50c` | 2026-09-28 | Merge main into wave1/evals-reports before merging #79 |
 | `8f0edce` | 2026-09-28 | docs(status): regenerate live status from 88064aa [skip ci] |
@@ -49,9 +51,6 @@ Paid AI loops: **off**.
 | `a4456d8` | 2026-09-28 | docs(status): regenerate live status from 6c776c6 [skip ci] |
 | `6c776c6` | 2026-09-28 | Merge pull request #75 from SatyamDave/wave1/risk |
 | `abbe049` | 2026-09-28 | docs(status): regenerate live status from 1ac55f3 [skip ci] |
-| `212b43f` | 2026-09-28 | Merge main into wave1/risk before merging #75 |
-| `1ac55f3` | 2026-09-28 | Merge pull request #80 from SatyamDave/fix/replay-ledger-determinism |
-| `257b29c` | 2026-09-28 | fix(agent): record wall-clock latency only for live decisions |
 
 ## Decisions (ADRs)
 
@@ -73,5 +72,5 @@ Paid AI loops: **off**.
 
 - Engine crates: `bridge`, `core`, `gateway`, `inference`, `oms`, `orderbook`, `replay`, `risk`, `strategy-runtime`, `telemetry`
 - Rust #[test] functions: 95
-- Python test functions: 165
+- Python test functions: 187
 - Registry trials: `demo` 4, `study-0001-favorite-longshot` 1
