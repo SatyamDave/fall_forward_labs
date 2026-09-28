@@ -6,6 +6,7 @@
 //! Determinism: time comes only from recorded timestamps via [`SimClock`],
 //! and record order is a `Vec`, never a `HashMap`.
 
+use std::collections::BTreeSet;
 use std::path::PathBuf;
 
 use ed25519_dalek::SigningKey;
@@ -190,6 +191,14 @@ pub struct BridgeEngine {
     /// `--instrument` (protocol v1.2, issue #66): `None` keeps the v1
     /// hard-coded instrument and skips every tick/qty-step/trading-hours check.
     instrument_cfg: Option<Instrument>,
+    /// Client-order-ids whose `PendingCancel` was requested by
+    /// [`Self::cancel_all_open`] (a halt), not an explicit
+    /// `cancel_order_intent` call (protocol v1.2.1, issue #44's cancel-on-halt
+    /// gap): tags the approval [`Self::pending_cancels`] mints with
+    /// `"reason":"halt"` so ops/audit can tell a mass halt-cancel apart from a
+    /// one-off agent-requested cancel. A `BTreeSet`, not a `HashMap` (root
+    /// rule), bounded by however many orders were ever open at once.
+    halt_cancelled: BTreeSet<u64>,
 }
 
 impl BridgeEngine {
@@ -258,6 +267,7 @@ impl BridgeEngine {
             signing_key: approval::generate_signing_key(),
             kill_file,
             instrument_cfg,
+            halt_cancelled: BTreeSet::new(),
         }
     }
 
@@ -337,14 +347,26 @@ impl BridgeEngine {
     /// operator, a supervisor, the ops runbook) engages the switch, and the
     /// *next* record or op this process handles (from any source, not
     /// necessarily the agent) observes it within root rule 11's budget.
+    ///
+    /// Issue #44 reopened: this alone is not enough if *nothing* ever calls
+    /// the bridge again (a truly hung, not merely slow, agent process never
+    /// sends another op, and a stalled feed never produces another record).
+    /// `main.rs` now also runs a dedicated watcher thread that polls this
+    /// same path independent of stdin and engages the same `Arc<AtomicBool>`
+    /// kill switch directly; the `!is_engaged()` guard below is what makes
+    /// the two paths idempotent with each other (whichever detects the file
+    /// first logs the one `kill_switch_engaged` event, the other is a silent
+    /// no-op) rather than double-logging.
     pub fn poll_kill_file(&mut self) {
         if self.halted.is_some() {
             return;
         }
         let Some(path) = &self.kill_file else { return };
         if path.exists() {
-            self.risk.kill_switch().engage();
-            eventlog::kill_switch_engaged(self.clock.now().0, "file");
+            if !self.risk.kill_switch().is_engaged() {
+                self.risk.kill_switch().engage();
+                eventlog::kill_switch_engaged(self.clock.now().0, "file");
+            }
             self.halt(HaltReason::KillSwitch, None);
         }
     }
@@ -390,7 +412,13 @@ impl BridgeEngine {
             .map(|o| o.request.client_id)
             .collect();
         for id in open {
-            let _ = self.oms.request_cancel(id);
+            if self.oms.request_cancel(id).is_ok() && self.venue_mode == VenueMode::External {
+                // Issue #44's cancel-on-halt gap: tag this id so
+                // `Self::pending_cancels` marks the approval it mints
+                // `"reason":"halt"`, distinguishing it from an explicit
+                // `cancel_order_intent` call.
+                self.halt_cancelled.insert(id.0);
+            }
             if self.venue_mode == VenueMode::Sim {
                 let _ = self.venue.cancel(id);
             }
@@ -398,6 +426,42 @@ impl BridgeEngine {
         if self.venue_mode == VenueMode::Sim {
             self.drain_venue_events();
         }
+    }
+
+    /// Protocol v1.2.1 (issue #44's cancel-on-halt gap): a fresh, unexpired
+    /// cancel `approval` for every order currently `PendingCancel` —
+    /// regardless of whether it got there via a halt
+    /// ([`Self::cancel_all_open`]) or an explicit `cancel_order_intent` —
+    /// tagged `"reason":"halt"` for the former (see `halt_cancelled`).
+    /// Minted fresh on every call rather than stored once: the gateway's
+    /// heartbeat (agent/src/broker/heartbeat.ts) is expected to call this
+    /// repeatedly until nothing is open at the broker, and a freshly minted
+    /// approval is never stale by the time it acts on it, even if the
+    /// bridge's market clock has stopped advancing (halted, `external` mode:
+    /// no more decisions, so `now` and `expires_ts_ns` are computed from the
+    /// same frozen reading and the approval never appears expired).
+    /// `sim` mode never leaves an order `PendingCancel` (`SimVenue` acks a
+    /// cancel immediately), so this is always empty there.
+    #[must_use]
+    pub fn pending_cancels(&self) -> Vec<Value> {
+        self.oms
+            .open_orders()
+            .filter(|o| o.state == OrderState::PendingCancel)
+            .map(|o| {
+                let client_order_id = o.request.client_id.0;
+                let reason = self
+                    .halt_cancelled
+                    .contains(&client_order_id)
+                    .then_some("halt");
+                let fields = CancelFields {
+                    client_order_id,
+                    reason,
+                };
+                let approval =
+                    approval::mint_cancel(&self.signing_key, &fields, self.clock.now().0);
+                json!({"client_order_id": client_order_id, "approval": approval})
+            })
+            .collect()
     }
 
     /// Remaining loss budget for the day: the limit, less any loss already
@@ -545,7 +609,10 @@ impl BridgeEngine {
             .request_cancel(id)
             .map_err(|_| "cancel is not legal from this order's state")?;
         if self.venue_mode == VenueMode::External {
-            let fields = CancelFields { client_order_id };
+            let fields = CancelFields {
+                client_order_id,
+                reason: None,
+            };
             let approval = approval::mint_cancel(&self.signing_key, &fields, self.clock.now().0);
             return Ok(
                 json!({"accepted": true, "client_order_id": client_order_id, "approval": approval}),
@@ -884,6 +951,11 @@ impl BridgeEngine {
             "reconciled": self.reconciled,
             "market_ts_ns": self.clock.now().0,
             "open_orders": open_orders,
+            // Issue #44's cancel-on-halt gap (protocol v1.2.1): every currently
+            // `PendingCancel` order's fresh cancel approval, so the gateway's
+            // heartbeat can finish the cancel at the real broker even if it
+            // missed (or is polling less often than) `drain_halt_cancels`.
+            "pending_cancels": self.pending_cancels(),
             "limits": {
                 "max_position": limits.max_position.to_string(),
                 "max_notional": limits.max_notional.to_string(),

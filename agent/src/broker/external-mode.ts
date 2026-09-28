@@ -8,6 +8,7 @@
 // through this factory, the same way agent/tests/broker/gateway.test.ts already does.
 import { ed25519PublicKeyFromRaw } from "./crypto.js";
 import { BrokerGateway, type GatewayConfig } from "./gateway.js";
+import { Heartbeat } from "./heartbeat.js";
 import { reconcileWithBroker } from "./reconcile.js";
 import type { McpClient } from "./mcp-client.js";
 import type { AssetClass } from "./types.js";
@@ -21,6 +22,11 @@ export interface ExternalModeDeps {
   journalPath?: string;
   requestTimeoutMs?: number;
   logPreview?: GatewayConfig["logPreview"];
+  /** Issue #44 reopened: overrides the heartbeat's own status-poll cadence (default 1s). Tests
+   *  use this to make the "observes a halt within budget" property fast to assert. */
+  heartbeatIntervalMs?: number;
+  /** Fires the first time the heartbeat observes the bridge halted (see heartbeat.ts). */
+  onHalted?: (reason: string) => void;
 }
 
 export interface ExternalMode {
@@ -28,6 +34,13 @@ export interface ExternalMode {
   /** Runs one reconciliation pass now. Call at startup and periodically (agent/src/loop.ts);
    *  also wired automatically below as the gateway's onAmbiguousOutcome trigger. */
   reconcile: () => Promise<void>;
+  /** Issue #44 reopened: a real wall-clock timer, independent of the decision loop, that keeps
+   *  polling the bridge and finishes any halt-triggered cancels at the broker even if the loop
+   *  itself is stuck. Caller starts it once external mode is fully wired (this factory does not
+   *  start it itself, so a caller that wants to build the gateway without yet running a live
+   *  heartbeat -- e.g. a test asserting on one tick at a time -- can). Always stop() it in the
+   *  same place the bridge itself gets shut down. */
+  heartbeat: Heartbeat;
 }
 
 /**
@@ -76,5 +89,14 @@ export async function createExternalModeGateway(deps: ExternalModeDeps): Promise
     },
   });
 
-  return { gateway, reconcile };
+  const heartbeat = new Heartbeat({
+    bridge: deps.bridge,
+    gateway,
+    instrument: deps.instrument,
+    assetClass: deps.assetClass,
+    intervalMs: deps.heartbeatIntervalMs,
+    onHalted: deps.onHalted,
+  });
+
+  return { gateway, reconcile, heartbeat };
 }

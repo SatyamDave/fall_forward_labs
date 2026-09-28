@@ -194,7 +194,10 @@ were analysed. The hypothesis is untested, not refuted. Process: [docs/process/r
   from `config/limits/default.toml` (unreviewed defaults).
 - **Kill switch:** stops new submissions and sends cancel requests for working orders, in the
   simulated engine. Cancels are not confirmed, positions are not flattened, and no operator
-  command engages it. [docs/runbooks/kill-switch.md](docs/runbooks/kill-switch.md).
+  command engages it. The live/agent-facing engine (`qc-bridge`, ADR-0040) is different: an
+  operator-touched `--kill-file` is observed by a dedicated watcher thread independent of the
+  agent process's cooperation, and a halt mints a signed cancel approval the gateway's own
+  heartbeat drains at the real broker (issue #44). [docs/runbooks/kill-switch.md](docs/runbooks/kill-switch.md).
 - **Protected paths:** root [CLAUDE.md](CLAUDE.md) rule 3 plus `autonomy/`. `guard-protected.sh`
   blocks Claude Code Edit/Write there; Bash and humans are not blocked. No GitHub rule enforces
   review ([docs/TEAM.md](docs/TEAM.md#review-and-the-enforcement-gap)).

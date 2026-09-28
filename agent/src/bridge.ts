@@ -36,36 +36,6 @@ interface Pending {
 
 const DEFAULT_TIMEOUT_MS = 5_000;
 
-// Protocol v1.2 ops (wave2-spec.md) that schemas/decision/v1/bridge_request.schema.json's `op`
-// enum does not list yet -- that file is the bridge-control lane's (wave2/bridge-control), and
-// adding these two strings to its closed enum is their job, not this one's. Requests using them
-// are checked by hand below instead of through ajv until that schema lands; every other request
-// shape (v, id, the op-specific required fields) is still enforced, just not via
-// schemas/decision/v1. Same shape as v1.1's approval types living in broker/types.ts before
-// bridge-v1.1 merged (see that file's former header, now agent/src/types.ts's).
-const V12_ONLY_REQUEST_OPS: ReadonlySet<BridgeOp> = new Set(["cancel_order_intent", "reconcile"]);
-
-function assertValidV12Request(req: BridgeRequest): void {
-  if (req.v !== 1) throw new Error(`bridge request v must be 1, got ${JSON.stringify(req.v)}`);
-  if (typeof req.id !== "string" || req.id.length === 0) {
-    throw new Error("bridge request id must be a non-empty string");
-  }
-  if (req.op === "cancel_order_intent") {
-    if (typeof req.client_order_id !== "number") {
-      throw new Error("cancel_order_intent requires client_order_id");
-    }
-    if (typeof req.reason !== "string") throw new Error("cancel_order_intent requires reason");
-    return;
-  }
-  if (req.op === "reconcile") {
-    if (typeof req.venue !== "object" || req.venue === null) {
-      throw new Error("reconcile requires venue");
-    }
-    return;
-  }
-  throw new Error(`assertValidV12Request called for a non-v1.2-only op: ${req.op}`);
-}
-
 /** Structural check for a `hello` response under protocol v1.2 (adds `market_ts_ns`, and
  *  `protocol` becomes "1.2"). schemas/decision/v1/hello.schema.json still pins `protocol` to the
  *  literal "1.1" and forbids extra properties (bridge-control's file, not extended yet), so ajv
@@ -237,11 +207,7 @@ export class BridgeClient implements BridgeReporter {
         return;
       }
       const stdin = this.stdin;
-      if (V12_ONLY_REQUEST_OPS.has(req.op)) {
-        assertValidV12Request(req);
-      } else {
-        validateOrThrow("bridge_request", req);
-      }
+      validateOrThrow("bridge_request", req);
       const timer = setTimeout(() => {
         this.pending.delete(req.id);
         reject(new Error(`bridge request ${req.op} (id=${req.id}) timed out after ${this.timeoutMs}ms`));
@@ -304,6 +270,15 @@ export class BridgeClient implements BridgeReporter {
    *  method never decides "mismatch" itself, it only reports what the bridge decided. */
   reconcile(venue: VenueSnapshot): Promise<BridgeResponse> {
     return this.send({ v: 1, id: randomUUID(), op: "reconcile", venue });
+  }
+
+  /** Protocol v1.2.1 (issue #44's cancel-on-halt gap): pulls a fresh, unexpired cancel `approval`
+   *  for every order the bridge is still waiting on the gateway to finish cancelling at the real
+   *  broker (`response.pending_cancels`, same shape `status()`'s own `pending_cancels` field
+   *  carries). Safe to call repeatedly -- each call mints fresh approvals, and the list only
+   *  shrinks as `reportExecution` resolves each order to a terminal state. */
+  drainHaltCancels(): Promise<BridgeResponse> {
+    return this.send({ v: 1, id: randomUUID(), op: "drain_halt_cancels" });
   }
 
   async shutdown(): Promise<void> {

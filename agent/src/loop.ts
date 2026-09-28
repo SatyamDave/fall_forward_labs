@@ -1,6 +1,7 @@
 // The decision loop: next_decision_request -> decide -> submit_order_intent or no_trade ->
 // ledger, until the bridge's feed is exhausted (decision_request: null).
 import type { BrokerGateway } from "./broker/gateway.js";
+import type { Heartbeat } from "./broker/heartbeat.js";
 import type { AssetClass } from "./broker/types.js";
 import type { BridgeClient } from "./bridge.js";
 import type { Decider } from "./decider/types.js";
@@ -34,6 +35,11 @@ export interface ExternalModeLoopOptions {
   /** Default chosen to reconcile often enough to matter in a demo-length run
    *  (`just agent-sim-external`) without adding a bridge round trip to every single decision. */
   reconcileEveryNDecisions?: number;
+  /** Issue #44 reopened: threaded through only so a caller that already started it
+   *  (agent/src/cli.ts, agent/src/broker/external-mode.js's createExternalModeGateway) has one
+   *  place to find it again for stop()ing at shutdown. runLoop itself never calls into this --
+   *  the entire point is that the heartbeat runs on its own timer, independent of this loop. */
+  heartbeat?: Heartbeat;
 }
 
 export interface LoopOptions {

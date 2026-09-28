@@ -97,11 +97,45 @@ export interface ApprovalPayload {
 
 /** Protocol v1.2 `cancel_order_intent` approval payload (wave2-spec.md): a distinct, smaller
  *  payload shape from `ApprovalPayload` above -- a cancel approves stopping an order, not a new
- *  order's fields, so it carries only what a cancel needs. Signed with the same Ed25519 key. */
+ *  order's fields, so it carries only what a cancel needs. Signed with the same Ed25519 key.
+ *  `reason` is v1.2.1's additive field (issue #44's cancel-on-halt gap): present as `"halt"` only
+ *  when the bridge minted this cancel itself as part of halting (as opposed to an explicit
+ *  `cancel_order_intent` call, which carries no `reason` at all, byte-for-byte unchanged from
+ *  before this field existed) -- audit-only, never checked by verification. */
 export interface CancelApprovalPayload {
   action: "cancel";
   client_order_id: number;
   expires_ts_ns: number;
+  reason?: "halt";
+}
+
+/** One order the bridge halted and is still waiting on the gateway to finish cancelling at the
+ *  real broker (protocol v1.2.1, issue #44's cancel-on-halt gap): a fresh, unexpired cancel
+ *  approval, minted on demand every time `status`/`drain_halt_cancels` is called so it is never
+ *  stale by the time the gateway's heartbeat acts on it. */
+export interface PendingCancel {
+  client_order_id: number;
+  approval: Approval;
+}
+
+/** `status` op's result shape (loosely typed beyond what callers actually read: the bridge is
+ *  free to add fields additively). `pending_cancels` is protocol v1.2.1; every other field is
+ *  v1.2 or earlier. */
+export interface BridgeStatus {
+  position?: DecimalString;
+  halted?: string | null;
+  reconciled?: boolean;
+  /** v1.2+: the latest feed/market timestamp (ns) this process has seen. */
+  market_ts_ns?: number;
+  open_orders?: Array<{
+    client_order_id: number;
+    side: Side;
+    price: DecimalString;
+    qty: DecimalString;
+    filled: DecimalString;
+    state: string;
+  }>;
+  pending_cancels?: PendingCancel[];
 }
 
 export interface IntentResult {
@@ -171,12 +205,13 @@ export type BridgeOp =
   // Protocol v1.1 (additive; schemas/decision/v1/README.md):
   | "hello"
   | "report_execution"
-  // Protocol v1.2 (additive; wave2-spec.md). Not yet in
-  // schemas/decision/v1/bridge_request.schema.json's closed `op` enum -- see bridge.ts's
-  // "V12_ONLY_REQUEST_OPS" comment for how requests using these are validated until the
-  // bridge-control lane extends that schema.
+  // Protocol v1.2 (additive; wave2-spec.md).
   | "cancel_order_intent"
-  | "reconcile";
+  | "reconcile"
+  // Protocol v1.2.1 (additive; issue #44's cancel-on-halt gap): pulls a fresh cancel approval
+  // for every order the bridge is still waiting on the gateway to finish cancelling at the real
+  // broker (see PendingCancel/BridgeStatus.pending_cancels above).
+  | "drain_halt_cancels";
 
 export interface BridgeRequest {
   v: 1;
@@ -204,7 +239,7 @@ export interface BridgeResponse {
   ok: boolean;
   decision_request?: DecisionRequest | null;
   result?: IntentResult;
-  status?: Record<string, unknown>;
+  status?: BridgeStatus;
   error?: BridgeError;
   /** hello */
   hello?: Hello;
@@ -214,6 +249,8 @@ export interface BridgeResponse {
    *  `reconcile.ok`/`reconcile.discrepancies`, never the envelope's `ok`, to learn whether
    *  reconciliation was clean (schemas/decision/v1/README.md's v1.2 section). */
   reconcile?: { ok: boolean; discrepancies: string[] };
+  /** drain_halt_cancels (protocol v1.2.1): same shape as `status.pending_cancels` above. */
+  pending_cancels?: PendingCancel[];
 }
 
 export type LedgerMode = "fake" | "live" | "replay";

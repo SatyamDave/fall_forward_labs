@@ -192,22 +192,37 @@ pub fn verify(
     Ok(())
 }
 
-/// `cancel_order_intent`'s approval fields (protocol v1.2): just the id, the
-/// rest of the cancel is implicit (there is nothing to tamper with beyond
-/// which order gets canceled).
+/// `cancel_order_intent`'s approval fields (protocol v1.2, extended
+/// additively by v1.2.1/issue #44's cancel-on-halt gap): the id, plus an
+/// optional provenance tag for *why* this cancel was minted. Nothing here is
+/// checked by [`verify_cancel`] beyond `client_order_id` -- `reason` is
+/// audit-only, so a broker/ops log can tell a mass halt-cancel apart from an
+/// agent-requested one.
 #[derive(Debug, Clone, Copy)]
 pub struct CancelFields {
     pub client_order_id: u64,
+    /// `Some("halt")` when the bridge halted and requested this order be
+    /// canceled as part of cancelling every open order
+    /// (`BridgeEngine::cancel_all_open`); `None` for an explicit
+    /// `cancel_order_intent` call, which keeps this struct's and the wire
+    /// payload's v1.2 shape byte-for-byte unchanged.
+    pub reason: Option<&'static str>,
 }
 
 /// The canonical cancel-approval payload. Field order here **is** the
-/// canonical wire order (already alphabetical: a < c < e), matching
-/// `schemas/decision/v1/README.md`'s v1.2 section.
+/// canonical wire order (already alphabetical: a < c < e < r), matching
+/// `schemas/decision/v1/README.md`'s v1.2 section. `reason` is v1.2.1's
+/// additive field: omitted from the wire entirely when `None` (`serde`'s
+/// `skip_serializing_if`), so an explicit `cancel_order_intent`'s approval is
+/// byte-for-byte identical to before this field existed, and `#[serde(default)]`
+/// means a payload minted before this field existed still deserializes here.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 struct CancelApprovalPayload {
     action: String,
     client_order_id: u64,
     expires_ts_ns: u64,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    reason: Option<String>,
 }
 
 /// Signs a cancel (protocol v1.2), same key and TTL as [`mint`].
@@ -220,6 +235,7 @@ pub fn mint_cancel(key: &SigningKey, cancel: &CancelFields, decision_ts_ns: u64)
         action: "cancel".to_owned(),
         client_order_id: cancel.client_order_id,
         expires_ts_ns: decision_ts_ns + APPROVAL_TTL_NS,
+        reason: cancel.reason.map(str::to_owned),
     };
     let payload_json =
         serde_json::to_string(&payload).expect("CancelApprovalPayload always serializes");
@@ -346,7 +362,10 @@ mod tests {
     #[test]
     fn mints_and_verifies_a_matching_cancel() {
         let key = fixed_key();
-        let cancel = CancelFields { client_order_id: 7 };
+        let cancel = CancelFields {
+            client_order_id: 7,
+            reason: None,
+        };
         let approval = mint_cancel(&key, &cancel, 1_000_000_000);
         assert!(verify_cancel(&key.verifying_key(), &approval, &cancel, 1_000_000_001).is_ok());
     }
@@ -354,9 +373,15 @@ mod tests {
     #[test]
     fn a_cancel_stamp_does_not_verify_against_a_different_order_id() {
         let key = fixed_key();
-        let cancel = CancelFields { client_order_id: 7 };
+        let cancel = CancelFields {
+            client_order_id: 7,
+            reason: None,
+        };
         let approval = mint_cancel(&key, &cancel, 1_000_000_000);
-        let other = CancelFields { client_order_id: 8 };
+        let other = CancelFields {
+            client_order_id: 8,
+            reason: None,
+        };
         assert_eq!(
             verify_cancel(&key.verifying_key(), &approval, &other, 1_000_000_001),
             Err(VerifyError::FieldMismatch("client_order_id"))
@@ -364,9 +389,40 @@ mod tests {
     }
 
     #[test]
+    fn a_halt_reason_is_carried_in_the_wire_payload_and_still_verifies() {
+        let key = fixed_key();
+        let cancel = CancelFields {
+            client_order_id: 7,
+            reason: Some("halt"),
+        };
+        let approval = mint_cancel(&key, &cancel, 1_000_000_000);
+        assert!(verify_cancel(&key.verifying_key(), &approval, &cancel, 1_000_000_001).is_ok());
+        let payload = approval["payload"].as_str().unwrap();
+        assert!(payload.contains("\"reason\":\"halt\""), "{payload}");
+    }
+
+    #[test]
+    fn an_explicit_cancels_payload_omits_reason_entirely_unchanged_from_v1_2() {
+        let key = fixed_key();
+        let cancel = CancelFields {
+            client_order_id: 7,
+            reason: None,
+        };
+        let approval = mint_cancel(&key, &cancel, 1_000_000_000);
+        let payload = approval["payload"].as_str().unwrap();
+        assert_eq!(
+            payload,
+            r#"{"action":"cancel","client_order_id":7,"expires_ts_ns":6000000000}"#
+        );
+    }
+
+    #[test]
     fn an_expired_cancel_stamp_is_rejected() {
         let key = fixed_key();
-        let cancel = CancelFields { client_order_id: 7 };
+        let cancel = CancelFields {
+            client_order_id: 7,
+            reason: None,
+        };
         let decision_ts_ns = 1_000_000_000;
         let approval = mint_cancel(&key, &cancel, decision_ts_ns);
         let expires_ts_ns = decision_ts_ns + APPROVAL_TTL_NS;

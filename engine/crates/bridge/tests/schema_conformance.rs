@@ -122,6 +122,7 @@ fn bridge_response_and_intent_result_conform_for_every_op() {
         r#"{"v":1,"id":"7","op":"cancel_order_intent","client_order_id":1,"reason":"test"}"#,
         r#"{"v":1,"id":"8","op":"reconcile","venue":{"orders":[],"position":"0","cash":null}}"#,
         r#"{"v":1,"id":"9","op":"kill","reason":"test"}"#,
+        r#"{"v":1,"id":"10","op":"drain_halt_cancels"}"#,
         r#"{"v":1,"id":"5","op":"shutdown"}"#,
     ];
     for line in lines {
@@ -165,8 +166,14 @@ fn external_mode_approval_and_report_execution_conform() {
              "limit_price":"99.8","time_in_force":"gtc","reason":"test"}}"#,
         r#"{"v":1,"id":"3","op":"report_execution","execution":
             {"client_order_id":1,"event":"accepted","venue_order_id":"1","ts_ns":1}}"#,
+        // A halt (protocol v1.2.1) must expose a real, non-empty
+        // `pending_cancels` too -- an empty array would pass the item schema
+        // trivially, so this is what actually exercises its shape.
+        r#"{"v":1,"id":"9","op":"kill","reason":"test"}"#,
+        r#"{"v":1,"id":"10","op":"drain_halt_cancels"}"#,
     ];
     let mut saw_approval = false;
+    let mut saw_pending_cancel = false;
     for line in lines {
         let (response, _) = handle_line(&mut engine, line);
         let value: Value = serde_json::from_str(&response).unwrap();
@@ -182,10 +189,17 @@ fn external_mode_approval_and_report_execution_conform() {
             );
             saw_approval |= result.get("approval").is_some();
         }
+        if let Some(pending) = value.get("pending_cancels").and_then(Value::as_array) {
+            saw_pending_cancel |= !pending.is_empty();
+        }
     }
     assert!(
         saw_approval,
         "external mode must produce an approval to check"
+    );
+    assert!(
+        saw_pending_cancel,
+        "drain_halt_cancels must produce a real pending cancel to check its schema"
     );
 }
 
