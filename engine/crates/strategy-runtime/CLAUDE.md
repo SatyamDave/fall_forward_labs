@@ -1,7 +1,7 @@
 # engine/crates/strategy-runtime — qc-strategy-runtime: Strategy trait and the event loop that drives it
 
 ## Owns / does not own
-- Owns: the `Strategy` trait (`on_event(&Event, &mut Vec<OrderRequest>)`), the loop that feeds events in order and hands requests to risk and the OMS, kill-switch propagation to strategies.
+- Owns: the `Strategy` trait (`on_event(&mut self, &Event, &OrderBook, &mut Vec<Command>)`) and its `Command` enum, the loop that feeds events in order and hands requests to risk and the OMS, kill-switch propagation to strategies.
 - Does not own: strategy logic (strategies/<name>/), risk checks (qc-risk), replay harness (qc-replay).
 
 ## Commands

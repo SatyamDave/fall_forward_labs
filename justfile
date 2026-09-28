@@ -62,7 +62,7 @@ precommit:
 bench:
     cd {{engine}} && cargo bench --workspace --locked
 
-# Replay a recorded market day and check the order log is reproduced exactly
+# Replay the synthetic fixture day (tests/replay/sample_day.csv) twice and check both order logs match
 replay:
     #!/usr/bin/env bash
     set -euo pipefail
