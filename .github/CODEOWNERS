@@ -1,8 +1,14 @@
-# CODEOWNERS requests review from the listed owner on a matching PR. It does NOT enforce a
-# review *count* — GitHub only supports "require review from code owners" (one approval), not
-# "require two." The root rule that protected-zone changes need two human approvals is enforced
-# by a branch-protection ruleset (added in the Phase 4 security-pipeline lane), not by this file
-# alone. Treat this file as "who gets pinged," not as the two-approval guarantee.
+# CODEOWNERS requests review from the listed owner on a matching PR. It does not enforce a
+# review count: GitHub's "require review from code owners" needs one approval from any listed
+# owner, never two. Nothing enforces the root rule that protected-zone changes need two human
+# approvals today: branch protection and rulesets are unavailable on this private repo's plan
+# (the API returns 403), so this file only decides who gets pinged.
+#
+# Order matters: for each file the last matching pattern wins, so the catch-all comes first
+# and the protected-zone lines below it take precedence.
+
+# Everything else, for now
+*                                    @SatyamDave
 
 # Protected zones (root CLAUDE.md rule 3, plus autonomy/** per the bootstrap plan)
 /engine/crates/risk/**              @SatyamDave
@@ -19,6 +25,3 @@
 /tests/autonomy/**                  @SatyamDave
 /tests/hooks/**                     @SatyamDave
 /.github/workflows/autonomy-gate.yml @SatyamDave
-
-# Everything else, for now
-*                                    @SatyamDave
