@@ -15,6 +15,7 @@
 - Trading hosts are separate from research hosts and accept no inbound ports except VPN or bastion.
 - Secrets come from the secret manager at runtime; venue keys are trade-only, IP-allowlisted, per strategy and environment, and rotated (root rule 9).
 - Audit logs ship off-host.
+- The ADR-0040 agentic trading account is separately funded, self-custodied by the founders, with a hard dollar cap set here, not in `agent/`; the agent process itself never holds a broker credential or `ANTHROPIC_API_KEY` directly — both come from the secret manager into the process that needs them, scoped to that process alone.
 
 ## NEVER
 - Never commit secrets or state files. Check: `git ls-files | grep -E 'tfstate|\.tfvars$|\.pem$|\.key$'` prints nothing.
@@ -29,3 +30,4 @@ _None yet. Each entry links to the PR or postmortem where it bit us._
 
 ## See also
 - docs/runbooks/; docs/runbooks/github-hardening.md; SECURITY.md
+- ADR-0040 (agent handoff, agent account funding): docs/adr/0040-agentic-decision.md

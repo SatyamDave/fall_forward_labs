@@ -2,7 +2,7 @@
 
 ## Owns / does not own
 - Owns: the Cargo workspace (`crates/*` named `qc-*`, `benches/`), `fuzz/` (not a workspace member; needs nightly), clippy.toml, rust-toolchain.toml.
-- Does not own: risk limit values (`config/limits/`, protected), model training (`ml/`), deploys (`ops/deploy/`).
+- Does not own: risk limit values (`config/limits/`, protected), model training (`ml/`), deploys (`ops/deploy/`), the final trade decision (`agent/`, ADR-0040) — the engine only emits a `DecisionRequest` and accepts submitted intents back through `qc-bridge`.
 
 ## Commands
 - `cargo fmt --all --check`
@@ -17,6 +17,7 @@
 - Every `unsafe` block has a `// SAFETY:` comment on the line above and a named reviewer sign-off in the PR. Check: `grep -rn -B1 'unsafe' crates/` shows a SAFETY line for each hit.
 - `just replay` passes on every PR (root rule 7).
 - New crates inherit workspace lints: `[lints] workspace = true`. Check: `grep -L 'workspace = true' crates/*/Cargo.toml` prints nothing.
+- The agent service's only path in or out is `qc-bridge` (ADR-0040): it can submit an order intent, never place one directly, and `qc-risk` plus the kill switch run before `qc-oms` sees it — risk stays authoritative.
 
 ## NEVER
 - No allocation, locks, syscalls, or formatted logging on the hot path. Check: `grep -rnE 'Mutex|RwLock|println!|eprintln!|format!|std::fs|std::thread::sleep' crates/{orderbook,gateway,oms,risk,strategy-runtime,inference}/src` has no hit outside `#[cfg(test)]` modules.
@@ -33,4 +34,4 @@ _None yet. Each entry links to the PR or postmortem where it bit us._
 ## See also
 - Skills: engine/.claude/skills/ (add-venue-adapter, add-order-type, latency-profile, replay-debug)
 - Rule: .claude/rules/rust-hotpath.md; ADR-0001 (engine foundation), ADR-0004 (toolchain) in docs/adr/
-- docs/ARCHITECTURE.md
+- docs/ARCHITECTURE.md; ADR-0040 (agent handoff): docs/adr/0040-agentic-decision.md
