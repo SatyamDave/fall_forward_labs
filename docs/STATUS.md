@@ -6,7 +6,7 @@ Regenerated automatically by `.github/workflows/docs-status.yml` on every merge 
 Narrative docs: [project guide](guide/quant-core-guide.html) ·
 [base status](reports/base-status.md) · [NOW](NOW.md).
 
-Generated from `main` at **effb75d 2026-09-27**. Latest CI on `main`: **in_progress on effb75d**.
+Generated from `main` at **360d053 2026-09-28**. Latest CI on `main`: **success on effb75d**.
 Paid AI loops: **off**.
 
 ## Open pull requests (0)
@@ -37,6 +37,7 @@ None.
 
 | Commit | Date | Subject |
 |---|---|---|
+| `360d053` | 2026-09-28 | docs(status): regenerate live status from effb75d [skip ci] |
 | `effb75d` | 2026-09-27 | Merge pull request #62 from SatyamDave/docs/record-merge-exception |
 | `543468b` | 2026-09-27 | docs(team): record the second merge batch as a dated founder exception |
 | `fa7afb9` | 2026-09-28 | docs(status): regenerate live status from 9543372 [skip ci] |
@@ -48,7 +49,6 @@ None.
 | `c32f44f` | 2026-09-27 | Merge main into agentic/agent-service before merging #61 |
 | `4d26c8e` | 2026-09-27 | Merge pull request #58 from SatyamDave/agentic/bridge |
 | `c0a0584` | 2026-09-27 | Merge pull request #59 from SatyamDave/agentic/claude-md |
-| `9925463` | 2026-09-27 | Merge pull request #60 from SatyamDave/agentic/docs |
 
 ## Decisions (ADRs)
 
