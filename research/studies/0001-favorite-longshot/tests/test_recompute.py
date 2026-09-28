@@ -37,11 +37,16 @@ def independent_G(raw: Path) -> float:
     return total / n
 
 
-def write_synthetic_snapshot(raw: Path) -> None:
-    """SYNTHETIC plumbing fixture: calibrated random outcomes, never evidence of an edge."""
-    import random
+PRICES = (0.05, 0.1, 0.5, 0.9, 0.95)
+GOLDEN = 0.6180339887498949
 
-    rng = random.Random(1)  # noqa: S311
+
+def write_synthetic_snapshot(raw: Path) -> None:
+    """SYNTHETIC plumbing fixture: calibrated outcomes, never evidence of an edge.
+
+    Deterministic without `random`: market i gets price PRICES[i % 5] and resolves yes when the
+    golden-ratio sequence frac(i * GOLDEN), which is spread evenly over [0, 1), falls below it.
+    """
 
     def iso(s: int) -> str:
         return datetime.fromtimestamp(s, UTC).isoformat().replace("+00:00", "Z")
@@ -52,14 +57,15 @@ def write_synthetic_snapshot(raw: Path) -> None:
     for e in range(200):
         base = 1_786_000_000 + e * 8000
         for k in range(3):
-            p = rng.choice([0.05, 0.1, 0.5, 0.9, 0.95])
+            i = e * 3 + k
+            p = PRICES[i % len(PRICES)]
             t = f"KXS-E{e}-{k}"
             markets.append(
                 {
                     "ticker": t,
                     "event_ticker": f"KXS-E{e}",
                     "market_type": "binary",
-                    "result": "yes" if rng.random() < p else "no",
+                    "result": "yes" if (i * GOLDEN) % 1.0 < p else "no",
                     "volume_fp": "100.00",
                     "expected_expiration_time": iso(base + 86400),
                     "open_time": iso(base - 86400),
@@ -95,6 +101,7 @@ def write_synthetic_snapshot(raw: Path) -> None:
 
 
 def test_recompute_matches_on_synthetic_fixture(tmp_path: Path) -> None:
+    """Plumbing only: the two code paths agree on SYNTHETIC data. Says nothing about Kalshi."""
     import study
 
     write_synthetic_snapshot(tmp_path)

@@ -1,6 +1,12 @@
-"""Fetch the study 0001 snapshot into data/raw/study-0001 and write the catalog manifest.
+"""Fetch a study 0001 snapshot into data/raw/study-0001, then compare it with the catalog.
 
 Resumable: files already on disk are not re-requested. Stops cleanly when the budget is spent.
+Spends real (unauthenticated, public) Kalshi requests, up to the registered budget.
+
+The committed catalog data/catalog/study-0001.json records run 0001's snapshot and is never
+overwritten here. The new snapshot's catalog goes to out/study-0001/catalog.json, and the files
+are checked against the committed hashes: any difference means a different snapshot, which is a
+new trial needing its own registration, not a reproduction of run 0001.
 """
 
 import hashlib
@@ -122,7 +128,8 @@ def catalog(c: Client, cutoff_doc: dict[str, str]) -> None:
         "ledger_sha256": hashlib.sha256(c.ledger.read_bytes()).hexdigest(),
         "catalog_written_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
     }
-    out = study.ROOT / "data" / "catalog" / "study-0001.json"
+    out = study.ROOT / "out" / "study-0001" / "catalog.json"
+    out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(doc, indent=1, sort_keys=True) + "\n")
 
 
@@ -144,6 +151,15 @@ def main() -> None:
     fetch_trades(c, cutoff)
     catalog(c, cutoff_doc)
     print(f"requests used: {c.used}")
+    problems = study.snapshot_problems(c.raw_dir)
+    if problems:
+        print(
+            f"DIFFERENT SNAPSHOT: {len(problems)} difference(s) from {study.CATALOG}; this is "
+            "not run 0001 and needs its own registration:\n  " + "\n  ".join(problems),
+            file=sys.stderr,
+        )
+        sys.exit(1)
+    print(f"same snapshot as {study.CATALOG}: every sha256 matches")
 
 
 if __name__ == "__main__":

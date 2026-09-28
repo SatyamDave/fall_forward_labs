@@ -1,24 +1,20 @@
 """Model registry: one append-only JSONL record per model event, next to the trial log.
 
-Uses the `research/registry` JSONL store rather than MLflow (ADR-0005 allows either).
+Uses the `research/registry` JSONL store. ADR-0005 (Proposed) names MLflow as the tracker and
+registry; this JSONL store is what is implemented.
 ponytail: JSONL on disk; move to an MLflow tracking server when several machines train at once
 or the registry needs a UI. Records are never edited: a status change is a new record for the
 same artifact hash, and the latest record wins.
 """
 
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
-from registry import read, record
+from registry import REGISTRY_DIR, read, record
 
 Status = Literal["challenger", "no_signal", "promoted"]
 
-REGISTRY_DIR = Path(
-    os.environ.get("QC_REGISTRY_DIR", Path(__file__).resolve().parents[2] / "research/registry/log")
-)
-TRIALS = REGISTRY_DIR / "trials.jsonl"
 MODELS = REGISTRY_DIR / "models.jsonl"
 
 

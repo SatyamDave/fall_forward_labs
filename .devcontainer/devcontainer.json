@@ -3,9 +3,10 @@
   "build": {
     "dockerfile": "Dockerfile"
   },
+  "remoteUser": "vscode",
   "postCreateCommand": "just setup",
   "remoteEnv": {
-    "PATH": "${containerEnv:PATH}:/usr/local/cargo/bin:/root/.local/bin"
+    "PATH": "${containerEnv:PATH}:/usr/local/cargo/bin:/home/vscode/.local/bin"
   },
   "customizations": {
     "vscode": {
