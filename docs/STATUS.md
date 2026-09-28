@@ -6,20 +6,20 @@ Regenerated automatically by `.github/workflows/docs-status.yml` on every merge 
 Narrative docs: [project guide](guide/quant-core-guide.html) ·
 [base status](reports/base-status.md) · [NOW](NOW.md).
 
-Generated from `main` at **4d26c8e 2026-09-27**. Latest CI on `main`: **pending on 4d26c8e**.
+Generated from `main` at **1ed4d2c 2026-09-27**. Latest CI on `main`: **pending on 1ed4d2c**.
 Paid AI loops: **off**.
 
-## Open pull requests (2)
+## Open pull requests (1)
 
 | PR | Title | Author | Draft |
 |---|---|---|---|
-| [#61](https://github.com/SatyamDave/fall_forward_labs/pull/61) | Build the agent service against qc-bridge protocol v1 | SatyamDave | no |
 | [#56](https://github.com/SatyamDave/fall_forward_labs/pull/56) | Add the three-tier eval harness (just eval, Tier 1) | SatyamDave | no |
 
 ## Recently merged
 
 | PR | Title | Merged |
 |---|---|---|
+| [#61](https://github.com/SatyamDave/fall_forward_labs/pull/61) | Build the agent service against qc-bridge protocol v1 | 2026-09-28 |
 | [#58](https://github.com/SatyamDave/fall_forward_labs/pull/58) | Add qc-bridge: protocol v1 stdio bridge between the engine and the agent | 2026-09-28 |
 | [#59](https://github.com/SatyamDave/fall_forward_labs/pull/59) | Record ADR-0040 in every CLAUDE.md and add the arch-check gate | 2026-09-28 |
 | [#60](https://github.com/SatyamDave/fall_forward_labs/pull/60) | Record ADR-0040, the agentic decision, across the docs | 2026-09-28 |
@@ -34,24 +34,23 @@ Paid AI loops: **off**.
 | [#3](https://github.com/SatyamDave/fall_forward_labs/pull/3) | Add autonomy tier policy and gate check (Phase A) | 2026-09-28 |
 | [#2](https://github.com/SatyamDave/fall_forward_labs/pull/2) | Record self-learning model plan and ADR-0013 learning speeds (Phase 1) | 2026-09-28 |
 | [#15](https://github.com/SatyamDave/fall_forward_labs/pull/15) | Build order book, OMS, risk checks, SimVenue and deterministic replay with kill-switch chaos tests | 2026-09-28 |
-| [#13](https://github.com/SatyamDave/fall_forward_labs/pull/13) | Add security pipeline: pre-commit, CI and scanner workflows, hardening script | 2026-09-28 |
 
 ## Recent commits on main
 
 | Commit | Date | Subject |
 |---|---|---|
+| `1ed4d2c` | 2026-09-27 | Merge pull request #61 from SatyamDave/agentic/agent-service |
+| `21ff75e` | 2026-09-28 | docs(status): regenerate live status from 4d26c8e [skip ci] |
+| `c32f44f` | 2026-09-27 | Merge main into agentic/agent-service before merging #61 |
 | `4d26c8e` | 2026-09-27 | Merge pull request #58 from SatyamDave/agentic/bridge |
 | `c0a0584` | 2026-09-27 | Merge pull request #59 from SatyamDave/agentic/claude-md |
 | `9925463` | 2026-09-27 | Merge pull request #60 from SatyamDave/agentic/docs |
 | `865fc6c` | 2026-09-27 | docs(readme): point the agentic rows at the open PRs and the end-to-end result |
 | `7520c0a` | 2026-09-27 | fix(ci): let arch-check accept a cited ADR, and use the agent's real tool names |
+| `bd21f08` | 2026-09-27 | feat(agent): run agent-sim against the real qc-bridge |
+| `7de781f` | 2026-09-27 | Merge agentic/bridge (qc-bridge) into agent-service for the end-to-end check |
+| `51bde4f` | 2026-09-27 | feat(agent): build the TypeScript agent service against qc-bridge protocol v1 |
 | `cf38c68` | 2026-09-27 | docs: record ADR-0040, the agentic decision, across the docs lane |
-| `6d524db` | 2026-09-27 | docs(claude-md): record ADR-0040 in every CLAUDE.md, add the arch-check gate |
-| `11734a9` | 2026-09-27 | feat(engine/bridge): add qc-bridge, the protocol v1 stdio bridge to the agent |
-| `2ea3f5f` | 2026-09-27 | feat(schemas): add decision handoff schemas v1 for the bridge and agent service |
-| `fdb8108` | 2026-09-28 | docs(status): regenerate live status from 8a4c782 [skip ci] |
-| `8a4c782` | 2026-09-27 | Merge pull request #19 from SatyamDave/docs/project-guide |
-| `8b906d1` | 2026-09-27 | docs: add a live status document regenerated on every merge |
 
 ## Decisions (ADRs)
 
