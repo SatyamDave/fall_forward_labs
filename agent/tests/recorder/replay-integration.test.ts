@@ -1,0 +1,86 @@
+// The wave2-spec "prove it" requirement for #46: `just record-quotes --dry-run` must produce a
+// file qc-replay can actually replay. This runs the real recorder CLI (as a child process, exactly
+// the way `just record-quotes` will invoke it) against the mock Robinhood MCP, then feeds the
+// resulting CSV to the real qc-replay binary and asserts it exits 0 -- not a claim, a build and a
+// subprocess run.
+import { execFileSync } from "node:child_process";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { repoRoot } from "../../src/paths.js";
+
+const ROOT = repoRoot();
+const AGENT_DIR = path.join(ROOT, "agent");
+const ENGINE_DIR = path.join(ROOT, "engine");
+const TSX_BIN = path.join(AGENT_DIR, "node_modules", ".bin", "tsx");
+const CLI = path.join(AGENT_DIR, "src", "recorder", "cli.ts");
+const QC_REPLAY_BIN = path.join(ENGINE_DIR, "target", "debug", "qc-replay");
+const LIMITS = path.join(ROOT, "tests", "replay", "limits.toml");
+
+function ensureQcReplayBuilt(): void {
+  if (existsSync(QC_REPLAY_BIN)) return;
+  // Same crate `just replay`/`just agent-sim` build; debug (not --release) is plenty for this
+  // proof and builds in a few seconds.
+  execFileSync("cargo", ["build", "-q", "-p", "qc-replay"], { cwd: ENGINE_DIR, stdio: "inherit" });
+}
+
+describe("just record-quotes --dry-run output replays through qc-replay", () => {
+  let dir: string | undefined;
+  afterEach(() => {
+    if (dir) rmSync(dir, { recursive: true, force: true });
+    dir = undefined;
+  });
+
+  it("runs the CLI dry-run against the mock MCP, then qc-replay accepts the recorded file", () => {
+    ensureQcReplayBuilt();
+    dir = mkdtempSync(path.join(tmpdir(), "recorder-replay-"));
+    const csvPath = path.join(dir, "recorded.csv");
+    const catalogDir = path.join(dir, "catalog");
+    const orderLog = path.join(dir, "orders.log");
+
+    const cliOutput = execFileSync(
+      TSX_BIN,
+      [
+        CLI,
+        "--dry-run",
+        "--instrument-id",
+        "1", // matches qc_replay's SAMPLE_INSTRUMENT and tests/replay/limits.toml
+        "--symbol",
+        "SPY",
+        "--poll-interval-ms",
+        "5",
+        "--request-budget",
+        "10",
+        "--out",
+        csvPath,
+        "--catalog-dir",
+        catalogDir,
+        "--dataset",
+        "recorder-replay-proof-test",
+      ],
+      { cwd: AGENT_DIR, encoding: "utf8" },
+    );
+    expect(cliOutput).toContain("wrote 10 record(s)");
+
+    expect(existsSync(csvPath)).toBe(true);
+    const csv = readFileSync(csvPath, "utf8");
+    const dataLines = csv.split("\n").filter((l) => l && !l.startsWith("#"));
+    expect(dataLines).toHaveLength(10);
+    expect(dataLines.every((l) => l.startsWith("S,1,"))).toBe(true);
+
+    const manifestPath = path.join(catalogDir, "recorder-replay-proof-test.json");
+    expect(existsSync(manifestPath)).toBe(true);
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
+      quality: { ok: boolean };
+      files: Record<string, string>;
+    };
+    expect(manifest.quality.ok).toBe(true);
+    expect(Object.keys(manifest.files)).toHaveLength(1);
+
+    // The actual proof: hand the recorded file to the real qc-replay binary.
+    const replayOutput = execFileSync(QC_REPLAY_BIN, [csvPath, orderLog, LIMITS], { encoding: "utf8" });
+    expect(replayOutput).toMatch(/^replayed .*: \d+ lines, \d+ submits, \d+ risk rejects, \d+ halts/);
+    expect(existsSync(orderLog)).toBe(true);
+  }, 60_000);
+});

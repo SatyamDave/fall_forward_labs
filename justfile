@@ -189,3 +189,14 @@ agent-sim:
     echo "run 2 ledger sha256: $hash2"
     if [ "$hash1" != "$hash2" ]; then echo "FAIL: agent-sim ledger is not deterministic"; exit 1; fi
     echo "agent-sim deterministic across two runs"
+
+# Issue #46: polls Robinhood quotes for one instrument, writes a replay-store CSV under
+# data/raw/ (gitignored) and a data/catalog/<dataset>.json manifest (agent/src/recorder/).
+# Read-only: never calls a place/cancel/preview tool -- agent/src/recorder/allowlist.ts enforces
+# it, agent/tests/recorder/allowlist*.test.ts proves it. `--dry-run` runs entirely against the
+# in-process mock Robinhood MCP server (no network); without it, connects to ROBINHOOD_MCP_URL
+# like every other broker call in this repo. `just record-quotes --dry-run` alone writes a small
+# default-budget file; agent/tests/recorder/replay-integration.test.ts is what proves the output
+# actually replays through qc-replay.
+record-quotes *args:
+    cd {{agent}} && node_modules/.bin/tsx src/recorder/cli.ts {{args}}

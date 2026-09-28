@@ -8,6 +8,14 @@
 // under agent/src (excluding this directory itself and testkit/) for an import specifier that
 // resolves into agent/src/broker/, so it starts exercising real enforcement the moment that
 // lane's files land, without needing to be re-written then.
+//
+// agent/src/recorder/ (issue #46, wave2-spec lane D) is a deliberate, documented exception: it
+// reads quotes through agent/src/broker/robinhood.ts + mcp-client.ts by design (through a
+// read-only tool allowlist -- agent/src/recorder/allowlist.ts -- that a separate test,
+// agent/tests/recorder/allowlist*.test.ts, proves never lets an order/cancel tool through). What
+// this test actually guards against is the *decider* reaching the broker directly, bypassing
+// qc-bridge's approval; a read-only market-data recorder is not that path, so it's excluded here
+// rather than silently making this test fail on every future recorder change.
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -44,8 +52,10 @@ function importsBroker(file: string): string[] {
 }
 
 describe("agent/src/decider/ cannot import agent/src/broker/", () => {
-  it("no file under src/decider (or anywhere outside src/broker itself) imports src/broker", () => {
-    const files = walk(AGENT_SRC).filter((f) => !f.includes(`${path.sep}src${path.sep}broker${path.sep}`));
+  it("no file under src/decider (or anywhere outside src/broker/src/recorder) imports src/broker", () => {
+    const files = walk(AGENT_SRC).filter(
+      (f) => !f.includes(`${path.sep}src${path.sep}broker${path.sep}`) && !f.includes(`${path.sep}src${path.sep}recorder${path.sep}`),
+    );
     const offenders = files.flatMap((f) => importsBroker(f).map((spec) => `${path.relative(AGENT_SRC, f)}: imports "${spec}"`));
     expect(offenders).toEqual([]);
   });
