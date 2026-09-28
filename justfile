@@ -68,9 +68,10 @@ replay:
     if [ "$first" != "$second" ]; then echo "FAIL: replay is not deterministic"; exit 1; fi
     echo "replay deterministic"
 
-# Run a backtest from backtest/configs/<cfg>.yaml
+# Run a backtest from backtest/configs/<cfg>.yaml (not implemented: exits 2 so nothing mistakes it for a pass)
 backtest cfg:
-    @echo "not implemented yet: backtest phase ({{cfg}})"
+    @echo "not implemented: no execution backtest exists yet ({{cfg}}); 'just walkforward <name>' is the label-level evaluation" >&2
+    @exit 2
 
 # Run a strategy against live data with simulated fills
 paper strategy:
