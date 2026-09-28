@@ -9,7 +9,7 @@ import { connectRobinhoodMcp } from "../../src/broker/mcp-client.js";
 import { placeOrder } from "../../src/broker/robinhood.js";
 import type { ApprovedOrder } from "../../src/broker/types.js";
 import { OrderToolCalledError, readOnly } from "../../src/recorder/allowlist.js";
-import { pollQuote } from "../../src/recorder/poll.js";
+import { pollBook, pollQuote } from "../../src/recorder/poll.js";
 import { createMockRobinhoodServer } from "../../src/testkit/mock-robinhood-mcp.js";
 
 const ORDER: ApprovedOrder = {
@@ -85,5 +85,45 @@ describe("recorder allowlist against the mock Robinhood MCP server", () => {
 
     expect(calledTools).toEqual(["get_equity_quotes", "get_equity_quotes", "get_equity_quotes", "get_equity_quotes", "get_equity_quotes"]);
     expect(calledTools.some((t) => t.includes("place") || t.includes("cancel"))).toBe(false);
+  });
+
+  it("polls a full Level 2 book through the wrapped client for equity", async () => {
+    const calledTools: string[] = [];
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMockRobinhoodServer({ onToolCall: (name) => calledTools.push(name) });
+    await server.connect(serverTransport);
+    const rawClient = await connectRobinhoodMcp({ transport: clientTransport });
+    cleanup = async () => {
+      await rawClient.close();
+      await server.close();
+    };
+    const client = readOnly(rawClient);
+
+    const book = await pollBook(client, "equity", "SPY");
+    expect(book.depth).toBe("l2");
+    expect(book.bids.length).toBeGreaterThan(1);
+    expect(book.asks.length).toBeGreaterThan(1);
+    expect(calledTools).toEqual(["get_equity_price_book"]);
+  });
+
+  it("falls back to a flagged top-of-book poll for crypto -- no L2 tool exists, and it never calls an order tool either", async () => {
+    const calledTools: string[] = [];
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMockRobinhoodServer({ onToolCall: (name) => calledTools.push(name) });
+    await server.connect(serverTransport);
+    const rawClient = await connectRobinhoodMcp({ transport: clientTransport });
+    cleanup = async () => {
+      await rawClient.close();
+      await server.close();
+    };
+    const client = readOnly(rawClient);
+
+    const book = await pollBook(client, "crypto", "BTC-USD");
+    expect(book.depth).toBe("top_of_book");
+    expect(book.bids).toEqual([{ price: "100.00" }]);
+    expect(book.asks).toEqual([{ price: "100.05" }]);
+    // Only the read-only quote tool was ever reached -- no attempt at a crypto price-book tool
+    // (there isn't one) and no order tool.
+    expect(calledTools).toEqual(["get_crypto_quotes"]);
   });
 });

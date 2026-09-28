@@ -8,46 +8,58 @@
 // already-appended line.
 //
 // Only Snapshot ("S") records are produced. Delta ("D") and Trade ("T") lines are real,
-// documented parts of the format (record.rs), but this recorder has no source for them: quote
-// polling (poll.ts) gives a fresh top-of-book snapshot each call, not an incremental book delta
-// or a trade tape, and fabricating either from a quote poll would be recording data that was
-// never actually observed. Emitting only what was genuinely seen matters more than a full record
-// mix; a future L2/trade-feed source (see poll.ts's header) is what would add D/T lines.
+// documented parts of the format (record.rs), but this recorder has no source for them: book
+// polling (poll.ts's pollBook) gives a fresh snapshot each call, not an incremental book delta or
+// a trade tape, and fabricating either from a poll would be recording data that was never
+// actually observed. Emitting only what was genuinely seen matters more than a full record mix;
+// a future delta/trade feed source is what would add D/T lines.
 import { closeSync, fsyncSync, mkdirSync, openSync, writeSync } from "node:fs";
 import path from "node:path";
 import type { DecimalString } from "../broker/types.js";
-import type { QuoteSample } from "./poll.js";
+import type { BookSample } from "./poll.js";
+
+export interface BookLevelRecord {
+  price: DecimalString;
+  qty: DecimalString;
+}
 
 export interface SnapshotRecord {
   instrument: number;
   seq: number;
   tsExchangeNs: bigint;
   tsLocalNs: bigint;
-  bidPrice: DecimalString;
-  bidQty: DecimalString;
-  askPrice: DecimalString;
-  askQty: DecimalString;
+  /** Best level first, per record.rs's grammar -- trusted to arrive that way from
+   *  BookSample (see poll.ts/robinhood.ts's own "no re-sorting, ambiguous is an error"
+   *  convention), never reordered here. */
+  bids: BookLevelRecord[];
+  asks: BookLevelRecord[];
 }
 
-/** Builds the SnapshotRecord for one poll. `placeholderQty` fills the level size: Robinhood's
- *  quote tools return no confirmed book depth (poll.ts's header) -- the mock returns none either
- *  -- so every level uses this fixed, documented placeholder rather than fabricating a specific
- *  observed size. `seq` must be caller-assigned and strictly increasing per instrument. */
-export function toSnapshotRecord(sample: QuoteSample, instrument: number, seq: number, placeholderQty: DecimalString): SnapshotRecord {
+function fillPlaceholderQty(levels: BookSample["bids"], placeholderQty: DecimalString): BookLevelRecord[] {
+  return levels.map((l) => ({ price: l.price, qty: l.qty ?? placeholderQty }));
+}
+
+/** Builds the SnapshotRecord for one poll. `placeholderQty` fills any level with no real size --
+ *  every level of a `"top_of_book"` BookSample (Robinhood's quote tools return no confirmed book
+ *  depth; poll.ts's header), never a level of an `"l2"` sample, which always carries the venue's
+ *  own resting size. `seq` must be caller-assigned and strictly increasing per instrument. */
+export function toSnapshotRecord(sample: BookSample, instrument: number, seq: number, placeholderQty: DecimalString): SnapshotRecord {
   return {
     instrument,
     seq,
     tsExchangeNs: sample.exchangeTsNs,
     tsLocalNs: sample.localTsNs,
-    bidPrice: sample.bid,
-    bidQty: placeholderQty,
-    askPrice: sample.ask,
-    askQty: placeholderQty,
+    bids: fillPlaceholderQty(sample.bids, placeholderQty),
+    asks: fillPlaceholderQty(sample.asks, placeholderQty),
   };
 }
 
+function formatSide(levels: readonly BookLevelRecord[]): string {
+  return levels.map((l) => `${l.price}@${l.qty}`).join(";");
+}
+
 export function formatSnapshot(r: SnapshotRecord): string {
-  return `S,${r.instrument},${r.seq},${r.tsExchangeNs},${r.tsLocalNs},${r.bidPrice}@${r.bidQty},${r.askPrice}@${r.askQty}`;
+  return `S,${r.instrument},${r.seq},${r.tsExchangeNs},${r.tsLocalNs},${formatSide(r.bids)},${formatSide(r.asks)}`;
 }
 
 /** Append-only writer for one recording session. Not thread-safe / not for concurrent writers --
