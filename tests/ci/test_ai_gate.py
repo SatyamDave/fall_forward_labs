@@ -75,6 +75,8 @@ def test_denies_when_switched_off(
         {"max_turns": 0},
         {"timeout_minutes": -1},
         {"max_turns": True},  # a bool is not a turn count
+        {"daily_usd": float("inf")},  # json.dumps writes Infinity, which json.loads accepts
+        {"max_turns": float("nan")},  # NaN <= 0 is false, so a sign check alone lets it through
     ],
 )
 def test_denies_without_enabled_loop_and_positive_budget(
