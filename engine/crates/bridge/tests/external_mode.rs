@@ -225,7 +225,10 @@ fn report_execution_rejects_a_negative_fill_price_instead_of_corrupting_cash() {
         r#"{"v":1,"id":"3","op":"report_execution","execution":
             {"client_order_id":1,"event":"filled","qty":"0.001","price":"-99.8","ts_ns":20}}"#,
     );
-    assert_eq!(resp["ok"], false, "a negative price must be refused: {resp:#}");
+    assert_eq!(
+        resp["ok"], false,
+        "a negative price must be refused: {resp:#}"
+    );
     assert_eq!(resp["error"]["code"], "invalid_fields");
     assert_eq!(
         engine.status(),
