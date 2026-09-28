@@ -18,6 +18,7 @@ qc-oms = { path = "crates/oms" }
 qc-risk = { path = "crates/risk" }
 qc-replay = { path = "crates/replay" }
 proptest = "1.11"
+sha2 = "0.10"
 criterion = "0.8"
 serde = { version = "1", features = ["derive"] }
 toml = "1"
