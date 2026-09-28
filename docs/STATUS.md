@@ -6,20 +6,22 @@ Regenerated automatically by `.github/workflows/docs-status.yml` on every merge 
 Narrative docs: [project guide](guide/quant-core-guide.html) ·
 [base status](reports/base-status.md) · [NOW](NOW.md).
 
-Generated from `main` at **ebb8db5 2026-09-28**. Latest CI on `main`: **in_progress on ebb8db5**.
+Generated from `main` at **04b8eeb 2026-09-28**. Latest CI on `main`: **queued on 04b8eeb**.
 Paid AI loops: **off**.
 
-## Open pull requests (2)
+## Open pull requests (3)
 
 | PR | Title | Author | Draft |
 |---|---|---|---|
+| [#95](https://github.com/SatyamDave/fall_forward_labs/pull/95) | Test whether a panel of agents beats one, at the same budget | SatyamDave | no |
+| [#94](https://github.com/SatyamDave/fall_forward_labs/pull/94) | Run the agent in shadow mode on live prices with one command | SatyamDave | no |
 | [#92](https://github.com/SatyamDave/fall_forward_labs/pull/92) | Profit is measured from what the broker actually filled, checked every day | SatyamDave | no |
-| [#91](https://github.com/SatyamDave/fall_forward_labs/pull/91) | Live trading refuses to start until every go-live check passes | SatyamDave | no |
 
 ## Recently merged
 
 | PR | Title | Merged |
 |---|---|---|
+| [#91](https://github.com/SatyamDave/fall_forward_labs/pull/91) | Live trading refuses to start until every go-live check passes | 2026-09-28 |
 | [#93](https://github.com/SatyamDave/fall_forward_labs/pull/93) | Keep the sample SPY limits inside the canary caps | 2026-09-28 |
 | [#90](https://github.com/SatyamDave/fall_forward_labs/pull/90) | Never send an order when the market is closed | 2026-09-28 |
 | [#89](https://github.com/SatyamDave/fall_forward_labs/pull/89) | Record the full order book, not just the best price | 2026-09-28 |
@@ -34,12 +36,14 @@ Paid AI loops: **off**.
 | [#78](https://github.com/SatyamDave/fall_forward_labs/pull/78) | Redo study 0001 favorite-longshot v2, bounded population, real sample | 2026-09-28 |
 | [#77](https://github.com/SatyamDave/fall_forward_labs/pull/77) | ops: give live trading a safe home and alert on it breaking | 2026-09-28 |
 | [#79](https://github.com/SatyamDave/fall_forward_labs/pull/79) | Baseline-checked evals, decision/PnL reports, and a stop rule | 2026-09-28 |
-| [#72](https://github.com/SatyamDave/fall_forward_labs/pull/72) | Make SimVenue consume liquidity and respect queue position | 2026-09-28 |
 
 ## Recent commits on main
 
 | Commit | Date | Subject |
 |---|---|---|
+| `04b8eeb` | 2026-09-28 | Merge pull request #91 from SatyamDave/wave3/preflight |
+| `6f0c5b4` | 2026-09-28 | docs(status): regenerate live status from ebb8db5 [skip ci] |
+| `5dac560` | 2026-09-28 | Merge main into wave3/preflight before merging #91 |
 | `ebb8db5` | 2026-09-28 | Merge pull request #93 from SatyamDave/fix/spy-limits-within-canary |
 | `7d46c30` | 2026-09-28 | Merge main into fix/spy-limits-within-canary before merging #93 |
 | `b0b8df7` | 2026-09-28 | fix(limits): keep the sample SPY limits inside the canary caps |
@@ -49,9 +53,6 @@ Paid AI loops: **off**.
 | `0cb401b` | 2026-09-28 | docs(status): regenerate live status from d7d8254 [skip ci] |
 | `d7d8254` | 2026-09-28 | Merge pull request #89 from SatyamDave/wave3/level2 |
 | `40ecd57` | 2026-09-28 | docs(status): regenerate live status from e564b3d [skip ci] |
-| `4390f58` | 2026-09-28 | Merge main into wave3/level2 before merging #89 |
-| `b40f7fe` | 2026-09-28 | feat(engine/bridge): add NYSE holiday and early-close calendar to the trading-hours gate |
-| `25e0a71` | 2026-09-28 | Record the full order book, not just the best price |
 
 ## Decisions (ADRs)
 
@@ -73,5 +74,5 @@ Paid AI loops: **off**.
 
 - Engine crates: `bridge`, `core`, `gateway`, `inference`, `oms`, `orderbook`, `replay`, `risk`, `strategy-runtime`, `telemetry`
 - Rust #[test] functions: 144
-- Python test functions: 253
+- Python test functions: 289
 - Registry trials: `demo` 4, `study-0001-favorite-longshot` 1, `study-0002-favorite-longshot-v2` 1
