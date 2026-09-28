@@ -19,6 +19,9 @@ concurrency:
 jobs:
   # Reads autonomy/POLICY.yaml and scripts/ci/ai_gate.py from a trusted ref; the paid
   # job below runs only on run=true, with the loop's turn, dollar and time budget.
+  # This file itself runs from the PR (pull_request), so a same-repo PR can delete
+  # this job or drop the `needs` on it and reach the paid step. That is inherent to
+  # pull_request workflows; the real fix is an org-level required workflow.
   gate:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
