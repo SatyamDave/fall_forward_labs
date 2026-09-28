@@ -6,23 +6,23 @@ Regenerated automatically by `.github/workflows/docs-status.yml` on every merge 
 Narrative docs: [project guide](guide/quant-core-guide.html) ·
 [base status](reports/base-status.md) · [NOW](NOW.md).
 
-Generated from `main` at **1ac55f3 2026-09-28**. Latest CI on `main`: **in_progress on 1ac55f3**.
+Generated from `main` at **6c776c6 2026-09-28**. Latest CI on `main`: **in_progress on 6c776c6**.
 Paid AI loops: **off**.
 
-## Open pull requests (5)
+## Open pull requests (4)
 
 | PR | Title | Author | Draft |
 |---|---|---|---|
 | [#79](https://github.com/SatyamDave/fall_forward_labs/pull/79) | Baseline-checked evals, decision/PnL reports, and a stop rule | SatyamDave | no |
 | [#78](https://github.com/SatyamDave/fall_forward_labs/pull/78) | Redo study 0001 favorite-longshot v2, bounded population, real sample | SatyamDave | no |
 | [#77](https://github.com/SatyamDave/fall_forward_labs/pull/77) | ops: give live trading a safe home and alert on it breaking | SatyamDave | no |
-| [#75](https://github.com/SatyamDave/fall_forward_labs/pull/75) | Add self-cross, wash-trade and daily-notional dollar caps to qc-risk | SatyamDave | no |
 | [#72](https://github.com/SatyamDave/fall_forward_labs/pull/72) | Make SimVenue consume liquidity and respect queue position | SatyamDave | no |
 
 ## Recently merged
 
 | PR | Title | Merged |
 |---|---|---|
+| [#75](https://github.com/SatyamDave/fall_forward_labs/pull/75) | Add self-cross, wash-trade and daily-notional dollar caps to qc-risk | 2026-09-28 |
 | [#80](https://github.com/SatyamDave/fall_forward_labs/pull/80) | Replaying a recorded decision gives the same ledger every time | 2026-09-28 |
 | [#74](https://github.com/SatyamDave/fall_forward_labs/pull/74) | Prove the agent can only place orders one way, replay decisions for free, write the live prompt | 2026-09-28 |
 | [#73](https://github.com/SatyamDave/fall_forward_labs/pull/73) | Build the broker gateway door and a mock Robinhood connection | 2026-09-28 |
@@ -37,24 +37,23 @@ Paid AI loops: **off**.
 | [#18](https://github.com/SatyamDave/fall_forward_labs/pull/18) | build(deps): Bump bridgecrewio/checkov-action from 12.1347.0 to 12.3125.0 in the actions group | 2026-09-28 |
 | [#8](https://github.com/SatyamDave/fall_forward_labs/pull/8) | Document the actual base state and consolidate the repo guide | 2026-09-28 |
 | [#17](https://github.com/SatyamDave/fall_forward_labs/pull/17) | Fix base integration failures and make checks cover every suite | 2026-09-28 |
-| [#6](https://github.com/SatyamDave/fall_forward_labs/pull/6) | Draft team plan and docs/NOW.md for both founders (Phase 1) | 2026-09-28 |
 
 ## Recent commits on main
 
 | Commit | Date | Subject |
 |---|---|---|
+| `6c776c6` | 2026-09-28 | Merge pull request #75 from SatyamDave/wave1/risk |
+| `abbe049` | 2026-09-28 | docs(status): regenerate live status from 1ac55f3 [skip ci] |
+| `212b43f` | 2026-09-28 | Merge main into wave1/risk before merging #75 |
 | `1ac55f3` | 2026-09-28 | Merge pull request #80 from SatyamDave/fix/replay-ledger-determinism |
 | `257b29c` | 2026-09-28 | fix(agent): record wall-clock latency only for live decisions |
+| `33cc3ea` | 2026-09-28 | docs(risk): record the new checks and their invariants in the crate CLAUDE.md |
+| `1769332` | 2026-09-28 | Merge main into wave1/risk before merging #75 |
 | `8519a7d` | 2026-09-28 | docs(status): regenerate live status from 502df0f [skip ci] |
 | `502df0f` | 2026-09-28 | Merge pull request #74 from SatyamDave/wave1/agent-core |
+| `f1130db` | 2026-09-28 | fix(risk): make max_daily_notional a conservative default, not a fixture-fit value |
 | `694a8ed` | 2026-09-28 | docs(status): regenerate live status from 153f09e [skip ci] |
 | `65478d5` | 2026-09-28 | Merge main into wave1/agent-core before merging #74 |
-| `153f09e` | 2026-09-28 | Merge pull request #73 from SatyamDave/wave1/gateway |
-| `dd4ee3c` | 2026-09-28 | Merge main into wave1/gateway before merging #73 |
-| `6c3a887` | 2026-09-28 | docs(status): regenerate live status from 1f5a183 [skip ci] |
-| `1f5a183` | 2026-09-28 | Merge pull request #76 from SatyamDave/wave1/bridge-v11 |
-| `5940dd9` | 2026-09-28 | docs(agent): note that an SDK version bump must re-run the permission e2e test |
-| `60e8d94` | 2026-09-28 | fix(agent/broker): persist a journal so a restart never blind-resubmits an order |
 
 ## Decisions (ADRs)
 
@@ -75,6 +74,6 @@ Paid AI loops: **off**.
 ## Code and research
 
 - Engine crates: `bridge`, `core`, `gateway`, `inference`, `oms`, `orderbook`, `replay`, `risk`, `strategy-runtime`, `telemetry`
-- Rust #[test] functions: 86
+- Rust #[test] functions: 92
 - Python test functions: 134
 - Registry trials: `demo` 4, `study-0001-favorite-longshot` 1
