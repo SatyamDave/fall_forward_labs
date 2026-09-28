@@ -12,7 +12,14 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { BrokerGateway, GatewayRejection } from "../../src/broker/gateway.js";
 import { connectRobinhoodMcp } from "../../src/broker/mcp-client.js";
 import { ed25519PublicKeyFromRaw } from "../../src/broker/crypto.js";
-import type { Approval, ApprovalPayload, ApprovedOrder, BridgeReporter, ReportExecutionOp } from "../../src/broker/types.js";
+import type {
+  Approval,
+  ApprovalPayload,
+  ApprovedOrder,
+  BridgeReporter,
+  CancelApprovalPayload,
+  ReportExecutionOp,
+} from "../../src/broker/types.js";
 import { createMockRobinhoodServer, type MockScenario } from "../../src/testkit/mock-robinhood-mcp.js";
 
 function tempJournalPath(): string {
@@ -58,6 +65,27 @@ function approve(fields: ApprovalPayload): Approval {
   const payload = canonicalPayload(fields);
   const signature = cryptoSign(null, Buffer.from(payload, "utf8"), privateKey).toString("base64");
   return { payload, signature };
+}
+
+function canonicalCancelPayload(fields: CancelApprovalPayload): string {
+  // Sorted keys, no whitespace -- same canonicalization convention as canonicalPayload() above,
+  // for protocol v1.2's distinct (smaller) cancel approval payload shape.
+  const sorted: CancelApprovalPayload = {
+    action: fields.action,
+    client_order_id: fields.client_order_id,
+    expires_ts_ns: fields.expires_ts_ns,
+  };
+  return JSON.stringify(sorted);
+}
+
+function approveCancel(fields: CancelApprovalPayload): Approval {
+  const payload = canonicalCancelPayload(fields);
+  const signature = cryptoSign(null, Buffer.from(payload, "utf8"), privateKey).toString("base64");
+  return { payload, signature };
+}
+
+function cancelFields(clientOrderId: number): CancelApprovalPayload {
+  return { action: "cancel", client_order_id: clientOrderId, expires_ts_ns: NOW_NS + 5_000_000_000 };
 }
 
 function orderFrom(fields: ApprovalPayload): ApprovedOrder {
@@ -277,7 +305,7 @@ describe("BrokerGateway", () => {
     const gateway = await makeGateway({ "9": "accepted" });
     await gateway.submitOrder(orderFrom(fields), approve(fields), "equity");
 
-    const result = await gateway.cancelOrder(9, fields.instrument, "equity");
+    const result = await gateway.cancelOrder(9, fields.instrument, "equity", approveCancel(cancelFields(9)));
 
     expect(result.status).toBe("canceled");
     expect(reporter.calls[reporter.calls.length - 1]!.execution.event).toBe("canceled");
@@ -285,7 +313,38 @@ describe("BrokerGateway", () => {
 
   it("refuses to cancel an order it never placed, without calling the broker", async () => {
     const gateway = await makeGateway({});
-    await expect(gateway.cancelOrder(12345, "SPY", "equity")).rejects.toThrow(GatewayRejection);
+    await expect(
+      gateway.cancelOrder(12345, "SPY", "equity", approveCancel(cancelFields(12345))),
+    ).rejects.toThrow(GatewayRejection);
+  });
+
+  it("refuses a cancel with a missing approval", async () => {
+    const fields = baseFields(13);
+    const gateway = await makeGateway({ "13": "accepted" });
+    await gateway.submitOrder(orderFrom(fields), approve(fields), "equity");
+
+    await expect(gateway.cancelOrder(13, fields.instrument, "equity", undefined)).rejects.toThrow(/missing approval/);
+  });
+
+  it("refuses a cancel approval for a different client_order_id than the one being cancelled", async () => {
+    const fields = baseFields(14);
+    const gateway = await makeGateway({ "14": "accepted" });
+    await gateway.submitOrder(orderFrom(fields), approve(fields), "equity");
+
+    await expect(
+      gateway.cancelOrder(14, fields.instrument, "equity", approveCancel(cancelFields(999))),
+    ).rejects.toThrow(/does not match/);
+  });
+
+  it("refuses an expired cancel approval", async () => {
+    const fields = baseFields(15);
+    const gateway = await makeGateway({ "15": "accepted" });
+    await gateway.submitOrder(orderFrom(fields), approve(fields), "equity");
+    const expired: CancelApprovalPayload = { ...cancelFields(15), expires_ts_ns: NOW_NS - 1 };
+
+    await expect(
+      gateway.cancelOrder(15, fields.instrument, "equity", approveCancel(expired)),
+    ).rejects.toThrow(/expired/);
   });
 
   it("still returns the order's own outcome even if reporting the execution back fails", async () => {

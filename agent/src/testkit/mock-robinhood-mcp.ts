@@ -31,6 +31,16 @@ export interface MockRobinhoodOptions {
    *  runs. This is how a test proves "the place tool was never called a second time" from the
    *  outside, e.g. across a simulated process restart. */
   onToolCall?: (name: string) => void;
+  /** Issue #45 (reconciliation): what get_equity_positions/get_crypto_holdings reports for the
+   *  one instrument a reconcile call asks about. Defaults to the sum of every placed order's own
+   *  actually-filled quantity (signed by side) -- i.e. this mock's own honest bookkeeping, so a
+   *  multi-order simulation stays self-consistent without the caller hand-computing it. Pass an
+   *  explicit value, including one that deliberately disagrees with that bookkeeping, to prove a
+   *  reconciliation mismatch gets flagged rather than silently trusted. */
+  position?: string;
+  /** What get_accounts reports as cash. `null` reports no cash field at all (some responses may
+   *  omit it). Defaults to a fixed synthetic balance. */
+  cash?: string | null;
 }
 
 const PLACE_TOOLS = new Set(["place_equity_order", "place_crypto_order"]);
@@ -38,6 +48,9 @@ const PREVIEW_TOOLS = new Set(["review_equity_order", "preview_crypto_order"]);
 const CANCEL_TOOLS = new Set(["cancel_equity_order", "cancel_crypto_order"]);
 const STATUS_TOOLS = new Set(["get_equity_orders", "get_crypto_orders"]);
 const QUOTE_TOOLS = new Set(["get_equity_quotes", "get_crypto_quotes"]);
+// Issue #45 (reconciliation): read-only tools with no client_order_id filter.
+const POSITIONS_TOOLS = new Set(["get_equity_positions", "get_crypto_holdings"]);
+const ACCOUNT_TOOLS = new Set(["get_accounts"]);
 
 function structured(body: Record<string, unknown>): CallToolResult {
   return { content: [{ type: "text", text: JSON.stringify(body) }], structuredContent: body };
@@ -48,7 +61,14 @@ function errorResult(message: string): CallToolResult {
 }
 
 function placeBody(scenario: MockScenario, clientOrderId: string, qty: string, price: string): Record<string, unknown> {
-  const venueOrderId = `SYN-${clientOrderId}`;
+  // Wave-2 integration finding: this used to be `SYN-${clientOrderId}`, which
+  // engine/crates/bridge/src/wire.rs's `parse_venue_order_id` rejects -- `qc_core::VenueOrderId`
+  // is a `u64` newtype, and the real bridge requires the wire's `venue_order_id` to be a
+  // decimal-integer string (documented as UNVERIFIED against a real broker until #26, in exactly
+  // this one place). A synthetic id only ever needs to be distinct and traceable back to the
+  // client_order_id that produced it, not to look like a human-readable label, so this is
+  // decimal instead: real Robinhood order ids may not be, once #26 verifies the actual format.
+  const venueOrderId = String(900_000 + Number(clientOrderId));
   switch (scenario) {
     case "rejected":
       return { state: "rejected", id: venueOrderId, client_order_id: clientOrderId, reject_reason: "SYNTHETIC: insufficient buying power" };
@@ -73,7 +93,17 @@ export function createMockRobinhoodServer(opts: MockRobinhoodOptions = {}): Serv
   const scenarios = opts.scenarios ?? {};
   // Tracks what "placed" so a later status query can answer consistently (e.g. "accepted" at
   // place time, "filled" once queried -- the common eventually-consistent broker pattern).
-  const placed = new Map<string, { scenario: MockScenario; qty: string; price: string }>();
+  const placed = new Map<string, { scenario: MockScenario; qty: string; price: string; side: string }>();
+
+  /** How much of `entry` has actually filled, signed by side -- used only to derive a default
+   *  `position` (issue #45 reconciliation) when the caller doesn't pass one explicitly. Uses the
+   *  order's OWN scenario, not STATUS_TOOLS's query-time "accepted -> filled" reinterpretation
+   *  above: a not-yet-filled ("accepted") order hasn't moved position yet, however a later status
+   *  query might narrate it for other purposes. */
+  function signedFilledQty(entry: { scenario: MockScenario; qty: string; side: string }): number {
+    const filled = entry.scenario === "filled" ? Number(entry.qty) : entry.scenario === "partially_filled" ? Number(entry.qty) / 2 : 0;
+    return entry.side === "sell" ? -filled : filled;
+  }
 
   const server = new Server(
     { name: "mock-robinhood-agentic-mcp", version: "0.1.0" },
@@ -81,7 +111,15 @@ export function createMockRobinhoodServer(opts: MockRobinhoodOptions = {}): Serv
   );
 
   server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: [...PLACE_TOOLS, ...PREVIEW_TOOLS, ...CANCEL_TOOLS, ...STATUS_TOOLS, ...QUOTE_TOOLS].map((name) => ({
+    tools: [
+      ...PLACE_TOOLS,
+      ...PREVIEW_TOOLS,
+      ...CANCEL_TOOLS,
+      ...STATUS_TOOLS,
+      ...QUOTE_TOOLS,
+      ...POSITIONS_TOOLS,
+      ...ACCOUNT_TOOLS,
+    ].map((name) => ({
       name,
       description: `SYNTHETIC mock of Robinhood's ${name}`,
       inputSchema: { type: "object" },
@@ -101,10 +139,11 @@ export function createMockRobinhoodServer(opts: MockRobinhoodOptions = {}): Serv
     if (PLACE_TOOLS.has(name)) {
       const qty = typeof args.quantity === "string" ? args.quantity : "0";
       const price = typeof args.price === "string" ? args.price : "0";
+      const side = typeof args.side === "string" ? args.side : "buy";
       // A "timeout" order is recorded as if the broker really did accept it -- only our
       // response back to the caller is lost. That's what makes reconciliation via a later
       // status query meaningful instead of trivially always finding "not_found".
-      placed.set(clientOrderId, { scenario: scenario === "timeout" ? "accepted" : scenario, qty, price });
+      placed.set(clientOrderId, { scenario: scenario === "timeout" ? "accepted" : scenario, qty, price, side });
       if (scenario === "timeout") {
         // Never resolves: the caller's own request timeout (mcp-client.ts's callTool timeout,
         // or the SDK's DEFAULT_REQUEST_TIMEOUT_MSEC) is what's actually under test here.
@@ -121,12 +160,33 @@ export function createMockRobinhoodServer(opts: MockRobinhoodOptions = {}): Serv
     }
 
     if (STATUS_TOOLS.has(name)) {
-      const entry = placed.get(clientOrderId);
-      if (!entry) return structured({ orders: [] });
-      // A status query reports "accepted" placements as filled -- the eventual-consistency case
-      // gateway.ts's reconciliation path (timeout -> status query) depends on.
-      const resolved: MockScenario = entry.scenario === "accepted" ? "filled" : entry.scenario;
-      return structured({ orders: [placeBody(resolved, clientOrderId, entry.qty, entry.price)] });
+      if (clientOrderId) {
+        const entry = placed.get(clientOrderId);
+        if (!entry) return structured({ orders: [] });
+        // A status query reports "accepted" placements as filled -- the eventual-consistency
+        // case gateway.ts's reconciliation path (timeout -> status query) depends on.
+        const resolved: MockScenario = entry.scenario === "accepted" ? "filled" : entry.scenario;
+        return structured({ orders: [placeBody(resolved, clientOrderId, entry.qty, entry.price)] });
+      }
+      // No client_order_id filter: issue #45's listOrders() wants everything the broker has.
+      const orders = [...placed.entries()].map(([id, entry]) => {
+        const resolved: MockScenario = entry.scenario === "accepted" ? "filled" : entry.scenario;
+        return placeBody(resolved, id, entry.qty, entry.price);
+      });
+      return structured({ orders });
+    }
+
+    if (POSITIONS_TOOLS.has(name)) {
+      const symbol = typeof args.symbol === "string" ? args.symbol : undefined;
+      const quantity =
+        opts.position ??
+        [...placed.values()].reduce((sum, entry) => sum + signedFilledQty(entry), 0).toString();
+      return structured({ positions: symbol ? [{ symbol, quantity }] : [] });
+    }
+
+    if (ACCOUNT_TOOLS.has(name)) {
+      const cash = opts.cash === undefined ? "10000.00" : opts.cash;
+      return structured(cash === null ? {} : { cash });
     }
 
     if (QUOTE_TOOLS.has(name)) {

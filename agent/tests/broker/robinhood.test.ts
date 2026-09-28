@@ -42,7 +42,9 @@ describe("robinhood.ts against the mock MCP server", () => {
     };
     const result = await placeOrder(client, "equity", ORDER);
     expect(result.status).toBe("accepted");
-    expect(result.venue_order_id).toBe("SYN-1");
+    // Decimal (not "SYN-1"): the real bridge's wire::parse_venue_order_id requires a
+    // decimal-integer string (wave-2 review/integration finding; see mock-robinhood-mcp.ts).
+    expect(result.venue_order_id).toBe("900001");
   });
 
   it("routes crypto orders through the crypto tool names, not the equity ones", async () => {

@@ -126,7 +126,9 @@ def _entry(
         "mode": "fake",
         "prompt_version": "v1",
         "model": "test",
-        "cost_usd": cost_usd,
+        # Wave 2: cost_usd is a decimal string on the wire (agent/src/types.ts); this helper
+        # still takes a plain float for readability at each call site.
+        "cost_usd": str(cost_usd),
     }
 
 

@@ -28,3 +28,15 @@ export function fromFixed(value: bigint): string {
 export function absFixed(value: bigint): bigint {
   return value < 0n ? -value : value;
 }
+
+/** Converts a JS float (e.g. the Agent SDK's `total_cost_usd`) into this repo's decimal-string
+ *  money convention -- root CLAUDE.md "no floats for money" applies the moment the value crosses
+ *  a process boundary (the decision ledger, in this case), even though the SDK itself hands it
+ *  back as a `number`. Routed through toFixed/fromFixed (not `n.toString()`) so the result is
+ *  always canonical: fixed at 8 fractional digits then trimmed, never exponential notation
+ *  (`n.toString()` on a small-enough float can emit "5e-7"), and never more precision than the
+ *  wire format allows. */
+export function usdToDecimalString(value: number): string {
+  if (!Number.isFinite(value)) throw new Error(`not a finite USD amount: ${value}`);
+  return fromFixed(toFixed(value.toFixed(8)));
+}

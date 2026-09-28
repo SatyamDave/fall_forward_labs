@@ -44,8 +44,9 @@
       "description": "Full SDK request/response in live mode; null in fake mode."
     },
     "cost_usd": {
-      "type": "number",
-      "minimum": 0
+      "type": "string",
+      "description": "Decimal string (never a JSON number -- root CLAUDE.md 'no floats for money'), same convention as every other money field on the wire. Wave 2 (gateway-integration): was a JSON number through wave 1.",
+      "pattern": "^[0-9]+(\\.[0-9]{1,8})?$"
     },
     "latency_ms": {
       "type": "number",

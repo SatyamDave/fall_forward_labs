@@ -121,11 +121,19 @@ def _cost_summary(entries: list[dict[str, Any]]) -> dict[str, Any]:
     n = 0
     for e in entries:
         cost = e.get("cost_usd")
-        if not isinstance(cost, (int, float)):
+        # Wave 2: cost_usd is now a decimal string; a bare number is still accepted for any
+        # pre-wave-2 fixture/ledger line. This report's own numbers stay floats (informational
+        # summary stats, not a money-accounting path -- pnl_report.py is the one that must use
+        # Decimal throughout, per its own docstring).
+        if not isinstance(cost, (int, float, str)):
             continue
+        try:
+            cost_f = float(cost)
+        except ValueError:
+            continue  # a malformed cost_usd must not take the whole report down
         mode = e.get("mode", "unknown")
-        by_mode[mode] = by_mode.get(mode, 0.0) + float(cost)
-        total += float(cost)
+        by_mode[mode] = by_mode.get(mode, 0.0) + cost_f
+        total += cost_f
         n += 1
     return {
         "total": round(total, 6),

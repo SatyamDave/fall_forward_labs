@@ -205,6 +205,14 @@ agent-sim:
     if [ "$hash1" != "$hash2" ]; then echo "FAIL: agent-sim ledger is not deterministic"; exit 1; fi
     echo "agent-sim deterministic across two runs"
 
+# Protocol v1.2 (wave2-spec.md, issue #45 + gateway-integration): agent (fake decider) -> the
+# real qc-bridge --venue external -> gateway -> mock Robinhood MCP -> report_execution, run twice
+# with identical ledger AND broker-journal hashes, exercising a partial fill, a reject, and a
+# cancel. Set QC_BRIDGE_BIN to point at a different binary (e.g. the fake, for a unit-test-only
+# run); the default is the real release binary built from engine/crates/bridge.
+agent-sim-external:
+    cd {{agent}} && node_modules/.bin/tsx src/testkit/run-external-sim.ts
+
 # Issue #46: polls Robinhood quotes for one instrument, writes a replay-store CSV under
 # data/raw/ (gitignored) and a data/catalog/<dataset>.json manifest (agent/src/recorder/).
 # Read-only: never calls a place/cancel/preview tool -- agent/src/recorder/allowlist.ts enforces

@@ -18,7 +18,8 @@ import {
 import { z } from "zod";
 import { repoRoot } from "../paths.js";
 import { loadRawSchema } from "../schema.js";
-import type { Decision, DecisionRequest } from "../types.js";
+import { usdToDecimalString } from "../decimal.js";
+import type { DecimalString, Decision, DecisionRequest } from "../types.js";
 import type { Decider, DecisionOutcome } from "./types.js";
 
 export const PROMPT_VERSION = "v1";
@@ -172,12 +173,14 @@ export class LiveDecider implements Decider {
     const prompt = buildPrompt(req);
 
     const raw: unknown[] = [];
-    let costUsd: number | undefined;
+    let costUsd: DecimalString | undefined;
     let structuredOutput: Decision | undefined;
     for await (const message of query({ prompt, options })) {
       raw.push(message);
       if (message.type === "result" && message.subtype === "success") {
-        costUsd = message.total_cost_usd;
+        // The SDK hands this back as a JS number; the ledger's cost_usd is a decimal string
+        // (root CLAUDE.md "no floats for money") -- convert at the boundary, once, here.
+        costUsd = usdToDecimalString(message.total_cost_usd);
         if (message.structured_output) structuredOutput = message.structured_output as Decision;
       }
     }

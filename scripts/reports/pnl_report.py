@@ -145,8 +145,14 @@ def compute(entries: list[dict[str, Any]], fee_bps: Decimal) -> tuple[PnLResult,
         decision = entry.get("decision", {})
         result = entry.get("result")
         cost = entry.get("cost_usd")
-        if isinstance(cost, (int, float)):
-            ai_cost += Decimal(str(cost))
+        # Wave 2: cost_usd is now a decimal string (root CLAUDE.md "no floats for money"); still
+        # accept a bare number for any pre-wave-2 fixture/ledger line that hasn't been
+        # regenerated. A malformed value must not corrupt the running total silently.
+        if isinstance(cost, (int, float, str)):
+            try:
+                ai_cost += Decimal(str(cost))
+            except (ArithmeticError, ValueError):
+                pass
         action = decision.get("action")
         if (
             action in ("buy", "sell")

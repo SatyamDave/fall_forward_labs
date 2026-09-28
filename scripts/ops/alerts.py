@@ -35,11 +35,10 @@ child's stdout to (<log-dir>/qc-bridge.log):
 Agent decision ledger: real today at out/agent/ledger.jsonl (gitignored; agent/src/ledger.ts),
 one `DecisionLedgerEntry` JSON object per line (`agent/src/types.ts`). This checker reads two
 fields: the UTC-day bucket from the nested `request.ts_ns` (matching `DecisionRequest.ts_ns`;
-there is no top-level `ts_ns` on a ledger entry) and the top-level, optional `cost_usd`. Note:
-`cost_usd` is typed `number` in `agent/src/types.ts`, not this repo's usual decimal-string money
-convention -- that is an existing choice in agent-core's code, not this checker's; summing it
-here via `Decimal(str(cost_usd))` is safe (str() on a JSON float preserves what json.loads gave
-us) but does not fix the underlying float representation.
+there is no top-level `ts_ns` on a ledger entry) and the top-level, optional `cost_usd`. `cost_usd`
+is a decimal string (`agent/src/types.ts`, wave 2 -- it was a JSON number through wave 1); summing
+it here via `Decimal(str(cost_usd))` works the same either way (a pre-wave-2 ledger line with a
+bare float still parses), so this checker needed no code change for that fix, only this note.
 
 Usage (run periodically, e.g. from a systemd timer every 1-2 minutes -- "within minutes" per
 #64 does not need a persistent tailing process). --bridge-log points at whichever log file

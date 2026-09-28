@@ -62,14 +62,121 @@ export interface OrderIntent {
   reason: string;
 }
 
+/**
+ * Protocol v1.1 approval token (issue #34): a short-lived, tamper-proof stamp over exactly the
+ * order risk approved, so the gateway can act on risk's decision without re-implementing or
+ * trusting it itself. Canonical home for this type -- agent/src/broker/types.ts re-exports it
+ * rather than redefining it, so there is exactly one definition (root CLAUDE.md "one
+ * implementation per concern").
+ */
+export interface Approval {
+  /** Canonical JSON string, keys sorted, no whitespace -- exactly the bytes that were signed. */
+  payload: string;
+  /** Base64 Ed25519 signature over the UTF-8 bytes of `payload`. */
+  signature: string;
+}
+
+/** `Approval.payload`, parsed: schemas/decision/v1/README.md's v1.1 section, keys already
+ *  alphabetical. */
+export interface ApprovalPayload {
+  client_order_id: number;
+  /** u64 nanoseconds on the wire. Parsed with plain JSON.parse, which rounds to the nearest
+   *  double once the value exceeds 2^53 -- for a wall-clock nanosecond epoch timestamp that's
+   *  an error of a few hundred ns at most (ULP near 1.7e18 is ~400ns), utterly negligible
+   *  against a 5-second TTL.
+   *  ponytail: bounded precision loss, fine down to microsecond TTLs; if the bridge ever issues
+   *  approvals with sub-microsecond TTLs, switch to a bigint-preserving JSON parse. */
+  expires_ts_ns: number;
+  instrument: string;
+  limit_price: DecimalString;
+  qty: DecimalString;
+  request_id: string;
+  side: Side;
+  time_in_force: TimeInForce;
+}
+
+/** Protocol v1.2 `cancel_order_intent` approval payload (wave2-spec.md): a distinct, smaller
+ *  payload shape from `ApprovalPayload` above -- a cancel approves stopping an order, not a new
+ *  order's fields, so it carries only what a cancel needs. Signed with the same Ed25519 key. */
+export interface CancelApprovalPayload {
+  action: "cancel";
+  client_order_id: number;
+  expires_ts_ns: number;
+}
+
 export interface IntentResult {
   accepted: boolean;
   client_order_id?: number;
   risk_reject?: string;
   halted?: string;
+  /** Present only in `external` venue mode on acceptance (protocol v1.1): the gateway must
+   *  verify this before ever calling the broker. */
+  approval?: Approval;
 }
 
-export type BridgeOp = "next_decision_request" | "submit_order_intent" | "no_trade" | "status" | "shutdown";
+/** Protocol v1.1's `hello` response (schemas/decision/v1/hello.schema.json), extended by v1.2
+ *  with `market_ts_ns` (wave2-spec.md: "hello and status gain market_ts_ns"). `protocol` is
+ *  typed as a plain string, not a literal union: the shared schema file
+ *  (schemas/decision/v1/hello.schema.json, bridge-control's lane) still pins it to the literal
+ *  "1.1" as of this PR, so a real v1.2 bridge's response is validated by hand in bridge.ts
+ *  rather than against that schema -- see bridge.ts's "V12_ONLY" comment. */
+export interface Hello {
+  protocol: string;
+  venue_mode: "sim" | "external";
+  approval_public_key: string;
+  /** v1.2+: the latest feed/market timestamp (ns) the bridge has seen. Absent from a v1.1-only
+   *  bridge. */
+  market_ts_ns?: number;
+}
+
+export type ExecutionEvent =
+  | "accepted"
+  | "rejected"
+  | "partially_filled"
+  | "filled"
+  | "canceled"
+  | "cancel_rejected";
+
+/** Protocol v1.1 `report_execution` op payload (gateway -> bridge, external mode). */
+export interface OrderExecution {
+  client_order_id: number;
+  event: ExecutionEvent;
+  qty?: DecimalString;
+  price?: DecimalString;
+  venue_order_id?: string;
+  ts_ns: number;
+  reason?: string;
+}
+
+/** One order as the venue itself reports it, for protocol v1.2's `reconcile` op. */
+export interface VenueOrderSnapshot {
+  client_order_id: number | null;
+  venue_order_id: string;
+  state: "open" | "filled" | "canceled" | "rejected";
+  filled_qty: DecimalString;
+}
+
+export interface VenueSnapshot {
+  orders: VenueOrderSnapshot[];
+  position: DecimalString;
+  cash: DecimalString | null;
+}
+
+export type BridgeOp =
+  | "next_decision_request"
+  | "submit_order_intent"
+  | "no_trade"
+  | "status"
+  | "shutdown"
+  // Protocol v1.1 (additive; schemas/decision/v1/README.md):
+  | "hello"
+  | "report_execution"
+  // Protocol v1.2 (additive; wave2-spec.md). Not yet in
+  // schemas/decision/v1/bridge_request.schema.json's closed `op` enum -- see bridge.ts's
+  // "V12_ONLY_REQUEST_OPS" comment for how requests using these are validated until the
+  // bridge-control lane extends that schema.
+  | "cancel_order_intent"
+  | "reconcile";
 
 export interface BridgeRequest {
   v: 1;
@@ -78,6 +185,12 @@ export interface BridgeRequest {
   intent?: OrderIntent;
   request_id?: string;
   reason?: string;
+  /** report_execution */
+  execution?: OrderExecution;
+  /** cancel_order_intent */
+  client_order_id?: number;
+  /** reconcile */
+  venue?: VenueSnapshot;
 }
 
 export interface BridgeError {
@@ -93,6 +206,14 @@ export interface BridgeResponse {
   result?: IntentResult;
   status?: Record<string, unknown>;
   error?: BridgeError;
+  /** hello */
+  hello?: Hello;
+  /** reconcile (protocol v1.2): the envelope's own `ok` above only reflects whether the request
+   *  was well-formed -- a successful comparison that found a mismatch still answers with the
+   *  envelope's `ok:true` and puts the actual clean/mismatch verdict here. Callers must read
+   *  `reconcile.ok`/`reconcile.discrepancies`, never the envelope's `ok`, to learn whether
+   *  reconciliation was clean (schemas/decision/v1/README.md's v1.2 section). */
+  reconcile?: { ok: boolean; discrepancies: string[] };
 }
 
 export type LedgerMode = "fake" | "live" | "replay";
@@ -106,6 +227,9 @@ export interface DecisionLedgerEntry {
   model: string;
   /** Full SDK request/response in live mode; null in fake mode. */
   raw?: unknown;
-  cost_usd?: number;
+  /** Decimal string (root CLAUDE.md: no floats for money), like every other money field on the
+   *  wire -- wave2 fixes what was previously a JS number here (scripts/ops/alerts.py's docstring
+   *  used to flag this as the one exception; it no longer is). */
+  cost_usd?: DecimalString;
   latency_ms?: number;
 }
