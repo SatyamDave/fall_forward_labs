@@ -6,7 +6,7 @@ Regenerated automatically by `.github/workflows/docs-status.yml` on every merge 
 Narrative docs: [project guide](guide/quant-core-guide.html) ·
 [base status](reports/base-status.md) · [NOW](NOW.md).
 
-Generated from `main` at **c0958a5 2026-09-28**. Latest CI on `main`: **in_progress on c0958a5**.
+Generated from `main` at **3f66f6b 2026-09-28**. Latest CI on `main`: **queued on 3f66f6b**.
 Paid AI loops: **off**.
 
 ## Open pull requests (0)
@@ -17,6 +17,7 @@ None.
 
 | PR | Title | Merged |
 |---|---|---|
+| [#88](https://github.com/SatyamDave/fall_forward_labs/pull/88) | Bring the docs and roadmap up to date with what's built | 2026-09-28 |
 | [#87](https://github.com/SatyamDave/fall_forward_labs/pull/87) | The kill switch cancels everything at the broker, even if the agent is stuck | 2026-09-28 |
 | [#86](https://github.com/SatyamDave/fall_forward_labs/pull/86) | The PR checklist check accepts sections written as headings | 2026-09-28 |
 | [#84](https://github.com/SatyamDave/fall_forward_labs/pull/84) | Wire the gateway to protocol v1.2: reconciliation, cancel, market clock | 2026-09-28 |
@@ -31,12 +32,14 @@ None.
 | [#75](https://github.com/SatyamDave/fall_forward_labs/pull/75) | Add self-cross, wash-trade and daily-notional dollar caps to qc-risk | 2026-09-28 |
 | [#80](https://github.com/SatyamDave/fall_forward_labs/pull/80) | Replaying a recorded decision gives the same ledger every time | 2026-09-28 |
 | [#74](https://github.com/SatyamDave/fall_forward_labs/pull/74) | Prove the agent can only place orders one way, replay decisions for free, write the live prompt | 2026-09-28 |
-| [#73](https://github.com/SatyamDave/fall_forward_labs/pull/73) | Build the broker gateway door and a mock Robinhood connection | 2026-09-28 |
 
 ## Recent commits on main
 
 | Commit | Date | Subject |
 |---|---|---|
+| `3f66f6b` | 2026-09-28 | Merge pull request #88 from SatyamDave/docs/sync-after-waves |
+| `44b30a8` | 2026-09-28 | docs: bring README, ARCHITECTURE, ROADMAP, NOW, TEAM and the guide up to main |
+| `013f3b1` | 2026-09-28 | docs(status): regenerate live status from c0958a5 [skip ci] |
 | `c0958a5` | 2026-09-28 | Merge pull request #87 from SatyamDave/safety/halt-path |
 | `49d66dd` | 2026-09-28 | Merge main into safety/halt-path before merging #87 |
 | `30d58ad` | 2026-09-28 | test(agent): run test files one at a time |
@@ -46,9 +49,6 @@ None.
 | `fa306e1` | 2026-09-28 | fix(ci): accept PR-template sections written as headings without a colon |
 | `e743334` | 2026-09-28 | docs(status): regenerate live status from 13866c8 [skip ci] |
 | `13866c8` | 2026-09-28 | Merge pull request #84 from SatyamDave/wave2/gateway-integration |
-| `249fc10` | 2026-09-28 | Merge main into wave2/gateway-integration before merging #84 |
-| `69ea482` | 2026-09-28 | test(recorder): give the replay-integration test realistic poll timing |
-| `b720f0f` | 2026-09-28 | docs(status): regenerate live status from 525399d [skip ci] |
 
 ## Decisions (ADRs)
 
