@@ -40,7 +40,10 @@ fn engaged_kill_switch_halts_submit_before_risk_or_the_venue() {
     assert!(halted.get("risk_reject").is_none());
 
     assert_eq!(engine.status()["halted"], "kill_switch");
-    // The engaged order never reached the OMS: still exactly one open order
-    // from the first, accepted submit.
-    assert_eq!(engine.status()["open_orders"].as_array().unwrap().len(), 1);
+    // Protocol v1.2 (issue #44): halting now also cancels every open order,
+    // not just refuses new ones -- the resting order from the first,
+    // accepted submit is canceled the moment the engaged switch is observed
+    // (the same `submit_order_intent` call above that discovered the halt),
+    // so sim mode ends with zero open orders, not one.
+    assert_eq!(engine.status()["open_orders"].as_array().unwrap().len(), 0);
 }

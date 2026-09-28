@@ -119,6 +119,9 @@ fn bridge_response_and_intent_result_conform_for_every_op() {
              "limit_price":"99.8","time_in_force":"gtc","reason":"test"}}"#,
         r#"{"v":1,"id":"4","op":"no_trade","request_id":"dr-2","reason":"flat"}"#,
         r#"{"v":1,"id":"6","op":"hello"}"#,
+        r#"{"v":1,"id":"7","op":"cancel_order_intent","client_order_id":1,"reason":"test"}"#,
+        r#"{"v":1,"id":"8","op":"reconcile","venue":{"orders":[],"position":"0","cash":null}}"#,
+        r#"{"v":1,"id":"9","op":"kill","reason":"test"}"#,
         r#"{"v":1,"id":"5","op":"shutdown"}"#,
     ];
     for line in lines {
@@ -150,7 +153,7 @@ fn external_mode_approval_and_report_execution_conform() {
     let response_validator = validator_for(&registry, &response_schema);
     let intent_result_validator = validator_for(&registry, &intent_result_schema);
 
-    let mut engine = support::engine_external(&support::small_book_csv(), 1);
+    let mut engine = support::engine_external_reconciled(&support::small_book_csv(), 1);
     assert!(
         engine.next_decision_request().is_some(),
         "book must sync before a submit"

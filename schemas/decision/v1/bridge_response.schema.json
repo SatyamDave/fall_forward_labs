@@ -37,6 +37,10 @@
     "hello": {
       "$ref": "hello.schema.json"
     },
+    "reconcile": {
+      "type": "object",
+      "description": "protocol v1.2 reconcile op's result: {\"ok\":bool,\"discrepancies\":[string,...]}."
+    },
     "error": {
       "type": "object",
       "required": [
