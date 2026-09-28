@@ -29,20 +29,27 @@ Definition of done:
 M0 does not require L0-L3 learning, autonomy loops, the decision layer, a live track record,
 multi-agent services or a chosen venue.
 
-## M1: first specialization (blocked on human decisions)
+## A0-A7: the agentic pipeline (blocked on human decisions)
 
-Starts only after the operators' jurisdiction is known and ADR-0020 or ADR-0003 is accepted.
+[ADR-0040](adr/0040-agentic-decision.md) (Accepted by Satyam 2026-09-28, pending Rohit's approval)
+replaces the old M1 plan ("first specialization": pick a vertical, wire a venue adapter, evaluate
+in shadow) with A0-A7, built around an agent that makes the final trade decision. The old M1 steps
+are folded into A3-A5 below; nothing here starts until A0 closes, and nothing places a live order
+before A6, which needs both founders' explicit sign-off separately from any ADR.
 
-1. Accept the first vertical and record venue eligibility for the operators.
-2. Point-in-time data capture for that venue with the quality checks in `data/quality/`.
-3. A venue adapter behind `VenueAdapter`, tested against recorded fixtures and the venue's demo
-   environment only.
-4. Fill and cost model calibrated to the venue; replace the SimVenue shortcuts for anything that
-   claims execution quality.
-5. Forward shadow evaluation of whatever survives research, with no orders.
+| Milestone | What it does | Exit test | Owner |
+|---|---|---|---|
+| A0 Decisions | ADR-0040 accepted by both founders; first asset chosen (a liquid ETF is the ADR's recommendation for the agentic account specifically; the classifier/engine vertical in ADR-0003/ADR-0020 is a separate, still-open choice); counsel review requested (Robinhood consent/personal-use clauses, Anthropic's high-risk-use and no-training-on-outputs clauses); Agentic beta account access confirmed | ADR-0040 accepted by both founders, recorded in its Status line | Satyam, Rohit |
+| A1 Handoff contract | `DecisionRequest`/`Decision` JSON schemas (`schemas/decision/v1/`); the `qc-bridge` crate; the agent service skeleton against SimVenue with a fake LLM (`QC_AGENT_MODE=fake`); a permission test | `just agent-sim` green, deterministic ledger hash across two runs; a test proves no tool but `submit_order_intent` is callable | Rohit (bridge), Satyam (agent service) |
+| A2 Evals | `just eval` deterministic recorded-response suite on every PR; a paid live-LLM agent eval on merge to main and nightly, gated by `scripts/ci/ai_gate.py` and the disabled `loop-agent-eval` policy entry | Deterministic suite green on every PR; the paid tier stays off until a human enables it with a real budget | Satyam |
+| A3 Broker | Robinhood Agentic MCP gateway adapter behind the risk wrapper (`agent/src/broker/`), tested only on recorded responses; an external kill switch; position and cash reconciliation | Recorded-response and chaos tests pass; the approval-token path is proven end to end with no live call | Rohit |
+| A4 Data + classifier | Point-in-time data capture for the chosen asset with the quality checks in `data/quality/`; classifier retrained on real data through the existing lab; walk-forward gates, including the deflated-Sharpe threshold decided (not left at the impossible default) | A classifier passes every walk-forward gate on real data, or the study is recorded REJECT/INSUFFICIENT EVIDENCE honestly | Shared |
+| A5 Shadow | The agent decides on live data; orders go only to SimVenue/paper, ≥ 14 days | Forward metrics beat both a classifier-only baseline and a no-trade baseline (research shows a dumb baseline often wins this comparison — see ADR-0040 Challenges); every shadow day replays identically from its recorded trajectory | Both founders review |
+| A6 First agentic trade | A funded agent account, limit orders only, a hard per-order and per-day dollar cap, both founders approve before it starts, daily reconciliation | Both founders' explicit sign-off recorded; zero cap or self-cross/wash-trade hits over the canary window; reconciled every day | Both founders sign; automatic demotion on any breach |
+| A7 Learning loop on | Decision-ledger outcomes become new frozen scenarios; prompt/tool changes are challengers evaluated against the champion before promotion; a parallel-agent experiment ships only if it beats one agent at equal token budget on the forward eval | A challenger beats the champion on the frozen suite and on forward shadow before promotion; a graveyard entry for every rejected challenger | Satyam (eval), Rohit (infra) |
 
-Live trading, even limited, is a separate decision after M1 and needs explicit human
-authorization.
+Live trading, even limited (A6), is a separate decision from any ADR and needs explicit,
+recorded sign-off from both founders every time, not just once.
 
 ## Deferred
 
@@ -51,10 +58,11 @@ authorization.
 | NautilusTrader, hftbacktest (ADR-0001) | Proposed only; the custom `qc-*` crates are what run. LGPL needs legal review | ADR-0001 is decided |
 | MLflow (ADR-0005) | JSONL registry is enough for one study | Trial volume or lineage needs outgrow JSONL |
 | Autonomy loops B-H (#3) | Need breakers, an App token, a second approver | M0 merged and review is enforceable |
-| Decision layer and Jev (#4) | No call site has a measured need; distillation blocked by MCA §2.3(b) | A call site shows a measured need |
-| L0-L3 learning (#2) | Needs a validated signal and labels | A signal survives forward shadow |
+| Decision layer and Jev (#4) | No call site has a measured need; distillation blocked by MCA §2.3(b); unaffected by ADR-0040 (different call site, no trading authority) | A call site shows a measured need |
+| L0-L3 learning (#2) | Needs a validated signal and labels; agent-side learning (challenger prompts/tools) is A7, not L0-L3 | A signal survives forward shadow |
 | RD-Agent, qlib sandbox | Multiplies trials before one baseline exists | After study 0001 and one more cycle |
-| Agent eval suite | Build from the first workflow's real failures | Failures are logged |
+| Agent eval suite (coding/autonomy agents) | Build from the first workflow's real failures | Failures are logged |
+| Live agent decisions, Robinhood adapter, first agentic trade (ADR-0040 A3, A5, A6) | Counsel review outstanding (Robinhood consent/personal-use, Anthropic high-risk-use and no-training-on-outputs clauses); `loop-agent-eval` disabled, zero budget | Counsel clears the open questions; both founders sign A6 |
 | sops/age encryption, plugin marketplace, managed settings | No threat model; plans unknown | Threat model written |
 | Metric ratchet | Replaced by invariants plus justified tolerances (research-loop §8) | Not planned |
 | Second vertical | Scope rule: one implementation | First vertical has a reconciled record |

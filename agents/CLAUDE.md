@@ -1,8 +1,8 @@
-# agents/ — offline agent swarm: orchestration, task specs, prompts
+# agents/ — offline agent swarm: orchestration, task specs, prompts. Not `agent/` (singular): see below.
 
 ## Owns / does not own
 - Owns: orchestrator/ (offline runs), tasks/ (one spec per task, from `tasks/0000-template.md`), prompts/ (versioned so runs reproduce), run logs.
-- Does not own: anything in the live path (engine/), deploys (ops/deploy/), promotion decisions (humans).
+- Does not own: anything in the live path (engine/), deploys (ops/deploy/), promotion decisions (humans), the runtime trading agent (`agent/`, singular, ADR-0040) — that is a different system: it makes the final trade decision through `qc-bridge`, is versioned and evaluated like production code, and is never one of these offline Claude Code swarm runs.
 
 ## Commands
 - New task: copy `tasks/0000-template.md` to `tasks/NNNN-<slug>.md`
@@ -28,3 +28,4 @@ _None yet. Each entry links to the PR or postmortem where it bit us._
 
 ## See also
 - tasks/0000-template.md; .claude/agents/; docs/ARCHITECTURE.md (offline side)
+- agent/CLAUDE.md (the runtime trading agent); ADR-0040: docs/adr/0040-agentic-decision.md

@@ -27,6 +27,8 @@
 - No venue credentials or live venue connections from research (root rules 1, 2).
 - Never report a Sharpe without its trial count.
 - Retrospective LLM forecasts on historical data are exploratory only, never evidence; prospective timestamped predictions are primary.
+- The ADR-0040 trading agent is never backtested on history (its pretraining may already contain the outcome); it is evaluated forward-only — recorded shadow decisions on live data, then canary — never as a historical Sharpe.
+- Never train or label the classifier from agent (ADR-0040) decisions or outputs; Anthropic's Commercial Terms and Usage Policy bar training on Claude outputs, and it would leak the agent's own bias into "ground truth." Labels come from realized market outcomes only.
 
 ## Gotchas
 _None yet. Each entry links to the PR or postmortem where it bit us._
@@ -37,3 +39,4 @@ _None yet. Each entry links to the PR or postmortem where it bit us._
 ## See also
 - Skills: research/.claude/skills/ (run-walkforward, overfitting-report, graveyard-entry)
 - Rule: .claude/rules/python-research.md; ADR-0005 (data storage); README.md (layout choice)
+- ADR-0040 (agent handoff, forward-only agent evals): docs/adr/0040-agentic-decision.md

@@ -16,6 +16,7 @@
 - Every alert in ops/monitoring links to a runbook in runbooks/ that exists.
 - A graveyard entry has a date, the gate reached, why it failed, and a registry link.
 - ARCHITECTURE.md changes in the same PR as any structural change (new crate, new top-level directory, new data path).
+- Amending a root CLAUDE.md non-negotiable rule gets its own ADR, referenced from the root file. ADR-0040 (agent handoff, superseding the old rule 1) is the precedent.
 
 ## NEVER
 - Never delete an ADR, a postmortem, or a graveyard row. Check: `git diff --diff-filter=D --name-only origin/main -- adr postmortems` is empty and graveyard.md only gains lines.
@@ -31,3 +32,4 @@ _None yet. Each entry links to the PR or postmortem where it bit us._
 ## See also
 - Skills: write-adr, write-plan, incident-postmortem, graveyard-entry
 - adr/0000-template.md, postmortems/0000-template.md, research/graveyard.md
+- ADR-0040 (agent handoff): adr/0040-agentic-decision.md

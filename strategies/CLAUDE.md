@@ -2,7 +2,7 @@
 
 ## Owns / does not own
 - Owns: `_template/` (README, GATES.md, config.yaml, src/, tests/) and one `<strategy_name>/` per strategy: thesis, parameters, strategy code implementing `Strategy` from qc-strategy-runtime, tests, gate history.
-- Does not own: risk limits (config/limits/, protected), research code (research/), models (ml/), backtest engines (backtest/).
+- Does not own: risk limits (config/limits/, protected), research code (research/), models (ml/), backtest engines (backtest/), the ADR-0040 agent's decision (`agent/`) — the agent is not a `Strategy` registered here; it is a separate decision source gated by the same qc-risk.
 
 ## Commands
 - New strategy: use the new-strategy skill (copies `_template/` to `<strategy_name>/`)
@@ -31,3 +31,4 @@ _None yet. Each entry links to the PR or postmortem where it bit us._
 
 ## See also
 - Skill: new-strategy; _template/GATES.md; docs/research/graveyard.md; research/CLAUDE.md
+- ADR-0040 (agent handoff): docs/adr/0040-agentic-decision.md

@@ -1,9 +1,10 @@
 # quant-core
 Private algorithmic trading platform: Rust engine, Python research/ML, offline agent swarm.
 Goal: auditable track record → regulated fund. Read docs/VISION.md once.
+North star: Every PR states how it moves us toward the first agentic trade.
 
 ## Non-negotiable rules
-1. **No agent or LLM call in the live trading path.** No network calls to AI APIs from `engine/` or from any process that holds venue credentials.
+1. **No LLM call inside the deterministic engine.** `engine/` makes no network or AI call. The final trade decision may be made by the agent service (`agent/`, ADR-0040) only through the risk-wrapped `submit_order_intent` path; the engine's risk checks and kill switch stay authoritative, and no process that holds broker credentials exposes them to the agent.
 2. **No secrets in git, ever.** API keys live in a secret manager, with `.env` for local development only (gitignored). Never read, print, log, or echo secrets. Never paste them into prompts, issues, or PRs.
 3. **Protected zones are human-approved only:** `engine/crates/risk/**`, `config/limits/**`, `ops/deploy/**`, `fund/**`, `.github/workflows/**`, `.claude/hooks/**`, `.claude/settings.json`. Agents may propose changes to these in a PR but must never weaken a limit or a check.
    Extension: `autonomy/**` is also a protected zone, and a change to it needs two human approvals.
@@ -26,6 +27,9 @@ ml/          Planned model pipeline: train → validate → registry → shadow 
 backtest/    Fill + latency models, configs, reports
 data/        Schemas, recorders, catalog, data-quality checks
 agents/      Offline swarm orchestration; outputs are PRs and reports only
+agent/       TypeScript agent service (ADR-0040); not agents/ (offline swarm)
+schemas/     Versioned handoff contract between engine/ and agent/ (schemas/decision/v1)
+evals/       Deterministic + gated live-LLM eval suites for the agent (ADR-0040)
 config/      limits★, venues, environments (no secrets)
 ops/         Infra, deploy★, monitoring
 fund/        Track record + compliance★

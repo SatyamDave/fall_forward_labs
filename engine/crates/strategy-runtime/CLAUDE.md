@@ -2,7 +2,7 @@
 
 ## Owns / does not own
 - Owns: the `Strategy` trait (`on_event(&mut self, &Event, &OrderBook, &mut Vec<Command>)`, `Command::{Submit, Cancel}`) and the example `InsideQuoter` test fixture.
-- Does not own: strategy logic (strategies/<name>/), risk checks (qc-risk), the event loop that hands commands to risk, the OMS and the venue (`Engine` in qc-replay).
+- Does not own: strategy logic (strategies/<name>/), risk checks (qc-risk), the event loop that hands commands to risk, the OMS and the venue (`Engine` in qc-replay), the agent's trade decision (`agent/`, ADR-0040) — a `Strategy` and the agent are separate decision sources, both gated by qc-risk.
 
 ## Commands
 - `cargo test -p qc-strategy-runtime --locked`
@@ -29,3 +29,4 @@ _None yet. Each entry links to the PR or postmortem where it bit us._
 
 ## See also
 - strategies/CLAUDE.md, engine/crates/replay, tests/replay/, .claude/rules/rust-hotpath.md
+- ADR-0040 (agent handoff): docs/adr/0040-agentic-decision.md
