@@ -147,6 +147,21 @@ report-ledger *args:
 report-pnl *args:
     python3 scripts/reports/pnl_report.py {{args}}
 
+# Issue #52: turn decision-ledger entries with known outcomes into new frozen scenarios under
+# evals/scenarios/from_ledger/ (provenance sidecar, synthetic/real label; never leaks the
+# outcome into the generated scenario's decision inputs). No-op, exit 0, if no ledger exists yet.
+scenarios-from-ledger *args:
+    python3 scripts/eval/scenarios_from_ledger.py {{args}}
+
+# Issue #53: champion/challenger promotion for agent prompt/tool-config versions. Runs the
+# frozen suite (fake mode; --live only when scripts/ci/ai_gate.py allows) and, if given
+# --champion-forward-ledger/--challenger-forward-ledger, a forward/shadow comparison; promotes
+# only when both tiers pass. Never edits agent/src/prompts/*.md or any decider default — writes
+# an append-only record to evals/promotions/ and, on PROMOTED, a recommendation file for
+# founders to act on by hand.
+promote *args:
+    python3 scripts/eval/promote.py {{args}}
+
 # ADR-0040 agent service (agent/): install pinned dependencies (npm ci, committed lockfile)
 agent-setup:
     cd {{agent}} && npm ci
