@@ -1,0 +1,741 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>quant-core Project Guide</title>
+<meta name="description" content="What Fall Forward Labs' quant-core is, how it works, what is built, and what it takes to trade through Robinhood accounts. Written for founders, PMs and newcomers.">
+<style>
+:root{
+  color-scheme:light;
+  --bg:#f7f7f5; --card:#ffffff; --fg:#1b1d21; --muted:#5b6170; --line:#d9dce2; --soft:#eef0f4;
+  --accent:#2f5bd3; --accent-soft:#e6ecfb; --ok:#1f7a4d; --ok-soft:#e3f3ea; --warn:#9a6200; --warn-soft:#fbf0dc;
+  --bad:#b3261e; --bad-soft:#fbe5e3; --plan:#7a7f8c; --plan-soft:#f0f1f4; --human:#7b3fb3; --human-soft:#f1e8fa;
+  --code:#f1f2f5; --shadow:0 1px 2px rgba(0,0,0,.05);
+}
+@media (prefers-color-scheme: dark){ :root:not([data-theme="light"]){
+  color-scheme:dark;
+  --bg:#121417; --card:#1b1e23; --fg:#e7e9ee; --muted:#a2a8b5; --line:#30343c; --soft:#23272e;
+  --accent:#7ea2ff; --accent-soft:#1f2a45; --ok:#5fcf97; --ok-soft:#15301f; --warn:#f0b54a; --warn-soft:#352812;
+  --bad:#ff8a80; --bad-soft:#3a1c1a; --plan:#9aa0ad; --plan-soft:#262a31; --human:#c79bff; --human-soft:#2c2140;
+  --code:#23272e; --shadow:none;
+}}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --bg:#121417; --card:#1b1e23; --fg:#e7e9ee; --muted:#a2a8b5; --line:#30343c; --soft:#23272e;
+  --accent:#7ea2ff; --accent-soft:#1f2a45; --ok:#5fcf97; --ok-soft:#15301f; --warn:#f0b54a; --warn-soft:#352812;
+  --bad:#ff8a80; --bad-soft:#3a1c1a; --plan:#9aa0ad; --plan-soft:#262a31; --human:#c79bff; --human-soft:#2c2140;
+  --code:#23272e; --shadow:none;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif}
+.wrap{max-width:1120px;margin:0 auto;padding:0 16px 80px}
+header.top{padding:40px 0 24px;border-bottom:1px solid var(--line);margin-bottom:24px}
+h1{font-size:2rem;line-height:1.2;margin:0 0 8px}
+h2{font-size:1.45rem;margin:48px 0 12px;padding-top:8px;scroll-margin-top:16px}
+h3{font-size:1.1rem;margin:28px 0 8px}
+p{margin:8px 0 12px}
+.lede{font-size:1.1rem;color:var(--muted);max-width:820px}
+a{color:var(--accent)}
+code{background:var(--code);padding:1px 5px;border-radius:4px;font-size:.88em;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px 18px;box-shadow:var(--shadow);margin:12px 0}
+.plain{border-left:4px solid var(--accent);background:var(--accent-soft);border-radius:8px;padding:12px 16px;margin:14px 0}
+.plain b.lbl{display:block;font-size:.78rem;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);margin-bottom:2px}
+.warnbox{border-left:4px solid var(--warn);background:var(--warn-soft);border-radius:8px;padding:12px 16px;margin:14px 0}
+.badbox{border-left:4px solid var(--bad);background:var(--bad-soft);border-radius:8px;padding:12px 16px;margin:14px 0}
+.okbox{border-left:4px solid var(--ok);background:var(--ok-soft);border-radius:8px;padding:12px 16px;margin:14px 0}
+.grid{display:grid;gap:12px}
+.g2{grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+.g3{grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
+.g4{grid-template-columns:repeat(auto-fit,minmax(190px,1fr))}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px}
+.stat .k{font-size:.8rem;color:var(--muted);text-transform:uppercase;letter-spacing:.05em}
+.stat .v{font-size:1.05rem;font-weight:600;margin-top:2px}
+.pill{display:inline-block;font-size:.76rem;font-weight:600;padding:2px 8px;border-radius:999px;white-space:nowrap}
+.p-ok{background:var(--ok-soft);color:var(--ok)} .p-warn{background:var(--warn-soft);color:var(--warn)}
+.p-bad{background:var(--bad-soft);color:var(--bad)} .p-plan{background:var(--plan-soft);color:var(--plan)}
+.p-human{background:var(--human-soft);color:var(--human)} .p-acc{background:var(--accent-soft);color:var(--accent)}
+.tbl{width:100%;border-collapse:collapse;font-size:.93rem}
+.tbl th,.tbl td{text-align:left;vertical-align:top;padding:8px 10px;border-bottom:1px solid var(--line)}
+.tbl th{font-size:.8rem;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);background:var(--soft)}
+.tblwrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--card);margin:12px 0}
+nav.toc{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 16px;margin:16px 0}
+nav.toc ol{margin:4px 0;padding-left:20px;columns:2;column-gap:28px}
+@media (max-width:640px){nav.toc ol{columns:1}}
+nav.toc li{margin:2px 0;break-inside:avoid}
+.diagram{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px;margin:14px 0;overflow-x:auto}
+.diagram svg{display:block;width:100%;min-width:760px;height:auto}
+.cap{font-size:.86rem;color:var(--muted);margin:6px 4px 0}
+details{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin:10px 0}
+details summary{cursor:pointer;font-weight:600}
+details[open] summary{margin-bottom:8px}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:.85rem;color:var(--muted);margin:6px 4px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{width:18px;height:12px;border-radius:3px;display:inline-block;border:2px solid}
+.steps{counter-reset:s;list-style:none;padding:0;margin:8px 0}
+.steps>li{counter-increment:s;position:relative;padding:10px 12px 10px 48px;background:var(--card);border:1px solid var(--line);border-radius:10px;margin:8px 0}
+.steps>li::before{content:counter(s);position:absolute;left:12px;top:10px;width:26px;height:26px;border-radius:50%;background:var(--accent);color:#fff;font-weight:700;font-size:.85rem;display:flex;align-items:center;justify-content:center}
+.small{font-size:.87rem;color:var(--muted)}
+footer{margin-top:56px;padding-top:16px;border-top:1px solid var(--line);font-size:.85rem;color:var(--muted)}
+.themebtn{float:right;background:var(--card);color:var(--fg);border:1px solid var(--line);border-radius:8px;padding:6px 10px;cursor:pointer;font:inherit;font-size:.85rem}
+/* svg tokens */
+svg text{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;fill:var(--fg)}
+svg .t-m{fill:var(--muted)} svg .t-s{font-size:11px} svg .t-h{font-weight:700}
+svg .zone{fill:var(--soft);stroke:var(--line)}
+svg .box{fill:var(--card);stroke:var(--line);stroke-width:1.5}
+svg .b-ok{fill:var(--ok-soft);stroke:var(--ok);stroke-width:1.5}
+svg .b-acc{fill:var(--accent-soft);stroke:var(--accent);stroke-width:1.5}
+svg .b-warn{fill:var(--warn-soft);stroke:var(--warn);stroke-width:1.5}
+svg .b-bad{fill:var(--bad-soft);stroke:var(--bad);stroke-width:1.5}
+svg .b-human{fill:var(--human-soft);stroke:var(--human);stroke-width:1.5}
+svg .b-plan{fill:var(--plan-soft);stroke:var(--plan);stroke-width:1.5;stroke-dasharray:6 4}
+svg .ar{stroke:var(--muted);stroke-width:1.6;fill:none}
+svg .ar-acc{stroke:var(--accent);stroke-width:1.8;fill:none}
+svg .ar-bad{stroke:var(--bad);stroke-width:1.6;fill:none;stroke-dasharray:5 4}
+svg .ar-plan{stroke:var(--plan);stroke-width:1.6;fill:none;stroke-dasharray:6 4}
+svg .wall{stroke:var(--bad);stroke-width:2.5;stroke-dasharray:10 6}
+svg .ah{fill:var(--muted)} svg .ah-acc{fill:var(--accent)} svg .ah-bad{fill:var(--bad)} svg .ah-plan{fill:var(--plan)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="top">
+  <button class="themebtn" id="themebtn" type="button" aria-label="Toggle light or dark theme">Theme</button>
+  <div class="small">Fall Forward Labs · repository <code>SatyamDave/fall_forward_labs</code> · snapshot of <code>main</code> on 2026-09-28</div>
+  <h1>quant-core: the complete project guide</h1>
+  <p class="lede">What we are building, how every piece fits together, what already works, what does not exist yet, and every step between today and letting the system trade through our own Robinhood accounts. Written so a founder, a PM, an engineer, or someone who has never traded can all follow it.</p>
+</header>
+
+<div class="grid g4">
+  <div class="stat"><div class="k">Stage</div><div class="v">Offline foundation done</div></div>
+  <div class="stat"><div class="k">Trading today</div><div class="v"><span class="pill p-bad">None, by design</span></div></div>
+  <div class="stat"><div class="k">Broker connected</div><div class="v"><span class="pill p-plan">Not built</span></div></div>
+  <div class="stat"><div class="k">Proven edge</div><div class="v"><span class="pill p-warn">None yet</span></div></div>
+</div>
+
+<nav class="toc" aria-label="Contents">
+  <b>Contents</b>
+  <ol>
+    <li><a href="#plain">The whole project in plain English</a></li>
+    <li><a href="#today">Where we are today</a></li>
+    <li><a href="#map">The system map (big diagram)</a></li>
+    <li><a href="#engine">Inside the trading engine</a></li>
+    <li><a href="#orders">How one order lives and dies</a></li>
+    <li><a href="#safety">Safety: every guardrail and its limits</a></li>
+    <li><a href="#research">How we find (or rule out) an edge</a></li>
+    <li><a href="#learning">What "learning" means here</a></li>
+    <li><a href="#agents">Where AI helps, and where it is banned</a></li>
+    <li><a href="#robinhood">Trading through Robinhood: what it takes</a></li>
+    <li><a href="#roadmap">Roadmap to live trading</a></li>
+    <li><a href="#decisions">Decisions only the founders can make</a></li>
+    <li><a href="#risks">Risks and honest limits</a></li>
+    <li><a href="#work">How we work day to day</a></li>
+    <li><a href="#glossary">Glossary</a></li>
+    <li><a href="#sources">Sources and how to verify</a></li>
+  </ol>
+</nav>
+
+<!-- 1 -->
+<h2 id="plain">1. The whole project in plain English</h2>
+<div class="plain"><b class="lbl">In one sentence</b>We are building a careful robot trader: software that watches a market, decides whether a trade is worth making after costs, checks every order against hard safety limits, and only ever trades with money we have explicitly allowed it to use.</div>
+<p>Think of it as three rooms with locked doors between them:</p>
+<div class="grid g3">
+  <div class="card"><b>Room 1: the lab (research)</b><p>We collect market data, form a guess ("hypothesis") about a pattern that might make money, and test it on past data using strict rules so we do not fool ourselves. Most ideas fail here, and that is the point. Failures are written down so nobody retries them blindly.</p></div>
+  <div class="card"><b>Room 2: the exam (evaluation and promotion)</b><p>An idea that survives the lab must pass numeric gates, then run in "shadow" (making pretend decisions on live data without placing orders), then run with tiny real money. Each step needs a human to say yes. Getting worse always demotes automatically; getting promoted never happens automatically.</p></div>
+  <div class="card"><b>Room 3: the trading floor (runtime)</b><p>A fast, predictable Rust program. It keeps the live order book, asks the strategy what to do, runs every order through risk checks and a kill switch, tracks each order's state, and talks to the broker. No AI model and no internet lookups are allowed in this room.</p></div>
+</div>
+<p>Around the rooms sit the <b>founders</b> (who set limits and approve every step up), <b>automated checks</b> (tests, security scans, CI on every change), and <b>AI coding assistants</b> (they write and review code and documents, but can never touch real money or place an order).</p>
+<div class="warnbox"><b>What this is not.</b> It is not a money-making machine yet. No strategy has shown an edge. Right now it can only trade against a fake, simulated market using made-up data. Making it trade real money through Robinhood needs the steps in <a href="#robinhood">section 10</a> and <a href="#roadmap">section 11</a>, several of which are legal and account decisions, not code.</div>
+
+<!-- 2 -->
+<h2 id="today">2. Where we are today</h2>
+<p>Everything below is on <code>main</code>. "Verified" means we ran it from a fresh copy of the repository and it passed, with the exit code recorded.</p>
+<div class="tblwrap"><table class="tbl">
+<thead><tr><th>Piece</th><th>What it does, plainly</th><th>Status</th><th>Main limitation</th></tr></thead>
+<tbody>
+<tr><td>Order book (<code>qc-orderbook</code>)</td><td>Keeps the current list of buy and sell prices for a market, rejects corrupt updates</td><td><span class="pill p-ok">Built, tested</span></td><td>Only fed synthetic data so far</td></tr>
+<tr><td>Risk checks + kill switch (<code>qc-risk</code>)</td><td>Blocks any order that breaks a limit; a kill switch stops new orders and cancels open ones</td><td><span class="pill p-ok">Built, tested</span></td><td>Limits are tiny placeholders; kill switch has no external button yet; does not close positions</td></tr>
+<tr><td>Order manager (<code>qc-oms</code>)</td><td>Tracks every order through its life (sent, accepted, filled, cancelled) and halts on surprises</td><td><span class="pill p-ok">Built, tested</span></td><td>Positions not reconciled with a broker (no broker yet)</td></tr>
+<tr><td>Simulated venue (<code>SimVenue</code>)</td><td>A fake exchange used for testing</td><td><span class="pill p-warn">Built, simplified</span></td><td>Ignores queue position and can reuse liquidity, so its fills are not realistic</td></tr>
+<tr><td>Replay (<code>just replay</code>)</td><td>Runs a recorded day through the engine twice and proves the orders come out identical</td><td><span class="pill p-ok">Verified</span></td><td>The "recorded day" is synthetic</td></tr>
+<tr><td>Research stack (Python)</td><td>Datasets without future information, features, a baseline model, walk-forward testing, overfitting statistics</td><td><span class="pill p-ok">Built, tested</span></td><td>Only demo runs on synthetic data (they correctly FAIL)</td></tr>
+<tr><td>Experiment ledger + graveyard</td><td>Every test ever run is appended; failed ideas are recorded with reasons</td><td><span class="pill p-ok">Built</span></td><td>Plain files, not a database</td></tr>
+<tr><td>Study 0001 (Kalshi favorite-longshot)</td><td>Our first real-data research cycle</td><td><span class="pill p-warn">Inconclusive</span></td><td>0 markets analysed (a design mistake in the sample rule); must be re-registered as v2</td></tr>
+<tr><td>Python ↔ Rust parity</td><td>Proves the research model and the engine compute identical features</td><td><span class="pill p-ok">Verified</span></td><td>Model not yet wired into live decisions</td></tr>
+<tr><td>CI and security scanning</td><td>Every change is tested, linted, and scanned for vulnerabilities and secrets</td><td><span class="pill p-ok">Passing on main</span></td><td>GitHub cannot force it to block merges on this plan</td></tr>
+<tr><td>Claude Code guardrails</td><td>Hooks and permissions that stop AI assistants reading secrets or editing protected files</td><td><span class="pill p-ok">Built, 62 tests</span></td><td>Only binds Claude sessions; a determined shell command can bypass</td></tr>
+<tr><td>Broker adapter (Robinhood)</td><td>Would connect the engine to a real account</td><td><span class="pill p-plan">Not built</span></td><td>Needs the decisions in section 10</td></tr>
+<tr><td>Live market data recorder</td><td>Would capture real prices continuously</td><td><span class="pill p-plan">Not built</span></td><td>Needs venue choice</td></tr>
+<tr><td>Realistic backtest / paper trading</td><td>Would simulate fills honestly, then trade on paper</td><td><span class="pill p-plan">Not built</span></td><td><code>just backtest</code> exits 2, <code>just paper</code> refuses</td></tr>
+</tbody></table></div>
+
+<!-- 3 -->
+<h2 id="map">3. The system map</h2>
+<div class="plain"><b class="lbl">How to read this</b>Left to right is the journey from raw market data to a real order. The red dashed wall is the most important line in the project: nothing on the left (research, AI, experiments) can send an order. Only a model or strategy that passes every gate and a human approval crosses the wall, and only as a hash-checked file. Solid boxes exist today; dashed grey boxes are planned.</div>
+<div class="diagram" role="img" aria-label="System map from market data through research, promotion gates, the trading engine and the broker, with humans and automation around it">
+<svg viewBox="0 0 1200 900" xmlns="http://www.w3.org/2000/svg">
+<defs>
+  <marker id="m1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker>
+  <marker id="m2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah-acc"/></marker>
+  <marker id="m3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah-bad"/></marker>
+  <marker id="m4" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah-plan"/></marker>
+</defs>
+<!-- humans band -->
+<rect x="10" y="10" width="1180" height="78" rx="10" class="b-human"/>
+<text x="30" y="36" class="t-h">FOUNDERS (humans) — the only ones who can grant authority</text>
+<text x="30" y="58" class="t-s">Choose market and broker · set risk limits (config/limits) · approve every promotion (shadow → tiny live → scaled)</text>
+<text x="30" y="76" class="t-s">Hold broker credentials · press the kill switch · approve changes to protected code · review every pull request</text>
+
+<!-- zones -->
+<rect x="10" y="104" width="470" height="560" rx="10" class="zone"/>
+<text x="26" y="128" class="t-h">OFFLINE: the lab (Python)</text>
+<text x="26" y="146" class="t-s t-m">No money, no broker keys. AI assistants may help here.</text>
+
+<rect x="500" y="104" width="190" height="560" rx="10" class="zone"/>
+<text x="514" y="128" class="t-h">THE EXAM</text>
+<text x="514" y="146" class="t-s t-m">Gates + human sign-off</text>
+
+<rect x="710" y="104" width="480" height="560" rx="10" class="zone"/>
+<text x="726" y="128" class="t-h">LIVE: the trading floor (Rust engine)</text>
+<text x="726" y="146" class="t-s t-m">Deterministic. No AI, no web lookups, no guessing.</text>
+
+<!-- the wall -->
+<line x1="700" y1="100" x2="700" y2="670" class="wall"/>
+<text x="706" y="690" class="t-s" style="fill:var(--bad)">The wall: no AI call and no research code crosses into the engine</text>
+
+<!-- offline boxes -->
+<rect x="30" y="165" width="200" height="58" rx="8" class="b-plan"/>
+<text x="42" y="188" class="t-h t-s">Market data capture</text><text x="42" y="206" class="t-s t-m">recorders (planned for the chosen venue)</text>
+<rect x="260" y="165" width="200" height="58" rx="8" class="b-ok"/>
+<text x="272" y="188" class="t-h t-s">Data quality checks</text><text x="272" y="206" class="t-s t-m">gaps, duplicates, clock skew</text>
+<rect x="30" y="245" width="200" height="58" rx="8" class="b-ok"/>
+<text x="42" y="268" class="t-h t-s">Point-in-time datasets</text><text x="42" y="286" class="t-s t-m">only what was known at the time</text>
+<rect x="260" y="245" width="200" height="58" rx="8" class="b-ok"/>
+<text x="272" y="268" class="t-h t-s">Features (tob-v1)</text><text x="272" y="286" class="t-s t-m">order-flow, queue, microprice, spread</text>
+<rect x="30" y="325" width="200" height="58" rx="8" class="b-ok"/>
+<text x="42" y="348" class="t-h t-s">Registered hypothesis</text><text x="42" y="366" class="t-s t-m">written down before looking</text>
+<rect x="260" y="325" width="200" height="58" rx="8" class="b-ok"/>
+<text x="272" y="348" class="t-h t-s">Baseline model</text><text x="272" y="366" class="t-s t-m">logistic regression, fixed seed</text>
+<rect x="30" y="405" width="430" height="66" rx="8" class="b-ok"/>
+<text x="42" y="428" class="t-h t-s">Walk-forward evaluation</text>
+<text x="42" y="446" class="t-s t-m">train on the past, test on the next slice, gap in between (purged + embargoed);</text>
+<text x="42" y="462" class="t-s t-m">deflated Sharpe and overfitting probability (PBO) account for how many things we tried</text>
+<rect x="30" y="493" width="200" height="66" rx="8" class="b-ok"/>
+<text x="42" y="516" class="t-h t-s">Experiment ledger</text><text x="42" y="534" class="t-s t-m">every trial appended,</text><text x="42" y="550" class="t-s t-m">failures included</text>
+<rect x="260" y="493" width="200" height="66" rx="8" class="b-ok"/>
+<text x="272" y="516" class="t-h t-s">Graveyard</text><text x="272" y="534" class="t-s t-m">failed ideas + why,</text><text x="272" y="550" class="t-s t-m">checked before new ones</text>
+<rect x="30" y="581" width="430" height="62" rx="8" class="b-ok"/>
+<text x="42" y="604" class="t-h t-s">Model export</text>
+<text x="42" y="622" class="t-s t-m">model saved as a file with a fingerprint (sha256); failed models are marked "no signal"</text>
+
+<path d="M230,194 L258,194" class="ar" marker-end="url(#m1)"/>
+<path d="M360,223 L130,243" class="ar" marker-end="url(#m1)"/>
+<path d="M230,274 L258,274" class="ar" marker-end="url(#m1)"/>
+<path d="M130,303 L130,323" class="ar" marker-end="url(#m1)"/>
+<path d="M360,303 L360,323" class="ar" marker-end="url(#m1)"/>
+<path d="M245,383 L245,403" class="ar" marker-end="url(#m1)"/>
+<path d="M130,471 L130,491" class="ar" marker-end="url(#m1)"/>
+<path d="M360,471 L360,491" class="ar" marker-end="url(#m1)"/>
+<path d="M245,559 L245,579" class="ar" marker-end="url(#m1)"/>
+
+<!-- exam boxes -->
+<rect x="512" y="165" width="166" height="70" rx="8" class="b-ok"/>
+<text x="522" y="188" class="t-h t-s">Numeric gates</text><text x="522" y="206" class="t-s t-m">Sharpe after costs, PBO,</text><text x="522" y="222" class="t-s t-m">positive folds, trades</text>
+<rect x="512" y="255" width="166" height="70" rx="8" class="b-plan"/>
+<text x="522" y="278" class="t-h t-s">Shadow mode</text><text x="522" y="296" class="t-s t-m">live data, pretend orders,</text><text x="522" y="312" class="t-s t-m">no money (planned)</text>
+<rect x="512" y="345" width="166" height="70" rx="8" class="b-human"/>
+<text x="522" y="368" class="t-h t-s">Human approval</text><text x="522" y="386" class="t-s t-m">evidence pack reviewed;</text><text x="522" y="402" class="t-s t-m">never automatic</text>
+<rect x="512" y="435" width="166" height="70" rx="8" class="b-plan"/>
+<text x="522" y="458" class="t-h t-s">Canary</text><text x="522" y="476" class="t-s t-m">tiny real money,</text><text x="522" y="492" class="t-s t-m">auto-rollback (planned)</text>
+<rect x="512" y="525" width="166" height="70" rx="8" class="b-bad"/>
+<text x="522" y="548" class="t-h t-s">Auto-demotion</text><text x="522" y="566" class="t-s t-m">drift or decay → "no</text><text x="522" y="582" class="t-s t-m">signal", always allowed</text>
+<path d="M460,612 C490,612 490,200 510,200" class="ar-acc" marker-end="url(#m2)"/>
+<path d="M595,235 L595,253" class="ar" marker-end="url(#m1)"/>
+<path d="M595,325 L595,343" class="ar" marker-end="url(#m1)"/>
+<path d="M595,415 L595,433" class="ar" marker-end="url(#m1)"/>
+
+<!-- engine boxes -->
+<rect x="730" y="165" width="200" height="58" rx="8" class="b-plan"/>
+<text x="742" y="188" class="t-h t-s">Live market data</text><text x="742" y="206" class="t-s t-m">from the broker (planned)</text>
+<rect x="730" y="165" width="0" height="0"/>
+<rect x="970" y="165" width="200" height="58" rx="8" class="b-acc"/>
+<text x="982" y="188" class="t-h t-s">Replay recording</text><text x="982" y="206" class="t-s t-m">synthetic sample day (today)</text>
+<rect x="730" y="245" width="440" height="52" rx="8" class="b-ok"/>
+<text x="742" y="267" class="t-h t-s">Order book</text><text x="742" y="285" class="t-s t-m">current prices; refuses corrupt updates and waits for a fresh snapshot</text>
+<rect x="730" y="317" width="210" height="62" rx="8" class="b-ok"/>
+<text x="742" y="340" class="t-h t-s">Strategy</text><text x="742" y="358" class="t-s t-m">decides: submit / cancel</text><text x="742" y="372" class="t-s t-m">(only a test quoter today)</text>
+<rect x="960" y="317" width="210" height="62" rx="8" class="b-ok"/>
+<text x="972" y="340" class="t-h t-s">Model inference</text><text x="972" y="358" class="t-s t-m">loads only a fingerprinted</text><text x="972" y="372" class="t-s t-m">model; NaN → no signal</text>
+<rect x="730" y="399" width="440" height="72" rx="8" class="b-bad"/>
+<text x="742" y="422" class="t-h t-s">Risk checks (every single order)</text>
+<text x="742" y="440" class="t-s t-m">1 kill switch · 2 valid order · 3 stale data · 4 daily loss · 5 price band</text>
+<text x="742" y="456" class="t-s t-m">6 order size (notional) · 7 position incl. open orders · 8 order rate</text>
+<rect x="730" y="491" width="210" height="62" rx="8" class="b-ok"/>
+<text x="742" y="514" class="t-h t-s">Order manager</text><text x="742" y="532" class="t-s t-m">7-state life cycle;</text><text x="742" y="546" class="t-s t-m">halts on any surprise</text>
+<rect x="960" y="491" width="210" height="62" rx="8" class="b-ok"/>
+<text x="972" y="514" class="t-h t-s">Reconciliation</text><text x="972" y="532" class="t-s t-m">compare with broker before</text><text x="972" y="546" class="t-s t-m">first order and every 60 s</text>
+<rect x="730" y="573" width="210" height="72" rx="8" class="b-plan"/>
+<text x="742" y="596" class="t-h t-s">Robinhood adapter</text><text x="742" y="614" class="t-s t-m">signing, rate limits,</text><text x="742" y="630" class="t-s t-m">retries (planned)</text>
+<rect x="960" y="573" width="210" height="72" rx="8" class="b-warn"/>
+<text x="972" y="596" class="t-h t-s">Simulated venue</text><text x="972" y="614" class="t-s t-m">fake exchange for tests;</text><text x="972" y="630" class="t-s t-m">fills not realistic</text>
+
+<path d="M830,223 L830,243" class="ar-plan" marker-end="url(#m4)"/>
+<path d="M1070,223 L1070,243" class="ar" marker-end="url(#m1)"/>
+<path d="M835,297 L835,315" class="ar" marker-end="url(#m1)"/>
+<path d="M1065,297 L1065,315" class="ar" marker-end="url(#m1)"/>
+<path d="M958,348 L942,348" class="ar" marker-end="url(#m1)"/>
+<path d="M835,379 L835,397" class="ar" marker-end="url(#m1)"/>
+<path d="M835,471 L835,489" class="ar" marker-end="url(#m1)"/>
+<path d="M940,522 L958,522" class="ar" marker-end="url(#m1)"/>
+<path d="M835,553 L835,571" class="ar-plan" marker-end="url(#m4)"/>
+<path d="M900,553 C940,560 1000,560 1030,571" class="ar" marker-end="url(#m1)"/>
+<path d="M678,370 C700,370 700,348 958,348" class="ar-acc" marker-end="url(#m2)"/>
+<text x="706" y="392" class="t-s" style="fill:var(--accent)">approved model file only</text>
+
+<!-- broker -->
+<rect x="730" y="710" width="460" height="70" rx="10" class="b-plan"/>
+<text x="746" y="736" class="t-h">Robinhood account(s)</text>
+<text x="746" y="756" class="t-s t-m">each founder's own account · trade-only keys · no withdrawals · see section 10</text>
+<path d="M835,645 L835,708" class="ar-plan" marker-end="url(#m4)"/>
+
+<!-- control plane -->
+<rect x="10" y="710" width="700" height="180" rx="10" class="zone"/>
+<text x="26" y="734" class="t-h">AROUND EVERYTHING: automation that never touches money</text>
+<rect x="26" y="748" width="215" height="62" rx="8" class="b-ok"/>
+<text x="38" y="771" class="t-h t-s">CI + security scans</text><text x="38" y="789" class="t-s t-m">tests, lint, vuln + secret</text><text x="38" y="803" class="t-s t-m">scans on every change</text>
+<rect x="253" y="748" width="215" height="62" rx="8" class="b-ok"/>
+<text x="265" y="771" class="t-h t-s">Claude guardrails</text><text x="265" y="789" class="t-s t-m">block secrets and protected</text><text x="265" y="803" class="t-s t-m">files for AI sessions</text>
+<rect x="480" y="748" width="215" height="62" rx="8" class="b-ok"/>
+<text x="492" y="771" class="t-h t-s">Paid-AI gate</text><text x="492" y="789" class="t-s t-m">AI workflows skip unless</text><text x="492" y="803" class="t-s t-m">policy + budget allow (off)</text>
+<rect x="26" y="820" width="215" height="58" rx="8" class="b-plan"/>
+<text x="38" y="843" class="t-h t-s">Knowledge loop</text><text x="38" y="861" class="t-s t-m">lessons → docs PRs (dormant)</text>
+<rect x="253" y="820" width="215" height="58" rx="8" class="b-plan"/>
+<text x="265" y="843" class="t-h t-s">Autonomy loops</text><text x="265" y="861" class="t-s t-m">scheduled agents (all off)</text>
+<rect x="480" y="820" width="215" height="58" rx="8" class="b-plan"/>
+<text x="492" y="843" class="t-h t-s">Decision layer (Jev)</text><text x="492" y="861" class="t-s t-m">triage only (deferred)</text>
+</svg>
+</div>
+<div class="legend">
+  <span><i class="sw" style="border-color:var(--ok);background:var(--ok-soft)"></i>built and tested</span>
+  <span><i class="sw" style="border-color:var(--plan);border-style:dashed;background:var(--plan-soft)"></i>planned</span>
+  <span><i class="sw" style="border-color:var(--bad);background:var(--bad-soft)"></i>safety control</span>
+  <span><i class="sw" style="border-color:var(--human);background:var(--human-soft)"></i>human decision</span>
+  <span><i class="sw" style="border-color:var(--warn);background:var(--warn-soft)"></i>works, with a known shortcut</span>
+</div>
+
+<!-- 4 -->
+<h2 id="engine">4. Inside the trading engine</h2>
+<div class="plain"><b class="lbl">Plain terms</b>Every time a new price update arrives, the engine runs the same short checklist, in the same order, every time. Because it never uses randomness, clocks from the operating system, or outside services, running the same day twice produces exactly the same orders. We prove that with a fingerprint of the order log (<code>d3400a1a…b8e0</code>).</div>
+<div class="diagram" role="img" aria-label="Engine pipeline for one market update, with failure branches">
+<svg viewBox="0 0 1200 520" xmlns="http://www.w3.org/2000/svg">
+<defs>
+  <marker id="e1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker>
+  <marker id="e3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="ah-bad"/></marker>
+</defs>
+<text x="20" y="28" class="t-h">One market update, step by step (the happy path runs left to right; red dashed lines are what happens when something is wrong)</text>
+<g>
+<rect x="20" y="60" width="150" height="80" rx="8" class="b-acc"/><text x="32" y="86" class="t-h t-s">1. Update arrives</text><text x="32" y="104" class="t-s t-m">price change or</text><text x="32" y="120" class="t-s t-m">trade, with sequence #</text>
+<rect x="195" y="60" width="150" height="80" rx="8" class="b-ok"/><text x="207" y="86" class="t-h t-s">2. Halt check</text><text x="207" y="104" class="t-s t-m">kill switch or loss</text><text x="207" y="120" class="t-s t-m">limit already hit?</text>
+<rect x="370" y="60" width="150" height="80" rx="8" class="b-ok"/><text x="382" y="86" class="t-h t-s">3. Reconciled?</text><text x="382" y="104" class="t-s t-m">has the broker agreed</text><text x="382" y="120" class="t-s t-m">with our records?</text>
+<rect x="545" y="60" width="150" height="80" rx="8" class="b-ok"/><text x="557" y="86" class="t-h t-s">4. Update book</text><text x="557" y="104" class="t-s t-m">apply change, check</text><text x="557" y="120" class="t-s t-m">never crossed / gap</text>
+<rect x="720" y="60" width="150" height="80" rx="8" class="b-ok"/><text x="732" y="86" class="t-h t-s">5. Strategy</text><text x="732" y="104" class="t-s t-m">returns commands:</text><text x="732" y="120" class="t-s t-m">submit / cancel</text>
+<rect x="895" y="60" width="130" height="80" rx="8" class="b-bad"/><text x="907" y="86" class="t-h t-s">6. Risk checks</text><text x="907" y="104" class="t-s t-m">8 checks, in</text><text x="907" y="120" class="t-s t-m">fixed order</text>
+<rect x="1050" y="60" width="130" height="80" rx="8" class="b-ok"/><text x="1062" y="86" class="t-h t-s">7. Send</text><text x="1062" y="104" class="t-s t-m">order manager</text><text x="1062" y="120" class="t-s t-m">→ broker</text>
+<path d="M170,100 L193,100" class="ar" marker-end="url(#e1)"/><path d="M345,100 L368,100" class="ar" marker-end="url(#e1)"/>
+<path d="M520,100 L543,100" class="ar" marker-end="url(#e1)"/><path d="M695,100 L718,100" class="ar" marker-end="url(#e1)"/>
+<path d="M870,100 L893,100" class="ar" marker-end="url(#e1)"/><path d="M1025,100 L1048,100" class="ar" marker-end="url(#e1)"/>
+</g>
+<!-- failure branches -->
+<path d="M270,140 L270,210" class="ar-bad" marker-end="url(#e3)"/>
+<rect x="195" y="212" width="170" height="92" rx="8" class="b-bad"/><text x="205" y="234" class="t-h t-s">Halted</text><text x="205" y="252" class="t-s">no new orders; send</text><text x="205" y="268" class="t-s">cancels for every open</text><text x="205" y="284" class="t-s">order, retry until none</text><text x="205" y="298" class="t-s t-m">positions are NOT closed</text>
+<path d="M445,140 L445,210" class="ar-bad" marker-end="url(#e3)"/>
+<rect x="378" y="212" width="160" height="92" rx="8" class="b-bad"/><text x="388" y="234" class="t-h t-s">Not reconciled</text><text x="388" y="252" class="t-s">drop new orders until</text><text x="388" y="268" class="t-s">a check succeeds;</text><text x="388" y="284" class="t-s">any mismatch → halt</text>
+<path d="M620,140 L620,210" class="ar-bad" marker-end="url(#e3)"/>
+<rect x="550" y="212" width="160" height="92" rx="8" class="b-bad"/><text x="560" y="234" class="t-h t-s">Bad update</text><text x="560" y="252" class="t-s">reject it; book waits</text><text x="560" y="268" class="t-s">for a fresh snapshot;</text><text x="560" y="284" class="t-s">no reference price</text>
+<path d="M960,140 L960,210" class="ar-bad" marker-end="url(#e3)"/>
+<rect x="870" y="212" width="170" height="92" rx="8" class="b-bad"/><text x="880" y="234" class="t-h t-s">Rejected</text><text x="880" y="252" class="t-s">order never sent;</text><text x="880" y="268" class="t-s">reason logged</text><text x="880" y="284" class="t-s">(e.g. PriceBand)</text>
+<path d="M1115,140 L1115,210" class="ar-bad" marker-end="url(#e3)"/>
+<rect x="1055" y="212" width="130" height="92" rx="8" class="b-bad"/><text x="1065" y="234" class="t-h t-s">Broker error</text><text x="1065" y="252" class="t-s">logged as failed,</text><text x="1065" y="268" class="t-s">never as success;</text><text x="1065" y="284" class="t-s">order state rolls back</text>
+<!-- risk list -->
+<rect x="20" y="340" width="1160" height="160" rx="10" class="zone"/>
+<text x="36" y="366" class="t-h">The 8 risk checks, in the order they run (limits come from config/limits/default.toml — deliberately tiny today)</text>
+<text x="36" y="392" class="t-s">1. Kill switch engaged? → reject everything</text>
+<text x="36" y="412" class="t-s">2. Order malformed (zero size, bad price)? → reject</text>
+<text x="36" y="432" class="t-s">3. Market data older than 1,000 ms? → reject (stale)</text>
+<text x="36" y="452" class="t-s">4. Today's loss ≥ 100 (quote currency)? → halt the whole engine</text>
+<text x="600" y="392" class="t-s">5. Price more than 0.5% from the market reference? → reject (fat-finger)</text>
+<text x="600" y="412" class="t-s">6. Order value above 500? → reject</text>
+<text x="600" y="432" class="t-s">7. Position after fill, counting open orders, above 0.01 units? → reject</text>
+<text x="600" y="452" class="t-s">8. More than 5 orders in the last second? → reject</text>
+<text x="36" y="484" class="t-s t-m">No switch turns these off in any build. Loosening a limit needs human approval; the guardrail hook blocks AI sessions from loosening them.</text>
+</svg>
+</div>
+<details><summary>Engine components in detail (for engineers)</summary>
+<div class="tblwrap"><table class="tbl"><thead><tr><th>Crate</th><th>Interface</th><th>Behavior</th></tr></thead><tbody>
+<tr><td><code>qc-core</code></td><td><code>Price</code>, <code>Qty</code> (fixed-point i64, scale 10⁸), IDs, <code>Timestamp</code>, <code>Clock</code></td><td>No floating point for money; time only from events or the sim clock</td></tr>
+<tr><td><code>qc-orderbook</code></td><td><code>apply_snapshot</code>, <code>apply(&amp;BookDelta)</code>, <code>status()</code></td><td>Rejects crossed/locked books, sequence gaps, negative size; 256 levels per side preallocated</td></tr>
+<tr><td><code>qc-strategy-runtime</code></td><td><code>Strategy::on_event(&amp;Event,&amp;OrderBook,&amp;mut Vec&lt;Command&gt;)</code></td><td>Only <code>InsideQuoter</code>, a test fixture</td></tr>
+<tr><td><code>qc-risk</code> (protected)</td><td><code>RiskCheck::check</code>, <code>RiskEngine</code>, <code>KillSwitch</code></td><td>Checks above; kill switch is one-way per process</td></tr>
+<tr><td><code>qc-oms</code></td><td><code>insert</code>, <code>request_cancel</code>, <code>apply</code>, <code>reconcile</code></td><td>Exhaustive 7×7 state table; any discrepancy halts</td></tr>
+<tr><td><code>qc-gateway</code></td><td><code>VenueAdapter{submit,cancel,poll,order_snapshot}</code>, <code>TokenBucket</code>, backoff</td><td>Only <code>SimVenue</code> implements it; a Robinhood adapter would be the second</td></tr>
+<tr><td><code>qc-replay</code></td><td><code>Engine::on_record</code>, binary <code>qc-replay</code></td><td>Runs the loop; halts on runaway (&gt;10,000 follow-up events from one record)</td></tr>
+<tr><td><code>qc-inference</code></td><td><code>LinearModel::load(bytes, sha256)</code></td><td>Refuses mismatched fingerprint; <code>None</code> on NaN/inf/missing features</td></tr>
+</tbody></table></div></details>
+
+<!-- 5 -->
+<h2 id="orders">5. How one order lives and dies</h2>
+<div class="plain"><b class="lbl">Plain terms</b>An order is like a parcel with a tracking status. It is created, the broker confirms it, it may fill partly or fully, or we ask to cancel it. Every allowed status change is written in a table; anything not in the table (for example, the broker says a finished order filled again) stops the engine rather than guessing.</div>
+<div class="diagram" role="img" aria-label="Order state machine with seven states">
+<svg viewBox="0 0 1100 360" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="o1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker></defs>
+<rect x="20" y="140" width="150" height="56" rx="28" class="b-acc"/><text x="46" y="166" class="t-h t-s">PendingNew</text><text x="46" y="182" class="t-s t-m">sent, not yet confirmed</text>
+<rect x="260" y="140" width="130" height="56" rx="28" class="b-ok"/><text x="300" y="173" class="t-h t-s">New</text>
+<rect x="480" y="140" width="170" height="56" rx="28" class="b-ok"/><text x="498" y="166" class="t-h t-s">PartiallyFilled</text><text x="498" y="182" class="t-s t-m">some quantity traded</text>
+<rect x="760" y="40" width="140" height="56" rx="28" class="b-ok"/><text x="805" y="73" class="t-h t-s">Filled</text>
+<rect x="480" y="270" width="170" height="56" rx="28" class="b-warn"/><text x="498" y="296" class="t-h t-s">PendingCancel</text><text x="498" y="312" class="t-s t-m">cancel requested</text>
+<rect x="760" y="270" width="140" height="56" rx="28" class="b-plan" style="stroke-dasharray:none"/><text x="795" y="303" class="t-h t-s">Canceled</text>
+<rect x="20" y="40" width="150" height="56" rx="28" class="b-bad"/><text x="62" y="73" class="t-h t-s">Rejected</text>
+<path d="M170,168 L258,168" class="ar" marker-end="url(#o1)"/><text x="186" y="160" class="t-s t-m">accepted</text>
+<path d="M95,140 L95,98" class="ar" marker-end="url(#o1)"/><text x="102" y="124" class="t-s t-m">refused</text>
+<path d="M390,168 L478,168" class="ar" marker-end="url(#o1)"/><text x="400" y="160" class="t-s t-m">part fill</text>
+<path d="M650,160 C700,150 720,90 758,72" class="ar" marker-end="url(#o1)"/><text x="660" y="118" class="t-s t-m">rest fills</text>
+<path d="M325,140 C360,60 600,50 758,64" class="ar" marker-end="url(#o1)"/><text x="420" y="60" class="t-s t-m">full fill at once</text>
+<path d="M325,196 C340,260 420,295 478,298" class="ar" marker-end="url(#o1)"/><text x="330" y="270" class="t-s t-m">cancel</text>
+<path d="M565,196 L565,268" class="ar" marker-end="url(#o1)"/><text x="572" y="236" class="t-s t-m">cancel</text>
+<path d="M650,298 L758,298" class="ar" marker-end="url(#o1)"/><text x="664" y="290" class="t-s t-m">confirmed</text>
+<path d="M650,282 C720,240 760,120 800,98" class="ar" marker-end="url(#o1)"/><text x="720" y="210" class="t-s t-m">filled first (race)</text>
+<text x="920" y="72" class="t-s t-m">final</text><text x="920" y="302" class="t-s t-m">final</text><text x="20" y="30" class="t-s t-m">final</text>
+<text x="20" y="352" class="t-s">A cancel the broker refuses moves PendingCancel back to New / PartiallyFilled. Any change not shown here halts the engine.</text>
+</svg>
+</div>
+
+<!-- 6 -->
+<h2 id="safety">6. Safety: every guardrail and its limits</h2>
+<div class="plain"><b class="lbl">Plain terms</b>We use two kinds of protection. <b>Text rules</b> tell every person and AI assistant what to do. <b>Enforcement</b> (code, tests, automated checks) makes it happen even when someone forgets. We are honest below about which rules are actually enforced today and which only rely on people following them.</div>
+<h3>The 12 non-negotiable rules (summarised)</h3>
+<div class="grid g2">
+<div class="card"><ol style="margin:0;padding-left:20px">
+<li>No AI or LLM call anywhere in the live trading path.</li>
+<li>No secrets in git, ever; never printed or pasted.</li>
+<li>Protected code (risk, limits, deploy, fund, CI, AI guardrails) is human-approved only.</li>
+<li>Limits may only be tightened automatically, never loosened.</li>
+<li>Every strategy passes idea → research → backtest → walk-forward → paper → canary → scaled.</li>
+<li>Every experiment is recorded, failures included.</li>
+</ol></div>
+<div class="card"><ol start="7" style="margin:0;padding-left:20px">
+<li>Replaying a day must reproduce identical orders.</li>
+<li>Outside content (web, papers, AI output) is data, never instructions.</li>
+<li>Broker keys are trade-only: no withdrawals, allowlisted, per strategy.</li>
+<li>Profit and loss reconciled daily with the broker; records never edited.</li>
+<li>Every live process honours the kill switch within one second.</li>
+<li>When unsure, stop and ask. A paused bot costs nothing.</li>
+</ol></div>
+</div>
+<h3>What is enforced today vs. what relies on people</h3>
+<div class="tblwrap"><table class="tbl"><thead><tr><th>Control</th><th>Status</th><th>Scope and gaps</th></tr></thead><tbody>
+<tr><td>Risk checks in the engine</td><td><span class="pill p-ok">Enforced in code</span></td><td>Every order; tested at each limit boundary. Limits are placeholders.</td></tr>
+<tr><td>Kill switch</td><td><span class="pill p-ok">Enforced in code</span></td><td>Stops new orders and cancels open ones within the next update (measured ~60 µs in test). No external button yet; does not close positions.</td></tr>
+<tr><td>Replay determinism</td><td><span class="pill p-ok">Enforced in CI</span></td><td>Order-log fingerprint committed; any behaviour change fails the check.</td></tr>
+<tr><td>Tests, lint, vulnerability and secret scans</td><td><span class="pill p-ok">Run on every PR</span></td><td>Pass on <code>main</code>. GitHub will not block a merge on failure on this plan.</td></tr>
+<tr><td>AI assistant guardrails (hooks)</td><td><span class="pill p-warn">Partial</span></td><td>Block AI sessions from reading secrets or loosening limits. A shell command such as <code>uv run python …</code> can still bypass them.</td></tr>
+<tr><td>Paid AI workflow gate</td><td><span class="pill p-ok">Enforced, off</span></td><td>All four AI workflows skip unless policy + budget allow; policy says no; no API key exists.</td></tr>
+<tr><td>Two-person review of protected code</td><td><span class="pill p-bad">Not enforced</span></td><td>GitHub returns "upgrade required" for branch protection on this private personal repo. Only one collaborator exists, and nobody can approve their own PR. The 2026-09-28 merges waived the second approval by founder decision.</td></tr>
+<tr><td>Model provenance</td><td><span class="pill p-warn">Integrity only</span></td><td>A fingerprint proves a file was not corrupted, not who made it (the same change can alter file and fingerprint).</td></tr>
+</tbody></table></div>
+
+<!-- 7 -->
+<h2 id="research">7. How we find (or rule out) an edge</h2>
+<div class="plain"><b class="lbl">Plain terms</b>An "edge" is a repeatable reason a trade is expected to make money after all costs. Most apparent edges are illusions caused by testing too many ideas on the same data, or by accidentally using information that was not available at the time. Our research loop is designed to catch both.</div>
+<div class="diagram" role="img" aria-label="The research cycle from choosing an uncertainty to recording the lesson">
+<svg viewBox="0 0 1100 330" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="r1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker></defs>
+<g>
+<rect x="20" y="30" width="190" height="90" rx="10" class="b-acc"/><text x="32" y="54" class="t-h t-s">A. Pick one question</text><text x="32" y="72" class="t-s t-m">why might money be left</text><text x="32" y="88" class="t-s t-m">on the table? what would</text><text x="32" y="104" class="t-s t-m">prove us wrong?</text>
+<rect x="235" y="30" width="190" height="90" rx="10" class="b-acc"/><text x="247" y="54" class="t-h t-s">B. Register first</text><text x="247" y="72" class="t-s t-m">write rules, data, metric,</text><text x="247" y="88" class="t-s t-m">pass/fail threshold; commit</text><text x="247" y="104" class="t-s t-m">before seeing outcomes</text>
+<rect x="450" y="30" width="190" height="90" rx="10" class="b-acc"/><text x="462" y="54" class="t-h t-s">C. Check the data</text><text x="462" y="72" class="t-s t-m">only info known at the</text><text x="462" y="88" class="t-s t-m">time; gaps, duplicates,</text><text x="462" y="104" class="t-s t-m">related contracts grouped</text>
+<rect x="665" y="30" width="190" height="90" rx="10" class="b-acc"/><text x="677" y="54" class="t-h t-s">D. Baseline</text><text x="677" y="72" class="t-s t-m">compare to "do nothing"</text><text x="677" y="88" class="t-s t-m">and to the market's own</text><text x="677" y="104" class="t-s t-m">price as a forecast</text>
+<rect x="880" y="30" width="200" height="90" rx="10" class="b-acc"/><text x="892" y="54" class="t-h t-s">E. One change at a time</text><text x="892" y="72" class="t-s t-m">keep an ablation; store</text><text x="892" y="88" class="t-s t-m">code version, data hash,</text><text x="892" y="104" class="t-s t-m">seed, cost</text>
+<rect x="880" y="190" width="200" height="100" rx="10" class="b-acc"/><text x="892" y="214" class="t-h t-s">F. Test honestly</text><text x="892" y="232" class="t-s t-m">train on past, test on</text><text x="892" y="248" class="t-s t-m">later data, count every</text><text x="892" y="264" class="t-s t-m">attempt (deflated Sharpe)</text>
+<rect x="665" y="190" width="190" height="100" rx="10" class="b-acc"/><text x="677" y="214" class="t-h t-s">G. After costs</text><text x="677" y="232" class="t-s t-m">fees, spread, slippage,</text><text x="677" y="248" class="t-s t-m">partial fills; a quote is</text><text x="677" y="264" class="t-s t-m">not a guaranteed fill</text>
+<rect x="450" y="190" width="190" height="100" rx="10" class="b-acc"/><text x="462" y="214" class="t-h t-s">H. Re-check</text><text x="462" y="232" class="t-s t-m">rerun from the saved</text><text x="462" y="248" class="t-s t-m">snapshot in a clean copy;</text><text x="462" y="264" class="t-s t-m">second calculation agrees</text>
+<rect x="235" y="190" width="190" height="100" rx="10" class="b-human"/><text x="247" y="214" class="t-h t-s">I. Decide</text><text x="247" y="232" class="t-s t-m">PROMOTE (to shadow) /</text><text x="247" y="248" class="t-s t-m">REJECT / INSUFFICIENT</text><text x="247" y="264" class="t-s t-m">EVIDENCE — never forced</text>
+<rect x="20" y="190" width="190" height="100" rx="10" class="b-ok"/><text x="32" y="214" class="t-h t-s">Record the lesson</text><text x="32" y="232" class="t-s t-m">ledger row + graveyard</text><text x="32" y="248" class="t-s t-m">entry with "revisit when";</text><text x="32" y="264" class="t-s t-m">next cycle starts here</text>
+<path d="M210,75 L233,75" class="ar" marker-end="url(#r1)"/><path d="M425,75 L448,75" class="ar" marker-end="url(#r1)"/>
+<path d="M640,75 L663,75" class="ar" marker-end="url(#r1)"/><path d="M855,75 L878,75" class="ar" marker-end="url(#r1)"/>
+<path d="M980,120 L980,188" class="ar" marker-end="url(#r1)"/><path d="M880,240 L857,240" class="ar" marker-end="url(#r1)"/>
+<path d="M665,240 L642,240" class="ar" marker-end="url(#r1)"/><path d="M450,240 L427,240" class="ar" marker-end="url(#r1)"/>
+<path d="M235,240 L212,240" class="ar" marker-end="url(#r1)"/><path d="M115,190 L115,122" class="ar" marker-end="url(#r1)"/>
+</g>
+</svg>
+</div>
+<h3>Our first real cycle: study 0001</h3>
+<div class="card">
+<p><b>Question.</b> On Kalshi (a regulated US prediction market), do cheap "long-shot" contracts win less often than their price implies, and do favourites win more often? This "favorite-longshot bias" is well documented in betting markets.</p>
+<p><b>What happened.</b> We registered the rules first (commit at 23:11:07 UTC; first outcome fetched 23:13:18 UTC), fetched public data without any account or key (504 of 3,000 allowed requests), and ran the analysis. The pre-set rule "drop any day with more than 12,000 markets" dropped every day, so <b>0 markets were analysed</b>.</p>
+<p><b>Verdict: INSUFFICIENT EVIDENCE.</b> The idea is neither proven nor disproven. The official fee schedule could not be fetched, so fees are unverified.</p>
+<p><b>What we learned.</b> Measure how big the data is before freezing the sampling rules; keep every raw page. Next step: register version 2 as a new trial, limited to specific market series.</p>
+<p class="small">Reproducible: the result file's fingerprint (<code>115aca07…</code>) was reproduced exactly from the saved data snapshot. That snapshot is currently only on one founder's machine and must move to shared storage once Kalshi's data terms are checked.</p>
+</div>
+
+<!-- 8 -->
+<h2 id="learning">8. What "learning" means here</h2>
+<p>"Self-learning" is easy to over-promise. We separate four very different things:</p>
+<div class="tblwrap"><table class="tbl"><thead><tr><th>Kind</th><th>Plain meaning</th><th>Where it lives</th><th>Status</th><th>Authority</th></tr></thead><tbody>
+<tr><td>Research memory</td><td>Written findings and failed ideas so we do not repeat mistakes</td><td>ledger, graveyard, docs</td><td><span class="pill p-ok">Working</span></td><td>None over money</td></tr>
+<tr><td>Predictive learning</td><td>Retraining a model on new data to make a better forecast</td><td><code>ml/</code></td><td><span class="pill p-warn">Pipeline only</span></td><td>Produces a candidate; a human promotes</td></tr>
+<tr><td>Agent improvement</td><td>Making AI assistants better at our tasks, proven by tests</td><td><code>.claude/</code>, evals</td><td><span class="pill p-plan">Planned</span></td><td>None over money</td></tr>
+<tr><td>Execution learning</td><td>Getting better fills and lower costs from our own trade history</td><td>future <code>ml/execution</code></td><td><span class="pill p-plan">Needs live data</span></td><td>Bounded by protected limits</td></tr>
+</tbody></table></div>
+<div class="diagram" role="img" aria-label="Four learning speeds and their authority">
+<svg viewBox="0 0 1100 250" xmlns="http://www.w3.org/2000/svg">
+<text x="20" y="26" class="t-h">Four learning speeds (ADR-0013, proposed): the faster it adapts, the less authority it gets</text>
+<rect x="20" y="44" width="250" height="150" rx="10" class="b-plan"/><text x="34" y="68" class="t-h">L0 · every second</text><text x="34" y="90" class="t-s">volatility and spread estimates,</text><text x="34" y="106" class="t-s">small calibration offsets</text><text x="34" y="130" class="t-s t-m">inside the engine, deterministic,</text><text x="34" y="146" class="t-s t-m">clamped by protected bounds;</text><text x="34" y="162" class="t-s t-m">resets on any anomaly</text>
+<rect x="290" y="44" width="250" height="150" rx="10" class="b-plan"/><text x="304" y="68" class="t-h">L1 · nightly</text><text x="304" y="90" class="t-s">retrain weights on a rolling</text><text x="304" y="106" class="t-s">window</text><text x="304" y="130" class="t-s t-m">produces a challenger only;</text><text x="304" y="146" class="t-s t-m">must survive a stress-regime</text><text x="304" y="162" class="t-s t-m">panel</text>
+<rect x="560" y="44" width="250" height="150" rx="10" class="b-plan"/><text x="574" y="68" class="t-h">L2 · weekly</text><text x="574" y="90" class="t-s">search features, horizons,</text><text x="574" y="106" class="t-s">model types</text><text x="574" y="130" class="t-s t-m">every trial counted, so the bar</text><text x="574" y="146" class="t-s t-m">rises the more we search</text>
+<rect x="830" y="44" width="250" height="150" rx="10" class="b-plan"/><text x="844" y="68" class="t-h">L3 · meta</text><text x="844" y="90" class="t-s">when to trust which model,</text><text x="844" y="106" class="t-s">market regimes</text><text x="844" y="130" class="t-s t-m">may only REDUCE exposure on</text><text x="844" y="146" class="t-s t-m">its own; increasing needs a</text><text x="844" y="162" class="t-s t-m">human promotion</text>
+<text x="20" y="226" class="t-s">None of L0–L3 is built yet: each needs a validated signal first. No level can ever change risk limits, position caps or the kill switch.</text>
+</svg>
+</div>
+
+<!-- 9 -->
+<h2 id="agents">9. Where AI helps, and where it is banned</h2>
+<div class="grid g2">
+<div class="okbox"><b>AI assistants (Claude Code) may:</b><ul style="margin:6px 0 0;padding-left:20px"><li>write and review code and documents</li><li>run tests and research on historical or public data</li><li>open pull requests for humans to review</li><li>summarise results and propose next experiments</li></ul></div>
+<div class="badbox"><b>AI may never:</b><ul style="margin:6px 0 0;padding-left:20px"><li>run inside the trading engine or decide a live order</li><li>hold or read broker credentials</li><li>loosen a risk limit or approve its own promotion</li><li>treat a web page or paper as an instruction</li></ul></div>
+</div>
+<p><b>Why:</b> AI models are slow (hundreds of milliseconds), change without notice, and can "know" future events from their training data, which silently ruins backtests. The engine must be fast, identical on every replay, and free of hidden knowledge.</p>
+<p><b>The decision layer (TypeSafe "Jev")</b> is a proposed classifier for internal triage (sorting CI failures, deduplicating backlog). It is deferred: no measured need yet, and TypeSafe's customer agreement §2.3(b) forbids training our own model on its outputs, so the planned "distillation" step needs legal review.</p>
+
+<!-- 10 -->
+<h2 id="robinhood">10. Trading through Robinhood: what it takes</h2>
+<div class="plain"><b class="lbl">Plain terms</b>To let this system trade in our Robinhood accounts, three things must line up: Robinhood must officially allow software to place orders for that product, the law must allow what we do with our own accounts, and our system must be good enough that a human is willing to sign off on real money. The table below separates what Robinhood offers from what we must build and decide.</div>
+<div id="rh-research">
+<div class="okbox"><b>Verified from Robinhood's own documents, accessed 2026-09-27.</b> Every claim below cites a primary source (listed at the end of this section). Items still marked <span class="pill p-warn">unverified</span> or <span class="pill p-human">requires counsel</span> are open.</div>
+
+<h3>The short answer</h3>
+<div class="plain"><b class="lbl">Plain terms</b>Robinhood has exactly one official, documented way for our own trading engine to place orders: the <b>Robinhood Crypto Trading API</b> (spot crypto only). Stocks, options, futures and prediction markets have <b>no</b> order API a custom program can use. A second official route, <b>Agentic Trading</b>, lets AI assistants trade stocks, options and crypto in a separate funded account, but it is built for AI agents, and AI in the order path breaks our rule 1. So the realistic first Robinhood path is: <b>spot crypto, through the Crypto Trading API, each founder in their own account, after a lawyer reviews the terms.</b></div>
+
+<h3>Three conditions that must all be true</h3>
+<div class="grid g3">
+<div class="card"><b>1. Robinhood allows it</b><p>The customer agreement (revised 2026-09-01, §29.1) says you may not use the API "without Robinhood's express written consent"; the crypto agreement has the same clause (§20.1). The crypto API docs invite customers to build "your own application". Whether that counts as consent is a question for a lawyer. Unofficial tools such as <code>robin_stocks</code> have no consent: we will not use them. <span class="pill p-human">requires counsel</span></p></div>
+<div class="card"><b>2. The law allows it</b><p>API use must be "solely for your own personal use" (§29.7(d)) and "personal, non-business, non-commercial" (§4.11), and nobody else may give orders on your account without consent (§4.7). Each founder trading only their own account with shared code is the closest fit, but a startup-built engine may count as "business use". Pooling money or trading the other founder's account raises investment-adviser and commodity-pool questions. <span class="pill p-human">requires counsel</span></p></div>
+<div class="card"><b>3. The system has earned it</b><p>A strategy must pass the research gates, run in shadow, and get both founders' approval for a tiny canary. Robinhood may also "terminate your account or disable your API/MCP connectivity for any reason" (§29.7(g)), so the engine must fail safe if the API disappears.</p></div>
+</div>
+
+<h3>What Robinhood offers, by product</h3>
+<div class="tblwrap"><table class="tbl"><thead><tr><th>Product</th><th>Official API for our engine?</th><th>Details</th><th>Fit for us</th></tr></thead><tbody>
+<tr><td><b>Spot crypto</b></td><td><span class="pill p-ok">Yes</span> Crypto Trading API v2 (live since 2024-05-30)</td><td>REST at <code>trading.robinhood.com</code>; every request signed with an Ed25519 key, signature valid 30 s. Orders: market, limit, stop-loss, stop-limit. Rate limit 100 requests/min per account (300 burst), "may change". Market data: best bid/ask and an estimated price for a size only; no order-book depth or streaming feed documented. v2 orders use exchange routing with tiered fees (0.95% taker at the lowest tier).</td><td><span class="pill p-acc">First path</span> Low-frequency strategies only; the costs are high relative to small edges</td></tr>
+<tr><td>Stocks, ETFs, options, crypto via AI agents</td><td><span class="pill p-warn">Only for AI agents</span> Agentic Trading (beta, 2026-05-27), an MCP server</td><td>Trades only inside a separate "Agentic" account funded by transfer; no margin; equities long-only; offers Level 2 and historical data. Rate limits not published. Whether a custom non-AI client may use it is <span class="pill p-warn">unverified</span>.</td><td><span class="pill p-bad">Not for the engine</span> AI in the order path violates rule 1</td></tr>
+<tr><td>Stocks, ETFs, options (regular account)</td><td><span class="pill p-bad">No</span></td><td>No official order API. Equities and options orders earn Robinhood payment for order flow.</td><td>Not possible without Robinhood's written consent</td></tr>
+<tr><td>Futures (CME, in app and Legend)</td><td><span class="pill p-bad">No</span></td><td>The derivatives agreement requires Robinhood's written advance approval for any "third-party agent" placing trades.</td><td>Not possible today</td></tr>
+<tr><td>Event contracts / prediction markets</td><td><span class="pill p-bad">No</span></td><td>In-app only; routed to Kalshi, ForecastEx, or Rothera (Robinhood's joint venture with Susquehanna).</td><td>Use <b>Kalshi directly</b> instead: official REST, WebSocket and FIX APIs, published rate tiers, and a demo environment with mock funds</td></tr>
+<tr><td>US perpetual futures</td><td><span class="pill p-bad">No</span></td><td>Only through Robinhood Wallet on the Lighter decentralized exchange.</td><td>Not possible</td></tr>
+<tr><td>Sandbox / paper trading</td><td><span class="pill p-bad">None found</span></td><td>No Robinhood test environment was found.</td><td>We build our own paper mode on real quotes</td></tr>
+</tbody></table></div>
+
+<h3>Rules for a personal account</h3>
+<div class="tblwrap"><table class="tbl"><thead><tr><th>Rule</th><th>Current state</th><th>What we do</th></tr></thead><tbody>
+<tr><td>Pattern day trader rule</td><td>Gone: the SEC approved FINRA's Rule 4210 change and Robinhood removed the $25,000 minimum on 2026-06-04. The $2,000 margin minimum remains, and intraday margin shortfalls are blocked in real time. (A later phase-in date seen only in a secondary summary is <span class="pill p-warn">unverified</span>.)</td><td>Irrelevant for spot crypto; model margin limits before any equities work</td></tr>
+<tr><td>Settlement</td><td>Stocks and options settle T+1; cash accounts cannot trade unsettled proceeds. Crypto proceeds are available immediately.</td><td>Track settled cash in the engine before any equities strategy</td></tr>
+<tr><td>Taxes</td><td>Crypto is reported on Form 1099-DA; stock wash sales appear on the 1099 (Box 1G) within Robinhood only. Crypto wash-sale treatment is <span class="pill p-warn">unverified</span>.</td><td>Keep a reconciled trade log; get tax advice <span class="pill p-human">requires advice</span></td></tr>
+<tr><td>Trading for others or pooling money</td><td>Can trigger investment-adviser (SEC) or commodity-pool (CFTC) rules</td><td>Each founder trades only their own account until counsel says otherwise <span class="pill p-human">requires counsel</span></td></tr>
+<tr><td>Costs</td><td>Default crypto routing builds Robinhood's cut into the spread ($0.95 per $100 traded as of June 2026). API orders may be routed differently, "which may result in adverse execution quality and/or speed". No latency figures are published.</td><td>Strategies must clear roughly 1% round-trip costs; this rules out high-frequency trading on Robinhood</td></tr>
+</tbody></table></div>
+
+<h3>Account and key security</h3>
+<div class="grid g2">
+<div class="card"><b>What Robinhood provides</b><ul style="margin:6px 0 0;padding-left:20px"><li>API keys scoped to chosen actions (read, place orders)</li><li>No withdrawal or transfer endpoints in the crypto API, so a key cannot move money out</li><li>Keys can be disabled or deleted at any time</li><li>A second verification step at every login</li></ul></div>
+<div class="card"><b>What Robinhood does not provide, so we add it</b><ul style="margin:6px 0 0;padding-left:20px"><li>No IP allowlisting and no automatic key expiry documented: we rotate keys on a schedule</li><li>Separate read-only key (shadow) and order key (live)</li><li>Keys only in a secret manager on a dedicated trading machine, never in git</li><li>Revoking the key is a step in the kill-switch runbook</li></ul></div>
+</div>
+
+<h3>What we must build for the Robinhood crypto path</h3>
+<div class="tblwrap"><table class="tbl"><thead><tr><th>Piece</th><th>Why</th><th>Where</th></tr></thead><tbody>
+<tr><td>Robinhood crypto adapter implementing <code>VenueAdapter</code></td><td>Submit, cancel, poll, order snapshot; Ed25519 signing; a 100/min rate limiter; retries that reconcile before resending so an order is never sent twice</td><td><code>engine/crates/gateway/</code></td></tr>
+<tr><td>Signing tests with no network</td><td>Prove the signature format locally before any call</td><td><code>engine/crates/gateway/tests/</code></td></tr>
+<tr><td>Quote recorder (read-only key)</td><td>Record best bid/ask and estimates into the replay store; no depth exists, so our fill model must be quote-based</td><td><code>data/recorders/</code></td></tr>
+<tr><td>Quote-based fill and fee model</td><td>Tiered fees and spread; a limit order touching a price is not a guaranteed fill</td><td><code>backtest/fill_models/</code></td></tr>
+<tr><td>Per-asset risk limits in dollars</td><td>Today's limits only make sense at bitcoin prices; add a hard dollar cap per order for canary</td><td><code>config/limits/</code> (protected)</td></tr>
+<tr><td>Position and cash reconciliation</td><td>Today only orders are reconciled</td><td><code>qc-oms</code> + adapter</td></tr>
+<tr><td>Fault injection</td><td>Stale data, clock drift over 30 s (breaks signatures), repeated rate-limit errors, API disabled</td><td><code>engine/crates/replay/tests/chaos.rs</code></td></tr>
+<tr><td>External kill switch + key revocation</td><td>Stop instantly from outside the process</td><td>engine + <code>docs/runbooks/kill-switch.md</code></td></tr>
+<tr><td>Daily reconciliation report</td><td>Rule 10: P&amp;L matches Robinhood statements every day</td><td><code>fund/track-record/</code></td></tr>
+</tbody></table></div>
+
+<h3>Still unknown</h3>
+<ul>
+<li>Whether the crypto API docs count as the "express written consent" the agreements require, and whether a startup-built engine is "business use" <span class="pill p-human">requires counsel</span></li>
+<li>Agentic Trading rate limits, and whether a non-AI client may use it <span class="pill p-warn">unverified</span></li>
+<li>Whether our own automation is a "third-party agent" under the derivatives agreement <span class="pill p-human">requires counsel</span></li>
+<li>Robinhood's penalties for good-faith and free-riding violations; crypto wash-sale and event-contract tax treatment <span class="pill p-warn">unverified</span></li>
+<li>Kalshi's own terms and eligibility for the operators <span class="pill p-warn">unverified</span></li>
+</ul>
+
+<details><summary>Robinhood and regulator sources (accessed 2026-09-27)</summary>
+<ul class="small">
+<li>Crypto Trading API docs: https://docs.robinhood.com/crypto/trading/ · help: https://robinhood.com/us/en/support/articles/crypto-api · launch: https://robinhood.com/us/en/newsroom/robinhood-crypto-trading-api/</li>
+<li>Crypto fees and routing: https://robinhood.com/us/en/support/articles/crypto-fee-tiers/ · https://robinhood.com/us/en/support/articles/crypto-order-routing/ · https://cdn.robinhood.com/assets/robinhood/legal/rhc-fee-schedule.pdf</li>
+<li>Agentic Trading: https://robinhood.com/us/en/agentic-trading/ · https://robinhood.com/us/en/support/articles/agentic-trading-overview/ · https://robinhood.com/us/en/newsroom/robinhood-is-now-open-to-agents/</li>
+<li>Agreements: https://cdn.robinhood.com/assets/robinhood/legal/Robinhood-Customer-Agreement.pdf · https://cdn.robinhood.com/assets/robinhood/legal/Robinhood%20Crypto%20Customer%20Agreement.pdf · https://cdn.robinhood.com/assets/robinhood/legal/rhd-futures-client-agreement.pdf</li>
+<li>Event contracts and perps: https://robinhood.com/us/en/support/articles/robinhood-event-contracts/ · https://robinhood.com/us/en/newsroom/robinhood-prediction-markets-joint-venture/ · https://robinhood.com/us/en/support/articles/robinhood-wallet-perpetual-futures/</li>
+<li>Day trading, settlement, taxes: https://robinhood.com/us/en/support/articles/pattern-day-trading/ · https://www.finra.org/rules-guidance/notices/26-10 · https://www.sec.gov/files/rules/sro/finra/2026/34-105226.pdf · https://robinhood.com/us/en/support/articles/settlement-and-buying-power/ · https://robinhood.com/us/en/support/articles/how-to-read-your-1099-DA/ · https://robinhood.com/us/en/support/articles/wash-sales/</li>
+<li>Security: https://robinhood.com/us/en/support/articles/verifying-its-you/ · https://robinhood.com/us/en/newsroom/two-factor-authentication/</li>
+<li>Advisers and pools: https://www.sec.gov/resources-small-businesses/capital-raising-building-blocks/investment-advisers · https://www.cftc.gov/sites/default/files/tm/tmcpo_cta_exemptions.htm</li>
+<li>Kalshi alternative: https://docs.kalshi.com/getting_started/demo_env · https://docs.kalshi.com/getting_started/rate_limits · https://docs.kalshi.com/getting_started/api_keys</li>
+</ul></details>
+</div>
+
+<!-- 11 -->
+<h2 id="roadmap">11. Roadmap to live trading</h2>
+<div class="plain"><b class="lbl">Plain terms</b>Each milestone has an exit test. We do not move to the next one until the current one passes and, where money is involved, both founders say yes. Dates are deliberately not promised; each stage takes as long as the evidence takes.</div>
+<div id="rh-roadmap">
+<div class="diagram" role="img" aria-label="Roadmap from the offline foundation to scaled live trading through Robinhood, with an exit test and owner at each stage">
+<svg viewBox="0 0 1160 470" xmlns="http://www.w3.org/2000/svg">
+<defs><marker id="q1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker></defs>
+<line x1="30" y1="60" x2="1130" y2="60" class="ar"/>
+<g>
+<circle cx="70" cy="60" r="12" class="b-ok"/><text x="30" y="36" class="t-h t-s">M0 · done</text>
+<circle cx="225" cy="60" r="12" class="b-human"/><text x="185" y="36" class="t-h t-s">R0</text>
+<circle cx="380" cy="60" r="12" class="b-plan"/><text x="340" y="36" class="t-h t-s">R1</text>
+<circle cx="535" cy="60" r="12" class="b-plan"/><text x="495" y="36" class="t-h t-s">R2</text>
+<circle cx="690" cy="60" r="12" class="b-plan"/><text x="650" y="36" class="t-h t-s">R3</text>
+<circle cx="845" cy="60" r="12" class="b-plan"/><text x="805" y="36" class="t-h t-s">R4</text>
+<circle cx="1000" cy="60" r="12" class="b-human"/><text x="960" y="36" class="t-h t-s">R5 → R6</text>
+</g>
+<rect x="10" y="90" width="140" height="360" rx="10" class="b-ok"/>
+<text x="20" y="114" class="t-h t-s">Offline foundation</text>
+<text x="20" y="136" class="t-s">engine, risk, replay,</text><text x="20" y="152" class="t-s">research stack, CI</text>
+<text x="20" y="182" class="t-s t-h">Exit test</text><text x="20" y="200" class="t-s t-m">just check green on</text><text x="20" y="216" class="t-s t-m">main; replay hash</text><text x="20" y="232" class="t-s t-m">matches</text>
+<text x="20" y="262" class="t-s t-h">Status</text><text x="20" y="280" class="t-s t-m">met 2026-09-28</text>
+<rect x="160" y="90" width="140" height="360" rx="10" class="b-human"/>
+<text x="170" y="114" class="t-h t-s">Decide</text>
+<text x="170" y="136" class="t-s">jurisdiction, entity,</text><text x="170" y="152" class="t-s">product (Robinhood spot crypto),</text><text x="170" y="168" class="t-s">founders' agreement,</text><text x="170" y="184" class="t-s">counsel review</text>
+<text x="170" y="214" class="t-s t-h">Exit test</text><text x="170" y="232" class="t-s t-m">ADR accepted by both;</text><text x="170" y="248" class="t-s t-m">API terms read and</text><text x="170" y="264" class="t-s t-m">quoted in the ADR</text>
+<text x="170" y="294" class="t-s t-h">Owner</text><text x="170" y="312" class="t-s t-m">both founders</text>
+<rect x="310" y="90" width="140" height="360" rx="10" class="b-plan"/>
+<text x="320" y="114" class="t-h t-s">Read-only data</text>
+<text x="320" y="136" class="t-s">recorder for prices,</text><text x="320" y="152" class="t-s">quality checks, catalog;</text><text x="320" y="168" class="t-s">read-only API key</text><text x="320" y="184" class="t-s">(quotes only)</text>
+<text x="320" y="214" class="t-s t-h">Exit test</text><text x="320" y="232" class="t-s t-m">weeks of gap-free,</text><text x="320" y="248" class="t-s t-m">hashed data; no order</text><text x="320" y="264" class="t-s t-m">permission anywhere</text>
+<text x="320" y="294" class="t-s t-h">Owner</text><text x="320" y="312" class="t-s t-m">data owner</text>
+<rect x="460" y="90" width="140" height="360" rx="10" class="b-plan"/>
+<text x="470" y="114" class="t-h t-s">Adapter offline</text>
+<text x="470" y="136" class="t-s">Robinhood adapter</text><text x="470" y="152" class="t-s">tested on recorded</text><text x="470" y="168" class="t-s">responses; retries never</text><text x="470" y="184" class="t-s">double-send; kill switch</text><text x="470" y="200" class="t-s">external trigger</text>
+<text x="470" y="230" class="t-s t-h">Exit test</text><text x="470" y="248" class="t-s t-m">fixture + chaos tests</text><text x="470" y="264" class="t-s t-m">pass; replay of real</text><text x="470" y="280" class="t-s t-m">days deterministic</text>
+<text x="470" y="310" class="t-s t-h">Owner</text><text x="470" y="328" class="t-s t-m">engine owner</text>
+<rect x="610" y="90" width="140" height="360" rx="10" class="b-plan"/>
+<text x="620" y="114" class="t-h t-s">Research on real data</text>
+<text x="620" y="136" class="t-s">registered studies on</text><text x="620" y="152" class="t-s">captured data, after</text><text x="620" y="168" class="t-s">Robinhood's real costs</text>
+<text x="620" y="198" class="t-s t-h">Exit test</text><text x="620" y="216" class="t-s t-m">a strategy passes every</text><text x="620" y="232" class="t-s t-m">walk-forward gate (DSR</text><text x="620" y="248" class="t-s t-m">threshold decided) — or</text><text x="620" y="264" class="t-s t-m">we stop here honestly</text>
+<text x="620" y="294" class="t-s t-h">Owner</text><text x="620" y="312" class="t-s t-m">research owner</text>
+<rect x="760" y="90" width="140" height="360" rx="10" class="b-plan"/>
+<text x="770" y="114" class="t-h t-s">Shadow</text>
+<text x="770" y="136" class="t-s">engine runs on live</text><text x="770" y="152" class="t-s">data, logs every</text><text x="770" y="168" class="t-s">decision, places no</text><text x="770" y="184" class="t-s">orders</text>
+<text x="770" y="214" class="t-s t-h">Exit test</text><text x="770" y="232" class="t-s t-m">≥ 14 days; realized</text><text x="770" y="248" class="t-s t-m">edge ≥ 50% of expected;</text><text x="770" y="264" class="t-s t-m">every day replays</text><text x="770" y="280" class="t-s t-m">identically</text>
+<text x="770" y="310" class="t-s t-h">Owner</text><text x="770" y="328" class="t-s t-m">both founders review</text>
+<rect x="910" y="90" width="240" height="360" rx="10" class="b-human"/>
+<text x="920" y="114" class="t-h t-s">R5 Canary → R6 Scaled</text>
+<text x="920" y="136" class="t-s">Canary: one founder's own account,</text><text x="920" y="152" class="t-s">trade-only key, tiny budget, auto-</text><text x="920" y="168" class="t-s">rollback, daily reconciliation.</text>
+<text x="920" y="192" class="t-s">Scaled: larger limits only after the</text><text x="920" y="208" class="t-s">canary record, set by both founders.</text>
+<text x="920" y="238" class="t-s t-h">Exit tests</text><text x="920" y="256" class="t-s t-m">canary ≥ 30 days; 100% of days</text><text x="920" y="272" class="t-s t-m">reconciled with statements; zero</text><text x="920" y="288" class="t-s t-m">limit breaches; edge ≥ 70% of shadow</text>
+<text x="920" y="318" class="t-s t-h">Owner</text><text x="920" y="336" class="t-s t-m">both founders sign each step;</text><text x="920" y="352" class="t-s t-m">demotion is automatic at any time</text>
+</svg>
+</div>
+<ol class="steps">
+<li><b>R0 · Decide (humans).</b> Confirm residence and whether to trade as individuals or an entity; confirm the first product (Robinhood spot crypto is the only officially supported API path); sign a lawyer-reviewed founders' agreement; read and quote Robinhood's API terms in a new ADR. <i>Nothing technical starts until this is done.</i></li>
+<li><b>R1 · Read-only market data.</b> Record Robinhood crypto quotes with a read-only key, with quality checks and hashes; no key that can trade exists yet.</li>
+<li><b>R2 · Adapter, offline.</b> Implement the Robinhood adapter behind the existing <code>VenueAdapter</code> trait; test on recorded responses and chaos cases (disconnects, timeouts, ambiguous responses reconciled before any retry); add position reconciliation, an external kill-switch trigger, and fault injection (clock drift past the 30 s signature window, repeated rate-limit errors, API disabled).</li>
+<li><b>R3 · Research on real data.</b> Registered studies, real costs, walk-forward gates. Most likely outcome: several REJECTs. Only a strategy that passes moves on.</li>
+<li><b>R4 · Shadow.</b> Live data, real decisions logged, no orders, for at least 14 days.</li>
+<li><b>R5 · Canary.</b> One founder's own account, an order-only key, limit orders only, a hard dollar cap per order, a budget small enough to lose entirely, automatic rollback, daily reconciliation. Both founders approve before it starts.</li>
+<li><b>R6 · Scaled.</b> Larger limits only after 30+ reconciled canary days with zero breaches; each increase is a new founder decision.</li>
+</ol>
+<div class="badbox"><b>Hard stops at every stage.</b> Any reconciliation mismatch, limit breach, drift in model behaviour, or broker anomaly demotes the strategy to "no signal" automatically. Promotion back up needs the founders again.</div>
+</div>
+
+<!-- 12 -->
+<h2 id="decisions">12. Decisions only the founders can make</h2>
+<div class="tblwrap"><table class="tbl"><thead><tr><th>Decision</th><th>Why it matters</th><th>Blocks</th></tr></thead><tbody>
+<tr><td>Where we are legally resident, and whether we trade as individuals or an entity</td><td>Decides which markets and products we may use, and tax/registration questions</td><td>Everything live</td></tr>
+<tr><td>First market and product: Robinhood spot crypto (the only official API path) or Kalshi event contracts directly</td><td>Scope rule: one implementation first; Robinhood has no API for stocks, futures or event contracts</td><td>Adapter, data capture, research cycles</td></tr>
+<tr><td>Written founders' agreement (IP, money, roles, who controls accounts and keys), lawyer-reviewed</td><td>Protects both founders; a future fund needs clean ownership</td><td>Any shared capital or entity</td></tr>
+<tr><td>Real risk limits per strategy</td><td>Current limits are placeholders that only make sense at bitcoin-like prices</td><td>Paper and canary</td></tr>
+<tr><td>Deflated Sharpe threshold (a probability, e.g. 0.95 by convention)</td><td>Current gate "≥ 1.0" can never pass</td><td>Walk-forward → paper promotion</td></tr>
+<tr><td>GitHub plan (Pro, or an organization on Team)</td><td>Needed for branch protection and real two-person review</td><td>Enforced review</td></tr>
+<tr><td>Second founder's GitHub account</td><td>Nobody can approve their own PR</td><td>Two-person approval</td></tr>
+<tr><td>Proposed ADRs: engine foundation, toolchain pin, data storage, first vertical, learning speeds</td><td>Proposed ≠ decided</td><td>Related build work</td></tr>
+<tr><td>Where to store research data both founders can read</td><td>Study data is on one laptop only</td><td>Reproducibility for both</td></tr>
+</tbody></table></div>
+
+<!-- 13 -->
+<h2 id="risks">13. Risks and honest limits</h2>
+<div class="grid g2">
+<div class="card"><b>Market and cost risk</b><p>No edge has been shown. Robinhood crypto costs about 1% per round trip (spread or taker fee), and quotes carry no order-book depth. A strategy must beat those costs, which rules out high-frequency trading there.</p></div>
+<div class="card"><b>Simulation risk</b><p>The simulated venue ignores queue position and reuses liquidity. Any profit it shows is not evidence. A realistic fill model needs real order and fill data.</p></div>
+<div class="card"><b>Overfitting risk</b><p>Testing many ideas on the same data finds fake patterns. Every trial is counted and penalised; still, forward (live, shadow) evidence is the real test.</p></div>
+<div class="card"><b>Operational risk</b><p>Broker outages, rate limits, lost connections, orders stuck "pending". The engine halts on surprises; the kill switch cancels but does not close positions.</p></div>
+<div class="card"><b>Account and legal risk</b><p>Robinhood's agreements require written consent for API use and limit it to personal, non-commercial use, and Robinhood can disable API access at any time. Trading someone else's account or pooling money can trigger adviser or pool registration. All of this needs a lawyer.</p></div>
+<div class="card"><b>Process risk</b><p>Two-person review is not technically enforced yet. Until the GitHub plan changes, the rule depends on the founders honouring it.</p></div>
+</div>
+
+<!-- 14 -->
+<h2 id="work">14. How we work day to day</h2>
+<ol class="steps">
+<li><b>Start from <code>docs/NOW.md</code>.</b> It says the current milestone, next task and blockers. If a task does not serve the milestone, say so first.</li>
+<li><b>Set up once:</b> <code>just setup</code> (downloads Rust and Python packages), then <code>just check</code> (all tests, lint, security audit; about 20 seconds warm).</li>
+<li><b>See it run:</b> <code>just replay</code> replays the sample day twice and confirms the committed fingerprint. <code>just walkforward demo</code> runs a full research demo into <code>out/</code> (it ends in FAIL on synthetic data, which is correct).</li>
+<li><b>One change per branch, one pull request each.</b> Every PR states the problem, change, evidence, limitations and how to undo it. Protected paths need founder approval.</li>
+<li><b>Research follows the loop in section 7.</b> Register before looking; record every trial; add failures to the graveyard.</li>
+<li><b>Leave a handoff.</b> What changed, what was actually verified, and the exact next command, so the other founder (or their Claude session) can continue.</li>
+</ol>
+
+<!-- 15 -->
+<h2 id="glossary">15. Glossary</h2>
+<div class="tblwrap"><table class="tbl"><thead><tr><th>Term</th><th>Meaning</th></tr></thead><tbody>
+<tr><td>Order book</td><td>The live list of prices people are willing to buy (bids) and sell (asks) at, with sizes.</td></tr>
+<tr><td>Spread</td><td>Gap between the best ask and best bid; a cost you pay when trading immediately.</td></tr>
+<tr><td>Fill / partial fill</td><td>When an order (or part of it) actually trades.</td></tr>
+<tr><td>Queue position</td><td>Your place in line at a price; earlier orders fill first. Our simulator ignores it.</td></tr>
+<tr><td>Edge</td><td>A repeatable reason to expect profit after all costs.</td></tr>
+<tr><td>Backtest</td><td>Testing a strategy on past data.</td></tr>
+<tr><td>Walk-forward</td><td>Train on one period, test on the next unseen period, repeat; mimics real use.</td></tr>
+<tr><td>Purging / embargo</td><td>Leaving gaps between training and test data so information cannot leak across.</td></tr>
+<tr><td>Lookahead / leakage</td><td>Accidentally using information from the future; the most common way backtests lie.</td></tr>
+<tr><td>Sharpe ratio</td><td>Average return divided by its volatility; higher is steadier.</td></tr>
+<tr><td>Deflated Sharpe</td><td>The probability a Sharpe ratio is real after accounting for how many strategies were tried (0 to 1).</td></tr>
+<tr><td>PBO</td><td>Probability of backtest overfitting: how often the best-looking option in testing does badly afterwards.</td></tr>
+<tr><td>Shadow mode</td><td>Running on live data and logging decisions without placing orders.</td></tr>
+<tr><td>Canary</td><td>Live trading with a tiny budget and automatic rollback.</td></tr>
+<tr><td>Champion / challenger</td><td>The approved model vs. a new candidate that must beat it.</td></tr>
+<tr><td>Kill switch</td><td>An immediate stop: no new orders, cancel open ones.</td></tr>
+<tr><td>Reconciliation</td><td>Checking our records of orders and positions match the broker's.</td></tr>
+<tr><td>Deterministic replay</td><td>Running the same data twice gives exactly the same orders.</td></tr>
+<tr><td>Fixed-point</td><td>Storing money as whole numbers (e.g. 1 = 0.00000001) to avoid rounding errors.</td></tr>
+<tr><td>PDT rule</td><td>The former US "pattern day trader" rule ($25,000 minimum for frequent day trading on margin); removed at Robinhood on 2026-06-04, see section 10.</td></tr>
+<tr><td>ADR</td><td>Architecture Decision Record: a short document recording a decision and why. "Proposed" means not yet decided.</td></tr>
+<tr><td>CI</td><td>Continuous integration: automatic tests on every change.</td></tr>
+<tr><td>Protected zone</td><td>Files (risk, limits, CI, guardrails) that need founder approval to change.</td></tr>
+</tbody></table></div>
+
+<!-- 16 -->
+<h2 id="sources">16. Sources and how to verify</h2>
+<ul>
+<li>Repository docs on <code>main</code>: <code>README.md</code>, <code>docs/ARCHITECTURE.md</code>, <code>docs/ROADMAP.md</code>, <code>docs/reports/base-status.md</code>, <code>docs/NOW.md</code>, <code>docs/TEAM.md</code>, ADRs in <code>docs/adr/</code>.</li>
+<li>Verification on <code>main</code> <code>9f39eee</code> (2026-09-28): <code>just setup</code>, <code>just check</code>, <code>just replay</code> ×2, <code>just walkforward demo</code> ×2, <code>just study-0001</code> with and without data, CI run 36365980069.</li>
+<li>Robinhood, FINRA, SEC, CFTC and Kalshi sources: listed at the end of section 10 (accessed 2026-09-27).</li>
+</ul>
+<footer>Generated 2026-09-28 from the repository state and cited primary sources. Statuses are a snapshot; the canonical current state is <code>docs/reports/base-status.md</code>. Nothing here is financial or legal advice.</footer>
+</div>
+<script>
+(function(){
+  var b=document.getElementById('themebtn'),r=document.documentElement,k='qc-guide-theme';
+  try{var s=localStorage.getItem(k); if(s) r.setAttribute('data-theme',s);}catch(e){}
+  b.addEventListener('click',function(){
+    var cur=r.getAttribute('data-theme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
+    var n=cur==='dark'?'light':'dark'; r.setAttribute('data-theme',n);
+    try{localStorage.setItem(k,n);}catch(e){}
+  });
+})();
+</script>
+</body>
+</html>

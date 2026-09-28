@@ -20,6 +20,10 @@ Biggest open items: review is not platform-enforced on this GitHub plan (403); t
 founder is unknown; the devcontainer is unbuilt; study 0001's data lives off git; ADRs, the
 deflated-Sharpe threshold and the first vertical are undecided (vertical PENDING).
 
+New here? Start with the illustrated [project guide](docs/guide/quant-core-guide.html) (open the
+file in a browser; GitHub shows HTML as source). It explains every component, the safety model, and
+the gated path to trading through Robinhood.
+
 ## Contents
 
 1. [Project and stage](#1-project-and-stage) · 2. [Current state](#2-current-state) ·
