@@ -6,7 +6,7 @@ Regenerated automatically by `.github/workflows/docs-status.yml` on every merge 
 Narrative docs: [project guide](guide/quant-core-guide.html) ·
 [base status](reports/base-status.md) · [NOW](NOW.md).
 
-Generated from `main` at **9543372 2026-09-27**. Latest CI on `main`: **in_progress on 9543372**.
+Generated from `main` at **effb75d 2026-09-27**. Latest CI on `main`: **in_progress on effb75d**.
 Paid AI loops: **off**.
 
 ## Open pull requests (0)
@@ -17,6 +17,7 @@ None.
 
 | PR | Title | Merged |
 |---|---|---|
+| [#62](https://github.com/SatyamDave/fall_forward_labs/pull/62) | Record the second merge batch as a dated founder exception | 2026-09-28 |
 | [#56](https://github.com/SatyamDave/fall_forward_labs/pull/56) | Add the three-tier eval harness (just eval, Tier 1) | 2026-09-28 |
 | [#61](https://github.com/SatyamDave/fall_forward_labs/pull/61) | Build the agent service against qc-bridge protocol v1 | 2026-09-28 |
 | [#58](https://github.com/SatyamDave/fall_forward_labs/pull/58) | Add qc-bridge: protocol v1 stdio bridge between the engine and the agent | 2026-09-28 |
@@ -31,12 +32,14 @@ None.
 | [#9](https://github.com/SatyamDave/fall_forward_labs/pull/9) | Propose first vertical in ADR-0020 and plan base completion (Phase 0) | 2026-09-28 |
 | [#4](https://github.com/SatyamDave/fall_forward_labs/pull/4) | Record decision-layer ADRs and TypeSafe vendor review (Phase 1) | 2026-09-28 |
 | [#3](https://github.com/SatyamDave/fall_forward_labs/pull/3) | Add autonomy tier policy and gate check (Phase A) | 2026-09-28 |
-| [#2](https://github.com/SatyamDave/fall_forward_labs/pull/2) | Record self-learning model plan and ADR-0013 learning speeds (Phase 1) | 2026-09-28 |
 
 ## Recent commits on main
 
 | Commit | Date | Subject |
 |---|---|---|
+| `effb75d` | 2026-09-27 | Merge pull request #62 from SatyamDave/docs/record-merge-exception |
+| `543468b` | 2026-09-27 | docs(team): record the second merge batch as a dated founder exception |
+| `fa7afb9` | 2026-09-28 | docs(status): regenerate live status from 9543372 [skip ci] |
 | `9543372` | 2026-09-27 | Merge pull request #56 from SatyamDave/agentic/evals |
 | `63f8270` | 2026-09-27 | Merge main into agentic/evals before merging #56 |
 | `b825e5a` | 2026-09-28 | docs(status): regenerate live status from 1ed4d2c [skip ci] |
@@ -46,9 +49,6 @@ None.
 | `4d26c8e` | 2026-09-27 | Merge pull request #58 from SatyamDave/agentic/bridge |
 | `c0a0584` | 2026-09-27 | Merge pull request #59 from SatyamDave/agentic/claude-md |
 | `9925463` | 2026-09-27 | Merge pull request #60 from SatyamDave/agentic/docs |
-| `865fc6c` | 2026-09-27 | docs(readme): point the agentic rows at the open PRs and the end-to-end result |
-| `7520c0a` | 2026-09-27 | fix(ci): let arch-check accept a cited ADR, and use the agent's real tool names |
-| `bd21f08` | 2026-09-27 | feat(agent): run agent-sim against the real qc-bridge |
 
 ## Decisions (ADRs)
 
