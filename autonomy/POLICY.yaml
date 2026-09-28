@@ -187,7 +187,11 @@
     "loop-report":    {"enabled": false, "daily_usd": 1, "max_turns": 10, "timeout_minutes": 10, "open_pr_cap": 1},
     # ai-review.yml (both jobs). Zero budget on purpose: scripts/ci/ai_gate.py denies until a
     # human sets real numbers from measured cost per review.
-    "loop-review":    {"enabled": false, "daily_usd": 0, "max_turns": 0, "timeout_minutes": 30, "open_pr_cap": 0}
+    "loop-review":    {"enabled": false, "daily_usd": 0, "max_turns": 0, "timeout_minutes": 30, "open_pr_cap": 0},
+    # ADR-0040 live decider (agent/src/decider/live.ts), QC_AGENT_MODE=live. Disabled with a
+    # zero budget on purpose: no live-LLM decision may run until a human sets real numbers here
+    # from measured cost/latency, and ai_gate.py fails closed on every zero in the meantime.
+    "loop-agent-eval": {"enabled": false, "daily_usd": 0, "max_turns": 0, "timeout_minutes": 0, "open_pr_cap": 0}
   },
 
   # Backlog ranking (Phase C): rank = expected_value * confidence / cost,

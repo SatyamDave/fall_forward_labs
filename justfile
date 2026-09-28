@@ -4,6 +4,7 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 
 engine := "engine"
 research := "research"
+agent := "agent"
 # Python outside research/ and ml/ that ruff also checks, relative to research/. Not listed:
 # autonomy/ and tests/autonomy/ (protected paths that fail ruff today; fixing them needs a T3 PR),
 # and tests/replay/generate_sample_day.py (S311, PTH123; the fixture it wrote must stay identical).
@@ -119,3 +120,46 @@ test-hooks:
 study-0001:
     cd {{research}} && uv run python studies/0001-favorite-longshot/study.py
     cd {{research}} && uv run pytest studies/0001-favorite-longshot/tests -q
+
+# ADR-0040 agent service (agent/): install pinned dependencies (npm ci, committed lockfile)
+agent-setup:
+    cd {{agent}} && npm ci
+
+# ADR-0040 agent service: offline unit tests only (bridge client, schema validation, fake
+# decider, live-decider config/hook, ledger, full fake loop against a fake bridge) — no
+# network, no API key, no real qc-bridge binary required
+agent-test:
+    cd {{agent}} && npm test
+
+# End-to-end fake-mode demo over tests/replay/sample_day.csv. Builds qc-bridge when its crate
+# and cargo are both available (informational: catches build breaks early), but always drives
+# the actual loop through the bundled fake bridge stand-in (src/testkit/fake-bridge.ts) unless
+# the caller sets QC_BRIDGE_BIN — the real binary's CLI args aren't fixed by this lane. Runs
+# the loop twice into separate ledgers and fails unless both sha256 hashes match.
+agent-sim:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd {{agent}}
+    export QC_AGENT_MODE=fake
+    if [ -z "${QC_BRIDGE_BIN:-}" ]; then
+      # The real Rust qc-bridge over the synthetic sample day, with the parity-fixture model.
+      # A build failure fails the recipe: a silent fallback to the fake bridge would hide it.
+      (cd ../engine && cargo build --release --locked -p qc-bridge -q)
+      model=../ml/tests/fixtures/model.json
+      export QC_BRIDGE_BIN=../engine/target/release/qc-bridge
+      export QC_BRIDGE_ARGS="../tests/replay/sample_day.csv --limits ../config/limits/default.toml --model $model --model-sha256 $(tr -d '[:space:]' < ../ml/tests/fixtures/model.sha256)"
+      # Smoke threshold: low enough that the order path (risk, OMS, SimVenue) actually runs.
+      export QC_FAKE_PROB_THRESHOLD="${QC_FAKE_PROB_THRESHOLD:-0.5}"
+    fi
+    sha() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -d' ' -f1; }
+    run() {
+      local out; out=$(mktemp -d)
+      QC_AGENT_LEDGER_PATH="$out/ledger.jsonl" node_modules/.bin/tsx src/cli.ts >&2
+      sha "$out/ledger.jsonl"
+    }
+    hash1=$(run)
+    hash2=$(run)
+    echo "run 1 ledger sha256: $hash1"
+    echo "run 2 ledger sha256: $hash2"
+    if [ "$hash1" != "$hash2" ]; then echo "FAIL: agent-sim ledger is not deterministic"; exit 1; fi
+    echo "agent-sim deterministic across two runs"
