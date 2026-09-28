@@ -189,3 +189,10 @@ agent-sim:
     echo "run 2 ledger sha256: $hash2"
     if [ "$hash1" != "$hash2" ]; then echo "FAIL: agent-sim ledger is not deterministic"; exit 1; fi
     echo "agent-sim deterministic across two runs"
+
+# Issues #31/#55: per-decision latency (raw bridge round trip, agent decide step, full loop) in
+# fake and replay mode, N decisions each (default 1000). Prints p50/p95/p99/max/throughput and
+# writes out/bench/latency-results.json (gitignored). See docs/reports/latency.md for the last
+# recorded run and the "first HFAT" definition it supports.
+bench-latency *args:
+    python3 scripts/bench/latency.py {{args}}
