@@ -3,7 +3,9 @@
 
 Reads changed repo paths (arguments, or one per line on stdin) and fails if:
 - a path is outside **/*.md, .claude/skills/**, .claude/rules/**;
-- a changed CLAUDE.md exceeds its line budget (root 150, nested 80);
+- a path is the root CLAUDE.md, under .claude/agents/, or inside a protected zone,
+  markdown included (compared case-insensitively);
+- a changed nested CLAUDE.md exceeds its line budget of 80;
 - an entry under "## Learned" in a changed CLAUDE.md is not
   `- YYYY-MM-DD: <lesson> ([<label>](https://github.com/...))`,
   the entries are not newest first, or there are more than 15.
@@ -19,7 +21,17 @@ import sys
 from pathlib import Path
 
 ALLOWED_PREFIXES = (".claude/skills/", ".claude/rules/")
-ROOT_BUDGET = 150
+# Human-edited only: the root rules, agent definitions and every protected zone.
+FORBIDDEN_PREFIXES = (
+    ".claude/agents/",
+    ".claude/hooks/",
+    ".github/",
+    "autonomy/",
+    "config/limits/",
+    "engine/crates/risk/",
+    "fund/",
+    "ops/deploy/",
+)
 NESTED_BUDGET = 80
 MAX_LEARNED = 15
 LEARNED_ENTRY = re.compile(
@@ -30,6 +42,11 @@ COMMENT = re.compile(r"^<!--.*-->$")
 
 def in_scope(path: str) -> bool:
     return path.endswith(".md") or path.startswith(ALLOWED_PREFIXES)
+
+
+def forbidden(path: str) -> bool:
+    folded = path.casefold()
+    return folded == "claude.md" or folded.startswith(FORBIDDEN_PREFIXES)
 
 
 def check_learned(path: str, lines: list[str]) -> list[str]:
@@ -67,6 +84,12 @@ def check_learned(path: str, lines: list[str]) -> list[str]:
 def check(paths: list[str], root: Path) -> list[str]:
     errors: list[str] = []
     for path in paths:
+        if forbidden(path):
+            errors.append(
+                f"{path}: knowledge PRs may not touch the root CLAUDE.md, .claude/agents/ "
+                "or a protected zone"
+            )
+            continue
         if not in_scope(path):
             errors.append(
                 f"{path}: knowledge PRs may only touch **/*.md, .claude/skills/**, .claude/rules/**"
@@ -76,9 +99,8 @@ def check(paths: list[str], root: Path) -> list[str]:
         if Path(path).name != "CLAUDE.md" or not file.is_file():
             continue
         lines = file.read_text(encoding="utf-8").splitlines()
-        budget = ROOT_BUDGET if path == "CLAUDE.md" else NESTED_BUDGET
-        if len(lines) > budget:
-            errors.append(f"{path}: {len(lines)} lines, budget {budget}")
+        if len(lines) > NESTED_BUDGET:
+            errors.append(f"{path}: {len(lines)} lines, budget {NESTED_BUDGET}")
         errors.extend(check_learned(path, lines))
     return errors
 

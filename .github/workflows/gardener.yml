@@ -1,6 +1,14 @@
 # Monthly gardening of agent instructions (spec section 8.4). Claude runs with a
 # read-only token and exports a patch; `open-pr` scope-checks it and opens one
 # PR labeled `knowledge`.
+#
+# Opening the PR: `open-pr` uses GITHUB_TOKEN. The repository setting "Allow
+# GitHub Actions to create pull requests" is off (SECURITY runbook step 4), so
+# `gh pr create` fails and the job fails with the branch kept. Even with the
+# setting on, a PR created with GITHUB_TOKEN triggers no workflows, so its
+# required checks would never run. Until a GitHub App token replaces it, this
+# loop cannot open PRs; its paid step is also gated off by scripts/ci/ai_gate.py
+# once the AI workflow gating (#17) lands.
 name: gardener
 
 on:
@@ -70,7 +78,7 @@ jobs:
             4. Runbooks: every runbook that an alert under ops/monitoring/ links to must exist under
                docs/runbooks/. Report missing ones in the PR body; do not write runbooks.
             Edit only markdown in CLAUDE.md files, .claude/rules/ and .claude/skills/. Never weaken a
-            rule, limit or check. Keep root CLAUDE.md within 150 lines and nested ones within 80.
+            rule, limit or check. Never edit the root CLAUDE.md, .claude/agents/ or a protected zone; keep nested CLAUDE.md files within 80 lines.
 
             Write ${{ runner.temp }}/knowledge/out/pr-body.md with one section per numbered task
             above: what you changed and what needs a human. Plain words, no hype.
