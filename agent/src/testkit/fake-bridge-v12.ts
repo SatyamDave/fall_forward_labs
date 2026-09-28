@@ -275,12 +275,19 @@ function handleReconcile(id: string, req: Json): void {
     diffs.push(`position mismatch: our OMS has ${internalPositionFixed}, venue reports ${venuePosition}`);
   }
 
+  // Matches the real qc-bridge's wire shape (schemas/decision/v1/README.md's v1.2 section,
+  // wire::reconcile): the RPC envelope's own "ok" reflects only whether the request itself was
+  // well-formed -- a successful comparison always answers ok:true here, whether or not it found a
+  // mismatch. The clean/mismatch verdict is nested under "reconcile". (Wave-2 review finding:
+  // this fake used to put the verdict at the envelope's top level instead, which meant a caller
+  // written against the real bridge's response shape would silently never observe a mismatch
+  // through this fake.)
   if (diffs.length > 0) {
-    write({ v: 1, id, ok: false, error: { code: "reconciliation", message: diffs.join("; ") }, status: { diff: diffs } });
+    write({ v: 1, id, ok: true, reconcile: { ok: false, discrepancies: diffs } });
     return;
   }
   reconciled = true;
-  write({ v: 1, id, ok: true });
+  write({ v: 1, id, ok: true, reconcile: { ok: true, discrepancies: [] } });
 }
 
 function handle(req: Json): void {

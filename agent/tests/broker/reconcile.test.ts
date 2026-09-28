@@ -46,11 +46,16 @@ describe("reconcileWithBroker", () => {
   });
 
   it("throws ReconciliationHalted when the bridge reports a mismatch -- never silently continues", async () => {
+    // Wave-2 review fix: the real bridge answers the RPC envelope's ok:true for a successful
+    // comparison regardless of outcome; the clean/mismatch verdict is nested under "reconcile"
+    // (schemas/decision/v1/README.md's v1.2 section). An earlier version of this test (and of
+    // reconcileWithBroker itself) used the envelope's own ok for this, which the real bridge
+    // never sets to false for a mere mismatch -- only for a malformed request.
     const mcp = await connectToMock("3", "12345.67");
     const bridge = {
       reconcile: async () => ({
-        ok: false,
-        error: { code: "reconciliation", message: "position mismatch: our OMS has 5, broker reports 3" },
+        ok: true,
+        reconcile: { ok: false, discrepancies: ["position mismatch: our OMS has 5, broker reports 3"] },
       }),
     };
 
@@ -59,6 +64,17 @@ describe("reconcileWithBroker", () => {
     );
     await expect(reconcileWithBroker({ mcp, bridge, assetClass: "equity", instrument: "SPY" })).rejects.toThrow(
       /position mismatch/,
+    );
+  });
+
+  it("throws ReconciliationHalted when the RPC envelope itself reports failure (a protocol error, not a mismatch)", async () => {
+    const mcp = await connectToMock("3", "12345.67");
+    const bridge = {
+      reconcile: async () => ({ ok: false, error: { code: "invalid_fields", message: '"venue" is required' } }),
+    };
+
+    await expect(reconcileWithBroker({ mcp, bridge, assetClass: "equity", instrument: "SPY" })).rejects.toThrow(
+      ReconciliationHalted,
     );
   });
 

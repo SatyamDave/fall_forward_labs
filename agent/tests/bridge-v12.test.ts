@@ -55,7 +55,11 @@ describe("BridgeClient protocol v1.2 against fake-bridge-v12", () => {
     expect(beforeReconcile.result?.risk_reject).toBe("unreconciled");
 
     const reconcileResp = await client.reconcile({ orders: [], position: "0", cash: "10000.00" });
+    // Wave-2 review fix: the RPC envelope's own "ok" only reflects whether the request was
+    // well-formed -- the real bridge always answers ok:true for a successful comparison, whether
+    // clean or not. The verdict is nested under "reconcile".
     expect(reconcileResp.ok).toBe(true);
+    expect(reconcileResp.reconcile?.ok).toBe(true);
 
     const afterReconcile = await client.submitOrderIntent({
       request_id: "req-1",
@@ -71,7 +75,7 @@ describe("BridgeClient protocol v1.2 against fake-bridge-v12", () => {
     expect(afterReconcile.result?.client_order_id).toBe(1);
   });
 
-  it("reconcile reports a mismatch (ok:false) rather than silently trusting either side", async () => {
+  it("reconcile reports a mismatch (reconcile.ok:false) rather than silently trusting either side", async () => {
     client = startFakeBridgeV12({ venue: "external", scenario: V12_SCENARIO_FIXTURE });
     await client.nextDecisionRequest();
     await client.reconcile({ orders: [], position: "0", cash: "10000.00" });
@@ -94,8 +98,11 @@ describe("BridgeClient protocol v1.2 against fake-bridge-v12", () => {
     // an unrecognized/absent order for a live client_order_id is exactly the case #45 exists to
     // catch, not resolve by trusting either side.
     const mismatch = await client.reconcile({ orders: [], position: "0", cash: "10000.00" });
-    expect(mismatch.ok).toBe(false);
-    expect(mismatch.error?.code).toBe("reconciliation");
+    // Wave-2 review fix: the request itself is still well-formed, so the envelope's ok stays
+    // true; the mismatch is reported in the nested "reconcile" object, matching the real bridge.
+    expect(mismatch.ok).toBe(true);
+    expect(mismatch.reconcile?.ok).toBe(false);
+    expect(mismatch.reconcile?.discrepancies.length).toBeGreaterThan(0);
   });
 
   it("cancel_order_intent returns a distinct cancel approval, verifiable against the same hello public key", async () => {

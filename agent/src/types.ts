@@ -208,6 +208,12 @@ export interface BridgeResponse {
   error?: BridgeError;
   /** hello */
   hello?: Hello;
+  /** reconcile (protocol v1.2): the envelope's own `ok` above only reflects whether the request
+   *  was well-formed -- a successful comparison that found a mismatch still answers with the
+   *  envelope's `ok:true` and puts the actual clean/mismatch verdict here. Callers must read
+   *  `reconcile.ok`/`reconcile.discrepancies`, never the envelope's `ok`, to learn whether
+   *  reconciliation was clean (schemas/decision/v1/README.md's v1.2 section). */
+  reconcile?: { ok: boolean; discrepancies: string[] };
 }
 
 export type LedgerMode = "fake" | "live" | "replay";

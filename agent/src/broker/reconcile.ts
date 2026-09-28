@@ -27,12 +27,21 @@ export class ReconciliationHalted extends Error {
 
 /** The subset of BridgeClient this module needs -- narrowed so a test can hand in a trivial
  *  double instead of a real bridge process, same convention as broker/types.ts's
- *  BridgeReporter. */
+ *  BridgeReporter.
+ *
+ *  Wave-2 review fix: the real bridge's `reconcile` op (schemas/decision/v1/README.md's v1.2
+ *  section) always answers the RPC envelope's `ok:true` once the request itself was
+ *  well-formed -- a *successful comparison that found a mismatch* is not a protocol error. The
+ *  actual clean/mismatch verdict is nested under `reconcile: {ok, discrepancies}`. An earlier
+ *  version of this interface (and `reconcileWithBroker` below) checked the envelope's `ok`
+ *  instead, which this lane's own fake bridge happened to set to `false` on a mismatch -- a
+ *  shape the real bridge does not use -- so `ReconciliationHalted` would never have fired against
+ *  the real binary. */
 export interface BridgeReconciler {
   reconcile(venue: VenueSnapshot): Promise<{
     ok: boolean;
     error?: { code: string; message: string };
-    status?: Record<string, unknown>;
+    reconcile?: { ok: boolean; discrepancies: string[] };
   }>;
 }
 
@@ -76,6 +85,13 @@ export async function reconcileWithBroker(deps: ReconcileDeps): Promise<void> {
 
   const resp = await deps.bridge.reconcile(venue);
   if (!resp.ok) {
-    throw new ReconciliationHalted(resp.error?.message ?? "the bridge reported a discrepancy", resp.status);
+    // The RPC itself failed (a protocol error, e.g. a malformed request) -- distinct from a
+    // clean-comparison-but-mismatched result, which lands in the branch below.
+    throw new ReconciliationHalted(resp.error?.message ?? "the reconcile request itself failed", { error: resp.error });
+  }
+  if (resp.reconcile && !resp.reconcile.ok) {
+    throw new ReconciliationHalted(resp.reconcile.discrepancies.join("; ") || "the bridge reported a discrepancy", {
+      discrepancies: resp.reconcile.discrepancies,
+    });
   }
 }
