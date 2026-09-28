@@ -140,14 +140,16 @@ agent-sim:
     #!/usr/bin/env bash
     set -euo pipefail
     cd {{agent}}
-    if [ -d ../engine/crates/bridge ] && command -v cargo >/dev/null 2>&1; then
-      echo "qc-bridge crate found; building it (agent-sim still demos through the fake bridge unless QC_BRIDGE_BIN is set)" >&2
-      (cd ../engine && cargo build --release --locked -p qc-bridge -q) || echo "qc-bridge build failed; continuing with the fake bridge" >&2
-    fi
     export QC_AGENT_MODE=fake
     if [ -z "${QC_BRIDGE_BIN:-}" ]; then
-      export QC_BRIDGE_BIN="node_modules/.bin/tsx"
-      export QC_BRIDGE_ARGS="src/testkit/fake-bridge.ts --csv ../tests/replay/sample_day.csv --limit 20"
+      # The real Rust qc-bridge over the synthetic sample day, with the parity-fixture model.
+      # A build failure fails the recipe: a silent fallback to the fake bridge would hide it.
+      (cd ../engine && cargo build --release --locked -p qc-bridge -q)
+      model=../ml/tests/fixtures/model.json
+      export QC_BRIDGE_BIN=../engine/target/release/qc-bridge
+      export QC_BRIDGE_ARGS="../tests/replay/sample_day.csv --limits ../config/limits/default.toml --model $model --model-sha256 $(tr -d '[:space:]' < ../ml/tests/fixtures/model.sha256)"
+      # Smoke threshold: low enough that the order path (risk, OMS, SimVenue) actually runs.
+      export QC_FAKE_PROB_THRESHOLD="${QC_FAKE_PROB_THRESHOLD:-0.5}"
     fi
     sha() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -d' ' -f1; }
     run() {

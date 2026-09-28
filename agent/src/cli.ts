@@ -25,7 +25,15 @@ async function main(): Promise<void> {
   const bridge = new BridgeClient({ command: bridgeBin, args: bridgeArgs });
   bridge.start();
 
-  const decider: Decider = mode === "live" ? new LiveDecider() : new FakeDecider();
+  // A lower threshold only exists to drive the order path in smoke runs (`just agent-sim`);
+  // it says nothing about whether a trade is worth making.
+  const rawThreshold = process.env.QC_FAKE_PROB_THRESHOLD;
+  const probThreshold = rawThreshold === undefined ? undefined : Number(rawThreshold);
+  if (probThreshold !== undefined && !(probThreshold > 0 && probThreshold <= 1)) {
+    throw new Error(`QC_FAKE_PROB_THRESHOLD must be in (0, 1], got ${rawThreshold}`);
+  }
+  const decider: Decider =
+    mode === "live" ? new LiveDecider() : new FakeDecider({ probThreshold });
   const model = mode === "live" ? (process.env.ANTHROPIC_MODEL ?? "unspecified") : "fake-rule-v1";
 
   try {
