@@ -44,6 +44,8 @@ pub struct Engine<S, V> {
     /// Quote-currency cash from fills, in raw [`Price`] units, wide so it cannot overflow.
     cash: i128,
     halted: Option<HaltReason>,
+    /// False until a reconcile succeeds and again after any fails; no order is sent meanwhile.
+    reconciled: bool,
     next_reconcile: Option<Timestamp>,
     submitted: u64,
     commands: Vec<Command>,
@@ -65,6 +67,7 @@ impl<S: Strategy, V: VenueAdapter> Engine<S, V> {
             position: Qty::ZERO,
             cash: 0,
             halted: None,
+            reconciled: false,
             next_reconcile: None,
             submitted: 0,
             commands: Vec::with_capacity(16),
@@ -130,32 +133,38 @@ impl<S: Strategy, V: VenueAdapter> Engine<S, V> {
         if let Err(e) = result {
             self.line(format_args!("book {e:?}"));
         }
+        if self.next_reconcile.is_none() {
+            // Startup: nothing has been sent, so nothing is in flight to disagree about.
+            self.reconcile();
+        }
         if let Record::Market(m) = record {
             self.dispatch(&Event::Market(*m));
         }
         self.drain();
-        let now = self.clock.now();
-        match self.next_reconcile {
-            None => self.next_reconcile = Some(Timestamp(now.0 + RECONCILE_EVERY_NS)),
-            Some(t) if now >= t => {
-                self.next_reconcile = Some(Timestamp(now.0 + RECONCILE_EVERY_NS));
-                self.reconcile();
-            }
-            Some(_) => {}
+        let due = self.next_reconcile.is_some_and(|t| self.clock.now() >= t);
+        if due || !self.reconciled {
+            self.reconcile();
         }
     }
 
-    /// Compares the OMS with the venue; any discrepancy halts.
+    /// Compares the OMS with the venue; any discrepancy halts. Order fills are
+    /// compared, positions are not: the adapter has no position endpoint yet.
     pub fn reconcile(&mut self) {
-        let Ok(venue_orders) = self.venue.order_snapshot() else {
-            self.line(format_args!("reconcile skipped: venue unreachable"));
-            return;
+        self.next_reconcile = Some(Timestamp(self.clock.now().0 + RECONCILE_EVERY_NS));
+        let venue_orders = match self.venue.order_snapshot() {
+            Ok(v) => v,
+            Err(e) => {
+                self.reconciled = false;
+                self.line(format_args!("reconcile failed {e:?}"));
+                return;
+            }
         };
         let r = reconcile(&self.oms, &venue_orders);
         if r.halt() {
             self.line(format_args!("reconcile {:?}", r.discrepancies));
             self.halt(HaltReason::Reconciliation);
         }
+        self.reconciled = true;
     }
 
     fn check_kill_switch(&mut self) {
@@ -305,6 +314,11 @@ impl<S: Strategy, V: VenueAdapter> Engine<S, V> {
     fn submit(&mut self, order: &OrderRequest) {
         if self.halted.is_some() {
             self.line(format_args!("drop {} halted", order.client_id.0));
+            return;
+        }
+        if !self.reconciled {
+            self.line(format_args!("drop {} unreconciled", order.client_id.0));
+            self.reject_locally(order);
             return;
         }
         let ctx = self.context(order);

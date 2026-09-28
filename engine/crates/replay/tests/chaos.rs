@@ -318,3 +318,65 @@ fn a_book_awaiting_resync_is_no_reference_price() {
     assert_eq!(engine.submitted(), 1, "{}", engine.log());
     assert!(engine.log().contains("PriceBand"), "{}", engine.log());
 }
+
+#[test]
+fn no_order_is_sent_before_the_first_successful_reconcile() {
+    let mut engine = sample_engine(limits(), KillSwitch::new());
+    engine.venue_mut().set_connected(false);
+    feed(&mut engine, &open_book(0));
+    for i in 0..3 {
+        feed(&mut engine, &[flicker(i)]);
+    }
+    assert_eq!(engine.submitted(), 0);
+    assert!(
+        !engine.log().contains("gateway"),
+        "an order reached the gateway before any reconcile:\n{}",
+        engine.log()
+    );
+    assert!(
+        engine.log().contains("reconcile failed"),
+        "{}",
+        engine.log()
+    );
+
+    engine.venue_mut().set_connected(true);
+    for i in 3..6 {
+        feed(&mut engine, &[flicker(i)]);
+    }
+    assert!(engine.submitted() > 0, "{}", engine.log());
+    assert_eq!(engine.halted(), None);
+}
+
+#[test]
+fn a_failed_reconcile_blocks_orders_until_one_succeeds() {
+    let mut engine = sample_engine(limits(), KillSwitch::new());
+    feed(&mut engine, &open_book(0));
+    feed(&mut engine, &[flicker(0), flicker(1)]);
+    assert!(engine.submitted() > 0);
+
+    // flicker(236) is at 60 s, when the periodic reconcile is due.
+    engine.venue_mut().set_connected(false);
+    for i in 2..=236 {
+        feed(&mut engine, &[flicker(i)]);
+    }
+    assert!(
+        engine.log().contains("reconcile failed"),
+        "{}",
+        engine.log()
+    );
+
+    engine.venue_mut().set_connected(true);
+    let before = engine.submitted();
+    feed(&mut engine, &[flicker(237)]);
+    assert_eq!(
+        engine.submitted(),
+        before,
+        "orders went out before a reconcile succeeded"
+    );
+    feed(&mut engine, &[flicker(238), flicker(239)]);
+    assert!(
+        engine.submitted() > before,
+        "trading resumes once reconciled"
+    );
+    assert_eq!(engine.halted(), None, "{}", engine.log());
+}
