@@ -5,12 +5,46 @@ import { describe, expect, it } from "vitest";
 import {
   ALLOWED_LIVE_TOOLS,
   buildOptions,
+  listPromptVersions,
+  LiveDecider,
   NO_TRADE_TOOL,
   preToolUseHook,
+  PROMPT_VERSION,
   resolveLivePolicy,
+  resolvePromptVersion,
   SDK_SERVER_NAME,
   SUBMIT_ORDER_INTENT_TOOL,
 } from "../src/decider/live.js";
+
+describe("resolvePromptVersion (issue #54: QC_PROMPT_VERSION override for promote.py A/B tests)", () => {
+  it("defaults to the committed PROMPT_VERSION when unset", () => {
+    expect(resolvePromptVersion({})).toBe(PROMPT_VERSION);
+  });
+
+  it("accepts a known, on-disk version", () => {
+    expect(resolvePromptVersion({ QC_PROMPT_VERSION: "v1" })).toBe("v1");
+  });
+
+  it("refuses an unknown version rather than guessing (fail closed)", () => {
+    expect(() => resolvePromptVersion({ QC_PROMPT_VERSION: "does-not-exist" })).toThrow(
+      /not a known prompt version/,
+    );
+  });
+
+  it("listPromptVersions includes the committed default", () => {
+    expect(listPromptVersions()).toContain(PROMPT_VERSION);
+  });
+});
+
+describe("LiveDecider construction (issue #54: ensemble members pin a prompt version)", () => {
+  it("accepts an explicit, known promptVersion override", () => {
+    expect(new LiveDecider({ promptVersion: "v1" }).promptVersion).toBe("v1");
+  });
+
+  it("refuses an explicit, unknown promptVersion override just as it would from the env", () => {
+    expect(() => new LiveDecider({ promptVersion: "does-not-exist" })).toThrow(/not a known prompt version/);
+  });
+});
 
 describe("resolveLivePolicy", () => {
   it("refuses to start when ANTHROPIC_API_KEY is not set", () => {

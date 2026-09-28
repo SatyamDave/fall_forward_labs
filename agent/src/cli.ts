@@ -17,8 +17,9 @@ import { createExternalModeGateway } from "./broker/external-mode.js";
 import { connectRobinhoodMcp } from "./broker/mcp-client.js";
 import type { AssetClass } from "./broker/types.js";
 import { BridgeClient } from "./bridge.js";
+import { EnsembleDecider, type EnsembleMember, parseEnsembleEnv, splitBudgetEqually } from "./decider/ensemble.js";
 import { FakeDecider } from "./decider/fake.js";
-import { LiveDecider, PROMPT_VERSION } from "./decider/live.js";
+import { LiveDecider, PROMPT_VERSION, resolveLivePolicy, resolvePromptVersion } from "./decider/live.js";
 import { loadReplayFixtures, ReplayDecider } from "./decider/replay.js";
 import type { Decider } from "./decider/types.js";
 import { ledgerSha256 } from "./ledger.js";
@@ -72,6 +73,47 @@ function resolveMode(raw: string | undefined): LedgerMode {
   return "fake";
 }
 
+/**
+ * Issue #54: builds the N members of an ensemble decider, one per `mode`'s base decider kind.
+ * Fake members get their own (possibly distinct) `QC_ENSEMBLE_FAKE_PROB_THRESHOLDS` entry, so a
+ * fake-mode ensemble can genuinely disagree in tests and in `scripts/eval/ensemble_compare.py`
+ * without needing a second live model. Live members split one total per-decision budget equally
+ * (`splitBudgetEqually`), resolved once here rather than once per member per decision, since
+ * `ai_gate.py`'s answer is static for the run (POLICY.yaml doesn't change mid-loop) -- this is
+ * the "total token/cost budget split equally" requirement, made exact rather than approximate.
+ */
+function buildEnsembleMembers(
+  mode: LedgerMode,
+  config: NonNullable<ReturnType<typeof parseEnsembleEnv>>,
+  fallbackProbThreshold: number | undefined,
+): EnsembleMember[] {
+  if (mode === "live") {
+    const totalBudgetUsd = resolveLivePolicy().maxBudgetUsd;
+    const perMemberBudgetUsd = splitBudgetEqually(totalBudgetUsd, config.size);
+    return Array.from({ length: config.size }, (_, i) => ({
+      label: `member-${i}`,
+      decider: new LiveDecider({ maxBudgetUsdOverride: perMemberBudgetUsd }),
+    }));
+  }
+  if (mode === "replay") {
+    // All members share one fixture set (there is only one QC_REPLAY_FIXTURES_DIR): they will
+    // agree on every request. That's a legitimate, if trivial, input to the comparison script --
+    // perfectly correlated members are exactly the failure mode issue #54 is checking for.
+    const fixtures = loadReplayFixtures(
+      process.env.QC_REPLAY_FIXTURES_DIR ?? path.join(repoRoot(), "agent", "fixtures", "replay"),
+    );
+    return Array.from({ length: config.size }, (_, i) => ({
+      label: `member-${i}`,
+      decider: new ReplayDecider(fixtures),
+    }));
+  }
+  const thresholds = config.fakeProbThresholds ?? Array<number | undefined>(config.size).fill(fallbackProbThreshold);
+  return thresholds.map((probThreshold, i) => ({
+    label: `member-${i}`,
+    decider: new FakeDecider({ probThreshold }),
+  }));
+}
+
 async function main(): Promise<void> {
   const mode: LedgerMode = resolveMode(process.env.QC_AGENT_MODE);
 
@@ -86,30 +128,55 @@ async function main(): Promise<void> {
 
   const bridge = new BridgeClient({ command: bridgeBin, args: bridgeArgs });
   bridge.start();
-  const external = await maybeBuildExternalMode(bridge);
-
-  // A lower threshold only exists to drive the order path in smoke runs (`just agent-sim`);
-  // it says nothing about whether a trade is worth making.
-  const rawThreshold = process.env.QC_FAKE_PROB_THRESHOLD;
-  const probThreshold = rawThreshold === undefined ? undefined : Number(rawThreshold);
-  if (probThreshold !== undefined && !(probThreshold > 0 && probThreshold <= 1)) {
-    throw new Error(`QC_FAKE_PROB_THRESHOLD must be in (0, 1], got ${rawThreshold}`);
-  }
-  const decider: Decider =
-    mode === "live"
-      ? new LiveDecider()
-      : mode === "replay"
-        ? new ReplayDecider(
-            loadReplayFixtures(
-              process.env.QC_REPLAY_FIXTURES_DIR ?? path.join(repoRoot(), "agent", "fixtures", "replay"),
-            ),
-          )
-        : new FakeDecider({ probThreshold });
-  const model =
-    mode === "live" ? (process.env.ANTHROPIC_MODEL ?? "unspecified") : mode === "replay" ? "replay-fixture" : "fake-rule-v1";
-
+  // Everything below can throw on bad input (QC_FAKE_PROB_THRESHOLD, QC_INSTRUMENT,
+  // QC_ENSEMBLE_*): all of it now runs inside this try so a rejected config still shuts the
+  // bridge child process down and lets this process exit, instead of throwing past bridge.start()
+  // and leaving an orphaned child holding the event loop open (a pre-existing gap this PR's own
+  // ensemble-flag validation surfaced -- QC_FAKE_PROB_THRESHOLD's own validation had the same gap
+  // before this change).
+  let external: ExternalModeLoopOptions | undefined;
   try {
-    const counts = await runLoop({ bridge, decider, mode, promptVersion: PROMPT_VERSION, model, external });
+    external = await maybeBuildExternalMode(bridge);
+
+    // A lower threshold only exists to drive the order path in smoke runs (`just agent-sim`);
+    // it says nothing about whether a trade is worth making.
+    const rawThreshold = process.env.QC_FAKE_PROB_THRESHOLD;
+    const probThreshold = rawThreshold === undefined ? undefined : Number(rawThreshold);
+    if (probThreshold !== undefined && !(probThreshold > 0 && probThreshold <= 1)) {
+      throw new Error(`QC_FAKE_PROB_THRESHOLD must be in (0, 1], got ${rawThreshold}`);
+    }
+    const baseModel =
+      mode === "live" ? (process.env.ANTHROPIC_MODEL ?? "unspecified") : mode === "replay" ? "replay-fixture" : "fake-rule-v1";
+
+    const ensembleConfig = parseEnsembleEnv();
+    let decider: Decider;
+    let model: string;
+    let promptVersion: string;
+    // Only live mode's ledger label reflects QC_PROMPT_VERSION -- fake/replay never read a
+    // prompt file at all, so PROMPT_VERSION is today's unchanged static label for them either way.
+    if (ensembleConfig) {
+      const members = buildEnsembleMembers(mode, ensembleConfig, probThreshold);
+      decider = new EnsembleDecider(members, ensembleConfig.aggregation);
+      model = `ensemble(${ensembleConfig.aggregation},n=${ensembleConfig.size},${baseModel})`;
+      promptVersion = mode === "live" ? resolvePromptVersion() : PROMPT_VERSION;
+    } else if (mode === "live") {
+      const live = new LiveDecider();
+      decider = live;
+      model = baseModel;
+      promptVersion = live.promptVersion;
+    } else if (mode === "replay") {
+      decider = new ReplayDecider(
+        loadReplayFixtures(process.env.QC_REPLAY_FIXTURES_DIR ?? path.join(repoRoot(), "agent", "fixtures", "replay")),
+      );
+      model = baseModel;
+      promptVersion = PROMPT_VERSION;
+    } else {
+      decider = new FakeDecider({ probThreshold });
+      model = baseModel;
+      promptVersion = PROMPT_VERSION;
+    }
+
+    const counts = await runLoop({ bridge, decider, mode, promptVersion, model, external });
     console.log(
       `decisions=${counts.decisions} accepted=${counts.accepted} rejected=${counts.rejected} no_trade=${counts.noTrades}`,
     );

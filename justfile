@@ -162,6 +162,16 @@ scenarios-from-ledger *args:
 promote *args:
     python3 scripts/eval/promote.py {{args}}
 
+# Issue #54: does a panel of N agents beat one, at the exact same total AI usage? Runs a single
+# decider and an N-member ensemble (equal-budget by construction: agent/src/cli.ts splits one
+# per-decision budget N ways, never approximated) over the frozen suite, fake mode by default
+# (--live only when scripts/ci/ai_gate.py allows); reports the paired P&L difference, whether the
+# panel's own members agreed with each other, and a plain ADOPT/DO_NOT_ADOPT verdict. Never
+# promotes anything itself -- this is a research comparison, not the promotion pipeline (`just
+# promote`); an ADOPT result is a founder decision to wire an ensemble into the live loop.
+ensemble-compare *args:
+    python3 scripts/eval/ensemble_compare.py {{args}}
+
 # ADR-0040 agent service (agent/): install pinned dependencies (npm ci, committed lockfile)
 agent-setup:
     cd {{agent}} && npm ci

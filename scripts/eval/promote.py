@@ -185,7 +185,16 @@ def run_candidate_frozen(
     metrics = ScenarioMetrics()
     for scenario in scenarios:
         mode = "live" if live else "fake"
-        extra_env = {} if live else {"QC_FAKE_PROB_THRESHOLD": str(candidate.prob_threshold)}
+        # Fake mode varies the rule threshold (there is no prompt to vary); live mode is where a
+        # prompt_version challenger actually differs from the champion (issue #54's
+        # QC_PROMPT_VERSION override, agent/src/decider/live.ts) -- passed through unconditionally
+        # so a champion whose prompt_version also isn't the committed default still gets pinned,
+        # not silently left on whatever QC_PROMPT_VERSION happens to be set in this process's env.
+        extra_env = (
+            {"QC_PROMPT_VERSION": candidate.prompt_version}
+            if live
+            else {"QC_FAKE_PROB_THRESHOLD": str(candidate.prob_threshold)}
+        )
         ledger_path = live_agent._run_agent_once(scenario, root, mode=mode, extra_env=extra_env)
         entries = pnl_report.load_entries(ledger_path)
         net_pnl, invalid, rejects, model = _metrics_from_entries(entries, schema)
