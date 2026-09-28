@@ -21,6 +21,8 @@ pub const RECONCILE_EVERY_NS: u64 = 60 * 1_000_000_000;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HaltReason {
     KillSwitch,
+    /// Realized plus unrealized loss reached `max_daily_loss`.
+    MaxDailyLoss,
     /// The venue sent an event the order state machine does not allow.
     IllegalOrderEvent,
     /// Reconciliation found an unknown venue order or a mismatch.
@@ -133,6 +135,7 @@ impl<S: Strategy, V: VenueAdapter> Engine<S, V> {
         if let Err(e) = result {
             self.line(format_args!("book {e:?}"));
         }
+        self.check_daily_loss();
         if self.next_reconcile.is_none() {
             // Startup: nothing has been sent, so nothing is in flight to disagree about.
             self.reconcile();
@@ -165,6 +168,12 @@ impl<S: Strategy, V: VenueAdapter> Engine<S, V> {
             self.halt(HaltReason::Reconciliation);
         }
         self.reconciled = true;
+    }
+
+    fn check_daily_loss(&mut self) {
+        if self.halted.is_none() && self.risk.daily_loss_reached(self.daily_pnl()) {
+            self.halt(HaltReason::MaxDailyLoss);
+        }
     }
 
     fn check_kill_switch(&mut self) {
@@ -267,6 +276,7 @@ impl<S: Strategy, V: VenueAdapter> Engine<S, V> {
                 };
                 self.position = Qty::from_raw(self.position.raw() + dq);
                 self.cash += dc;
+                self.check_daily_loss();
             }
             self.dispatch(&Event::Order(order_event));
         }
@@ -324,10 +334,15 @@ impl<S: Strategy, V: VenueAdapter> Engine<S, V> {
         let ctx = self.context(order);
         if let Err(reject) = self.risk.check(order, &ctx) {
             self.line(format_args!("risk-reject {} {reject:?}", order.client_id.0));
-            if reject == RiskReject::KillSwitch {
-                self.halt(HaltReason::KillSwitch);
-            } else {
-                self.reject_locally(order);
+            match reject {
+                RiskReject::KillSwitch => self.halt(HaltReason::KillSwitch),
+                RiskReject::MaxDailyLoss => self.halt(HaltReason::MaxDailyLoss),
+                RiskReject::InvalidOrder
+                | RiskReject::StaleData
+                | RiskReject::PriceBand
+                | RiskReject::MaxNotional
+                | RiskReject::MaxPosition
+                | RiskReject::MaxOrderRate => self.reject_locally(order),
             }
             return;
         }

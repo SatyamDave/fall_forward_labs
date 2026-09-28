@@ -1,5 +1,6 @@
 //! Failure injection: kill switch from another thread, venue disconnect, stale
-//! book, partial fills, and an order the process never sent.
+//! book, partial fills, an order the process never sent, an unreachable venue
+//! at reconcile time, and the daily loss limit.
 
 use std::thread;
 use std::time::{Duration, Instant};
@@ -379,4 +380,41 @@ fn a_failed_reconcile_blocks_orders_until_one_succeeds() {
         "trading resumes once reconciled"
     );
     assert_eq!(engine.halted(), None, "{}", engine.log());
+}
+
+#[test]
+fn reaching_the_daily_loss_limit_on_a_fill_halts_and_cancels_working_orders() {
+    // A resting bid below the market, and a buy that lifts the ask at 100.2
+    // against a mid of 100.1: a loss of 0.0001 the moment it fills.
+    let rest_and_take = |book: &OrderBook| match (book.best_bid(), book.best_ask()) {
+        (Some((bid, _)), Some((ask, _))) => vec![
+            (Side::Buy, OrderType::PostOnly, bid),
+            (Side::Buy, OrderType::Limit, ask),
+        ],
+        _ => Vec::new(),
+    };
+    let mut limits = limits();
+    limits.max_daily_loss = "0.0001".parse().unwrap();
+    let mut engine = scripted(limits, rest_and_take);
+    feed_scripted(&mut engine, &open_book(0));
+    feed_scripted(
+        &mut engine,
+        &parse(&format!("D,1,11,B,99.9,2,{t},{t}", t = 50 * MS)),
+    );
+    assert!(engine.log().contains("Filled"), "{}", engine.log());
+    assert_eq!(
+        engine.halted(),
+        Some(HaltReason::MaxDailyLoss),
+        "{}",
+        engine.log()
+    );
+    assert_eq!(open_at_venue(engine.venue_mut()), 0, "{}", engine.log());
+    assert_eq!(engine.oms().open_orders().count(), 0);
+
+    let submitted = engine.submitted();
+    feed_scripted(
+        &mut engine,
+        &parse(&format!("D,1,12,B,99.9,3,{t},{t}", t = 60 * MS)),
+    );
+    assert_eq!(engine.submitted(), submitted);
 }
