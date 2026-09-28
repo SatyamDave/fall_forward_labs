@@ -40,17 +40,35 @@ audit:
     set -euo pipefail
     cd {{engine}}
     if command -v cargo-deny >/dev/null && [ -f deny.toml ]; then cargo deny check; else echo "skip: cargo-deny or engine/deny.toml missing (CI runs it; install with 'cargo install cargo-deny')"; fi
-    if command -v cargo-audit >/dev/null; then cargo audit; else echo "skip: cargo-audit not installed (CI runs it; install with 'cargo install cargo-audit')"; fi
+    if command -v cargo-audit >/dev/null; then cargo audit --deny warnings; else echo "skip: cargo-audit not installed (CI runs it; install with 'cargo install cargo-audit')"; fi
     cd ../{{research}}
     if command -v pip-audit >/dev/null; then uv export --format requirements-txt --no-hashes --quiet | pip-audit --strict -r /dev/stdin; else echo "skip: pip-audit not installed (CI runs it; install with 'uv tool install pip-audit')"; fi
+
+# Install the git pre-commit hook and run every hook once over the whole tree
+precommit:
+    uvx pre-commit install
+    uvx pre-commit run --all-files
 
 # Criterion benchmarks for engine hot paths
 bench:
     cd {{engine}} && cargo bench --workspace --locked
 
-# Replay a recorded market day and check the order log is reproduced exactly
+# Replay a recorded market day twice and check both order logs match the committed sha256
 replay:
-    @echo "not implemented yet: engine-core phase (replay of a recorded day)"
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd {{engine}}
+    sha() { if command -v sha256sum >/dev/null; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -d' ' -f1; }
+    out=$(mktemp -d)
+    cargo build --release --locked -q -p qc-replay
+    for run in 1 2; do ./target/release/qc-replay ../tests/replay/sample_day.csv "$out/orders-$run.log"; done
+    first=$(sha "$out/orders-1.log"); second=$(sha "$out/orders-2.log")
+    echo "run 1 order-log sha256: $first"
+    echo "run 2 order-log sha256: $second"
+    if [ "$first" != "$second" ]; then echo "FAIL: replay is not deterministic"; exit 1; fi
+    expected=$(tr -d '[:space:]' < ../tests/replay/expected_order_log.sha256)
+    if [ "$first" != "$expected" ]; then echo "FAIL: order log does not match tests/replay/expected_order_log.sha256 ($expected)"; exit 1; fi
+    echo "replay deterministic and matches the committed order log"
 
 # Run a backtest from backtest/configs/<cfg>.yaml
 backtest cfg:
@@ -58,15 +76,26 @@ backtest cfg:
 
 # Run a strategy against live data with simulated fills
 paper strategy:
-    @echo "not implemented yet: paper-trading phase ({{strategy}})"
+    @echo "refused: paper trading needs live market data, and bootstrap allows no venue connections ({{strategy}})" >&2
+    @exit 1
 
 # Purged, embargoed walk-forward validation for a strategy or model
+# Writes backtest/reports/<name>/<date>.md and appends trials + a challenger to the registry.
 walkforward name:
-    @echo "not implemented yet: research/ml phase 6 ({{name}})"
+    cd {{research}} && PYTHONPATH=..:. uv run --locked python -m ml.validation.walkforward {{name}}
 
 # Show untriaged session learnings
 learnings:
-    @echo "not implemented yet: knowledge loop phase 5"
+    #!/usr/bin/env bash
+    set -euo pipefail
+    shopt -s nullglob
+    items=(.claude/learnings/inbox/*.md)
+    echo "${#items[@]} untriaged learning(s) in .claude/learnings/inbox"
+    for f in ${items[@]+"${items[@]}"}; do echo "  $f: $(head -1 "$f" | sed 's/^# //')"; done
+
+# Tests for the Claude Code hooks in .claude/hooks (not part of `test`, which other phases own)
+test-hooks:
+    cd {{research}} && uv run pytest ../tests/hooks -q
 
 # Study 0001 (favorite-longshot bias): offline analysis from the saved snapshot, then its checks
 study-0001:

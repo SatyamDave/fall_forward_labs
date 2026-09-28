@@ -12,3 +12,6 @@ workspace = true
 
 [dependencies]
 qc-core.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
