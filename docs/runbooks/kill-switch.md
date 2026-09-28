@@ -27,8 +27,8 @@ What it does not do:
 - It is checked per record, so the one-second bound (root rule 11) depends on records arriving.
   The chaos test `kill_switch_from_another_thread_halts_within_one_second`
   (`engine/crates/replay/tests/chaos.rs`) engages it from another thread and asserts the halt
-  within 1 s and no submission after it; it runs in `cargo test`, and CI runs that only on #13's
-  branch today.
+  within 1 s and no submission after it; it runs in `cargo test` and passes in CI on #17 and #8; nothing is
+  on `main` yet.
 
 Other halt reasons with the same effect (no new orders, cancel requests): `IllegalOrderEvent`,
 `Reconciliation` (any discrepancy, including an unknown venue order) and `Runaway`.

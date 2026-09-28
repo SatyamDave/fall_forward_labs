@@ -46,8 +46,8 @@ just fmt | just lint | just walkforward <name>
 ```
 `just` finds the root justfile from any subdirectory, so these work wherever you are.
 Run `just check` before every push. No CI workflow runs it until #13 (`ci.yml`) merges.
-`just backtest` is a placeholder that exits 0 and `just paper` refuses; hook, knowledge, autonomy
-and study tests run outside `just check` (commands in CONTRIBUTING.md).
+`just backtest` is a placeholder that exits 2 and `just paper` refuses; `just test` runs every
+suite (Rust, research/ml/data, hooks, knowledge, autonomy, ci, study 0001).
 
 ## How we work
 - Start every session with docs/NOW.md: the current milestone (M0, offline foundation; see

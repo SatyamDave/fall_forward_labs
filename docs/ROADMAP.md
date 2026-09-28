@@ -72,7 +72,7 @@ Preserved from [docs/specs/0005-final-base.md](specs/0005-final-base.md) Phase 5
 - Slow-signal path rejects stale, unsigned, over-influence; leakage-flagged features blocked [not started]
 - L0-L3 run for the vertical in shadow or offline with demotion tested [not started]
 - Autonomy loops within budget, weekly cost report [not started]
-- Security green, zero High/Critical on `main`, hardening script run [CI passes on #13 only; hardening blocked by plan]
+- Security green, zero High/Critical on `main`, hardening script run [CI passes on #17 and #8, nothing on `main`; hardening blocked by plan]
 - Fresh-clone test to a passing PR without asking [not run]
 - CLAUDE.md within budget, `/context` evidence, no references to removed paths [budgets met; `/context` not run]
 

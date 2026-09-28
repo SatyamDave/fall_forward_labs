@@ -9,17 +9,17 @@ trades, nothing connects to a venue for trading, and no strategy has shown an ed
 |---|---|
 | Date | 2026-09-27 |
 | `main` | `4975ec3` (initial commit, one README). No PR is merged |
-| Integration candidate | `integration/base-candidate-2026-09-27` @ `44d1711` (all open PRs except #6; unreviewed) |
-| Documentation verdict | **Complete** for this snapshot |
+| Audited revision | `0cf6c2c` (this branch) = `integration/base-candidate-2026-09-27` `f1293e3` (PRs #1-#16) + `fix/base-integration` `17e5abd` (#17) + docs; unreviewed |
+| Documentation verdict | **Complete** for snapshot `0cf6c2c` |
 | Engineering foundation verdict | **Partially ready** (reasons in [base-status](docs/reports/base-status.md#verdicts)) |
 | Live trading | Disabled and not built. `just paper` refuses; no venue adapter exists |
 | Venue connectivity | None. The only market-data network code is study 0001's read-only client for Kalshi's public endpoints |
-| Paid agent jobs | None running: no workflows on `main`, no `ANTHROPIC_API_KEY` secret. Once #10 and #13 merge and the key is added, four workflows make paid calls regardless of `autonomy/POLICY.yaml` |
+| Paid agent jobs | None running: no workflows on `main`, no `ANTHROPIC_API_KEY` secret. The four AI workflows stay ungated until `docs/proposals/0002-ai-workflow-gating.patch` is applied |
 | Auto-merge | Not enabled (`allow_auto_merge: false`); no workflow enables it |
 
-Biggest blockers: nothing is on `main`; `just check` fails at the candidate head (one lint line,
-#16 with #12); review rules are unenforceable on the current GitHub plan; the first vertical and
-the operators' jurisdiction are undecided.
+Biggest blockers: nothing is on `main` and nothing is reviewed; review rules are unenforceable
+on the current GitHub plan; three protected-file patches await approval; the first vertical and
+the operators' jurisdiction are undecided (vertical PENDING).
 
 ## Contents
 
@@ -41,15 +41,11 @@ Proposed pending the operators' jurisdiction.
 
 ## 2. Current state
 
-- All work is on 16 open PRs (#1-#16), every one authored by @SatyamDave and none reviewed.
-  The verifier merged them into the integration candidate; #6 was left out because its
-  `docs/NOW.md` conflicts with #14's. This PR (#8) is the candidate plus documentation.
-- `just check` exits 0 at candidate commit `f4a4537` and 1 at the head `44d1711` (ruff RUF100 at
-  `research/studies/0001-favorite-longshot/tests/test_recompute.py:44`).
-- CI passed on #13's own head. On the combined tree (this PR's head) `ci` fails on the same
-  RUF100 and `security` fails on one trivy HIGH: `.devcontainer/Dockerfile` runs as root. The AI
-  reviews fail for want of an API key, before any call. Branch protection and rulesets return
-  HTTP 403 on this plan.
+- All work is on 17 open PRs, every one authored by @SatyamDave and none reviewed. The
+  integration candidate merges #1-#16; #17 fixes what broke when combined; this PR (#8) adds docs.
+- At `0cf6c2c`, `just check` exits 0 with every suite executed, and every CI job that ran passes
+  except `gate`, which fails by design until a human approves (T2). Branch protection and
+  rulesets return HTTP 403 on this plan.
 - Unverified: the devcontainer (no docker on the verifying machine), any behavior on Linux or on
   a second founder's machine.
 
@@ -61,38 +57,37 @@ Proposed pending the operators' jurisdiction.
 | Order book, OMS, risk checks, kill switch, SimVenue, replay | #15 | yes, `just replay` | Synthetic fixture; SimVenue ignores queue position |
 | Data schemas, quality checks, datasets, features, training, walk-forward, export, monitoring | #12 | yes, `just walkforward demo` | Synthetic data only; DSR gate mis-scaled |
 | Rust inference with Python parity | #12 | tests only | Not wired into the engine |
-| Experiment registry (JSONL) | #1, #12 | yes | Two ledger paths once #16 merges; not MLflow |
+| Experiment registry (JSONL, one ledger) | #1, #12, #17 | yes | Not MLflow (ADR-0005 says MLflow) |
 | CLAUDE.md hierarchy, VISION, ARCHITECTURE | #7, #14 | n/a | Guidance, not enforcement |
 | `.claude/` settings, hooks, rules, agents, skills | #11 | 30 hook tests | Hooks bind Claude Code sessions only |
 | Knowledge-loop workflows and scope check | #10 | 10 tests | Never ran; would call Anthropic |
 | CI, security scanners, pre-commit, harden script | #13 | CI green on #13 | Harden script blocked by plan (403) |
-| Autonomy tier policy and gate | #3 | 23 tests; gate fails as designed | Loops not built; nothing reads POLICY.yaml |
-| Study 0001 favorite-longshot | #16 | ran once | INSUFFICIENT EVIDENCE; not reproducible from a clone |
+| Autonomy tier policy, gate, AI-workflow gate script | #3, #17 | 23 + 15 tests | Loops not built; workflows call the gate only after patch 0002 |
+| Study 0001 favorite-longshot | #16, #17 | yes, from snapshot | INSUFFICIENT EVIDENCE; snapshot is off git |
 | ADRs 0001-0006, 0010, 0011, 0013, 0020; plans; data classes | #2-#5, #9 | n/a | All Proposed |
-| Contributor docs, templates, devcontainer | #8 | n/a | Devcontainer never built |
+| Contributor docs, templates, devcontainer (non-root) | #8, #17 | n/a | Devcontainer never built |
 
 Per-component detail with evidence: [docs/audits/0001-reality-audit.md](docs/audits/0001-reality-audit.md).
 
 ## 4. What you can run today
 
-On a checkout of this branch (or the integration candidate), offline, with no credentials:
+On a checkout of this branch at `0cf6c2c`, offline, with no credentials:
 
 | Command | Kind | What it does | Expected result |
 |---|---|---|---|
 | `just setup` | setup | `cargo fetch`; `uv sync --locked` | exit 0; creates `research/.venv` |
-| `just check` | checks | fmt, clippy, Rust tests, pytest, audits | exit 1 at `44d1711` (RUF100); exit 0 at `f4a4537` |
+| `just check` | checks | fmt, clippy, ruff, mypy, all seven test suites, audits | exit 0, about 21 s |
 | `just replay` | offline replay, simulated execution | Replays `tests/replay/sample_day.csv` twice | `run 1/2 order-log sha256: d3400a1a...b8e0`, `replay deterministic`, exit 0 |
-| `just walkforward demo` | offline research demo | Synthetic day through features, training, walk-forward | Verdict FAIL, exit 0; modifies committed files (see §11) |
-| `just test-hooks` | checks | Hook tests | 30 passed |
+| `just walkforward demo` | offline research demo | Synthetic day through features, training, walk-forward | Verdict FAIL, exit 0; writes only gitignored `out/` (`--record` writes the registry) |
 | `just learnings` | knowledge | Counts inbox files | `0 untriaged learning(s)` |
 
 Not available:
 
 | Command or capability | Status |
 |---|---|
-| `just backtest <cfg>` | Placeholder; prints "not implemented yet" and exits 0 |
+| `just backtest <cfg>` | Placeholder; prints "not implemented" and exits 2 |
 | `just paper <strategy>` | Refuses and exits 1 by design |
-| `just study-0001` | Exits 1 on a fresh clone: raw data is gitignored |
+| `just study-0001` | Exits 2 on a fresh clone (snapshot is off git); reproduces `results.json` exactly from the preserved snapshot |
 | Exchange demo, paper/shadow, live trading | Not built |
 | Devcontainer | Not verified |
 
@@ -102,13 +97,13 @@ Prerequisites, versions as verified on 2026-09-27 (macOS arm64): Rust/cargo 1.97
 for floating `stable` via `engine/rust-toolchain.toml`, honoured only with rustup), uv 0.11.28
 (it provides Python 3.12 for `research/`), just 1.58.0, git, and read access to the private repo
 `SatyamDave/fall_forward_labs`. Optional for a full audit: cargo-deny, cargo-audit, pip-audit;
-without them `just audit` prints `skip:` and still exits 0.
+without them `just audit` prints `SKIPPED (not a pass)`, exits 0 locally and fails in CI.
 
 ```sh
 git clone https://github.com/SatyamDave/fall_forward_labs.git && cd fall_forward_labs
 git checkout bootstrap/phase-7-contributor   # main has only a README until the PRs merge
 just setup    # downloads crates from crates.io and packages from PyPI
-just check    # see §4 for the expected exit code at each commit
+just check    # exit 0 at 0cf6c2c
 just replay   # the smallest offline end-to-end demo
 ```
 
@@ -206,14 +201,12 @@ interactive).
 
 Dated evidence: [docs/reports/base-status.md](docs/reports/base-status.md). In short:
 
-- Passed: setup, Rust tests, pytest, audits, replay determinism, hook/knowledge/autonomy suites.
-- Failed: `just check` at the candidate head (RUF100); `just study-0001` on a fresh clone; CI
-  `ci` and `security` (trivy DS-0002) on the combined tree.
-- Not run or unavailable: devcontainer, fuzzing, bench timings.
-- False greens: `just backtest` and audit skips exit 0; walk-forward exits 0 on FAIL.
-- Hook, knowledge, autonomy and study suites are outside `just check` and CI.
-- `just walkforward demo` overwrites the committed dated report and appends to the committed
-  registry, so each run inflates the trial count used by deflated Sharpe.
+- Passed at `0cf6c2c`: setup, `just check` (all suites), audits, replay, bandit, CI jobs.
+- Failing by design: autonomy `gate` (needs a human T2 approval).
+- Not run or unavailable: devcontainer build, fuzzing, bench timings, codeql, AI reviews.
+- Study 0001 cannot be reproduced from a clean clone; the snapshot is outside git on one
+  founder's machine until an approved shared store exists.
+- Remaining false greens: audit skips exit 0 locally; walk-forward exits 0 on FAIL.
 - Synthetic fixtures establish mechanics and determinism, never fills, latency or edge.
 
 ## 12. Decisions and dependencies
@@ -223,10 +216,11 @@ Dated evidence: [docs/reports/base-status.md](docs/reports/base-status.md). In s
 | First vertical: ADR-0020 (Kalshi) vs ADR-0003 | Proposed | M1 | founders |
 | Operators' jurisdiction, entity | Unknown | Any venue account | founders, with counsel |
 | ADR-0001 NautilusTrader (LGPL-3.0 flagged for legal review in ADR-0002) | Proposed; not used | Engine dependency choice | founders |
-| ADR-0004 toolchain pin, ADR-0005 MLflow | Proposed; code differs | Pin PR, registry migration | founders |
+| ADR-0004 toolchain pin (patch 0001), ADR-0005 MLflow | Proposed; code differs | Pin, registry migration | founders |
 | TypeSafe MCA §2.3(b) distillation clause (ADR-0011) | Blocks decision-layer distillation | Decision layer | legal review |
 | GATES.md thresholds, DSR gate units | Unreviewed | Any promotion | founders |
 | Second founder, GitHub plan | Unknown | Enforced review | founders |
+| Protected patches 0002 (AI gating), 0003 (CODEOWNERS) | Prepared, unapplied | API key, review routing | founders |
 
 ## 13. Roadmap
 
@@ -234,8 +228,8 @@ M0 is the offline foundation on `main`; M1 is the first specialization, after th
 chosen. Full list, deferred items with reasons, and the historical "base complete" checklist:
 [docs/ROADMAP.md](docs/ROADMAP.md). Next three steps:
 
-1. Fix the two integration defects in #16 (drop the noqa, use `research/registry/log/`).
-2. Merge the PRs in the [base-status merge sequence](docs/reports/base-status.md#merge-sequence).
+1. Review and merge the PRs in the [base-status merge sequence](docs/reports/base-status.md#merge-sequence), then #17 and #8.
+2. Apply the [protected patches](docs/proposals/README.md) after approval, 0002 before any API key.
 3. Register study 0001 v2 with a population measured by metadata-only calls first.
 
 ## 14. Contributing, security, confidentiality

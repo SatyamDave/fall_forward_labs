@@ -13,8 +13,8 @@ report. Run `just replay` (expect `replay deterministic`) and read
 **Research / ML.** Read `research/README.md` and `ml/CLAUDE.md`. Walk through
 `docs/research/graveyard.md` and the experiment registry (`research/registry/`) — every trial,
 including failures, is recorded there. Read the skill `research/.claude/skills/run-walkforward/SKILL.md`,
-then run `just walkforward demo` in a scratch clone (it appends to the committed registry and
-overwrites the dated report) to see what a result has to report: Sharpe, deflated Sharpe using
+then run `just walkforward demo` (it writes only to gitignored `out/`; `--record` would
+write the committed registry) to see what a result has to report: Sharpe, deflated Sharpe using
 the *true* trial count, PBO, max drawdown, turnover. On the synthetic demo it ends in Verdict
 FAIL, which is expected.
 

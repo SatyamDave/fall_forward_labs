@@ -11,7 +11,7 @@ protected.
 | Command | Purpose | Expected output |
 |---|---|---|
 | `just setup` | download crates and PyPI packages, create `research/.venv` | exit 0 |
-| `just check` | fmt, lint, tests, audits | exit 0, or exit 1 with ruff `RUF100` at candidate `44d1711` (a known integration defect) |
+| `just check` | fmt, lint, all test suites, audits | exit 0 (about 21 s on the verifying Mac) |
 | `just replay` | replay the synthetic day twice | two identical `order-log sha256` lines and `replay deterministic` |
 
 Any other failure on a fresh clone is a bug: open an issue with the command's output rather than

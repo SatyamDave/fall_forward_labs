@@ -75,18 +75,16 @@ Run from the repo root. Expected results are from the verified run on 2026-09-27
 | Command | Purpose | Expected output |
 |---|---|---|
 | `just setup` | Fetch crates, create `research/.venv` from `uv.lock` | exit 0 |
-| `just check` | fmt check, clippy `-D warnings`, `cargo test`, pytest, audits | exit 0 (exit 1 at candidate `44d1711`: RUF100, see base-status). A `skip:` line means an audit tool is missing and did not run |
-| `just test-hooks` | `.claude/hooks` tests (not in `check`) | `30 passed` |
-| `python3 -m unittest discover -s tests/knowledge` | knowledge scripts (not in `check`) | `OK` (10 tests) |
-| `cd research && uv run pytest ../tests/autonomy -q` | autonomy classifier (not in `check`) | `23 passed` |
+| `just check` | fmt check, clippy `-D warnings`, ruff, mypy, `just test`, `just audit` | exit 0. A `SKIPPED (not a pass)` line means an audit tool is missing: a warning locally, a failure in CI |
+| `just test` | Rust tests, then pytest for research/ml/data, hooks, knowledge, autonomy, `tests/ci`, study 0001 | 42 Rust; 22, 30, 10, 23, 15 passed; study 13 passed, 1 skipped by design |
 | `just replay` | determinism of the engine on the synthetic day | two identical sha256 lines, `replay deterministic` |
 | `git diff --name-only <base>... \| python3 scripts/knowledge/scope_check.py` | Scope, CLAUDE.md budgets and Learned format for docs-only PRs (reads changed paths) | exit 0, no output |
 
-`just backtest` is a placeholder that exits 0; do not treat it as a check.
+`just backtest` is a placeholder that exits 2, and `just paper` refuses (exit 1).
 
 ## Before opening a PR
 
-- `just check` passes locally, and the suites outside it pass if you touched their areas.
+- `just check` passes locally.
 - Tests were added or updated for behavior changes, and — where the change is a bug fix — you can
   show the test failing before the fix.
 - Docs are updated for any changed behavior (a nested `CLAUDE.md`, a runbook, the glossary).

@@ -1,6 +1,6 @@
 # Architecture
 
-What is built on the integration candidate (`44d1711`, 2026-09-27), then what is planned. Nothing
+What is built at the audited revision `0cf6c2c` (2026-09-27), then what is planned. Nothing
 here is on `main` yet; see [docs/reports/base-status.md](reports/base-status.md).
 
 quant-core has two halves that share files but never a process: an offline side (data, research,
@@ -60,7 +60,7 @@ flowchart LR
 | `qc-inference` | `Model` trait; `LinearModel::load(bytes, expected_sha256)`; `FeatureState` | Loads only when the hash matches; Python/Rust parity tests on fixtures. Not wired into the replay engine |
 | `qc-telemetry`, `qc-benches` | `MetricSink`; criterion benches | Benches build; no numbers recorded |
 | `data/`, `ml/` (Python) | schemas, quality checks, datasets, features, training, validation, registry, monitoring, export | Runs from `research/`'s uv environment |
-| `research/registry/` | `record(path, entry)`, `trial_count(path, experiment)` | Append-only JSONL; the path is chosen by the caller (see base-status: two ledgers) |
+| `research/registry/` | `REGISTRY_DIR`, `TRIALS`, `record(path, entry)`, `read`, `trial_count(path, experiment)` | Append-only JSONL, one ledger at `research/registry/log/` (`QC_REGISTRY_DIR` overrides) |
 
 ## State transitions
 
@@ -97,10 +97,10 @@ process.
 | Replay fixture | `tests/replay/generate_sample_day.py` | `tests/replay/sample_day.csv` (synthetic) | yes |
 | Replay order log | `just replay` | a temp directory; hash printed | no |
 | Synthetic market data | `data/recorders/synthetic.py` | `data/raw/synthetic/` | no (gitignored) |
-| Trials, challengers | `just walkforward` | `research/registry/log/*.jsonl` | yes (includes demo rows) |
-| Walk-forward report | `just walkforward` | `backtest/reports/<name>/<date>.md` | yes; a rerun overwrites it |
-| Model artifact | walk-forward | `backtest/reports/raw/` | no |
-| Study 0001 raw pages | `fetch.py` (network) | `data/raw/study-0001/` | no; hashes in `data/catalog/study-0001.json` |
+| Walk-forward scratch run | `just walkforward <name>` | `out/walkforward/<name>/` (report, ledgers, data, artifact; replaced each run) | no (gitignored) |
+| Trials, challengers | `just walkforward <name> --record`, `record_trial.py` | `research/registry/log/*.jsonl` | yes (4 demo rows, 1 study row) |
+| Walk-forward report | `just walkforward <name> --record` | `backtest/reports/<name>/<date>.md` | yes |
+| Study 0001 raw pages | `fetch.py` (network) | `data/raw/study-0001/` | no; hashes in `data/catalog/study-0001.json`; snapshot kept outside git on one founder's machine |
 | Study 0001 results | `just study-0001` | `research/studies/0001-favorite-longshot/results.json` | yes |
 
 ## Boundaries
