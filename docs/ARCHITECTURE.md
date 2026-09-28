@@ -1,7 +1,8 @@
 # Architecture
 
-What is built on `main` at `9f39eee` (2026-09-28), then what is planned. Nothing
-here is on `main` yet; see [docs/reports/base-status.md](reports/base-status.md).
+What is built on `main` at `9f39eee` (2026-09-28), then what is planned. Current status is in
+[docs/reports/base-status.md](reports/base-status.md); a plain-language walkthrough with diagrams
+is [docs/guide/quant-core-guide.html](guide/quant-core-guide.html).
 
 quant-core has two halves that share files but never a process: an offline side (data, research,
 ML, reports) and an execution side (the Rust engine). Today the execution side runs only against a
