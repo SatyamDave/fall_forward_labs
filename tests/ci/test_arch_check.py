@@ -179,3 +179,20 @@ def test_citing_a_missing_adr_does_not_count(tmp_path: Path) -> None:
     code, summary = run(tmp_path, ["schemas/decision/v1/decision.schema.json"], body)
     assert code == 1
     assert "cite an existing ADR" in summary
+
+
+def test_heading_without_colon_counts_as_the_section(tmp_path: Path) -> None:
+    body = (
+        "## Moves us toward the first agentic trade by\n\nwiring the gateway.\n\n"
+        "## Architecture impact\n\nimplements ADR-0040.\n"
+    )
+    (tmp_path / "docs" / "adr").mkdir(parents=True)
+    (tmp_path / "docs" / "adr" / "0040-agentic-decision.md").write_text("# ADR-0040\n")
+    code, summary = run(tmp_path, ["schemas/decision/v1/decision.schema.json"], body)
+    assert code == 0, summary
+
+
+def test_empty_heading_section_still_fails(tmp_path: Path) -> None:
+    body = "## Moves us toward the first agentic trade by\n\n## Architecture impact\nnone\n"
+    code, _ = run(tmp_path, ["docs/runbooks/new.md"], body)
+    assert code == 1
