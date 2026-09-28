@@ -31,3 +31,9 @@ export function schemaDir(): string {
 export function ledgerPath(): string {
   return process.env.QC_AGENT_LEDGER_PATH ?? path.join(repoRoot(), "out", "agent", "ledger.jsonl");
 }
+
+/** Fsync'd append-only journal of broker order-submission attempts (agent/src/broker/journal.ts).
+ *  Gitignored, same as ledgerPath() -- out/agent/ already covers it. */
+export function brokerJournalPath(): string {
+  return process.env.QC_AGENT_BROKER_JOURNAL_PATH ?? path.join(repoRoot(), "out", "agent", "broker-journal.jsonl");
+}
