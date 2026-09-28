@@ -67,6 +67,17 @@ async function maybeBuildExternalMode(bridge: BridgeClient): Promise<ExternalMod
   return { gateway, assetClass, reconcile, heartbeat };
 }
 
+/** QC_BRIDGE_DECISION_TIMEOUT_MS: unset keeps BridgeClient's default; 0 waits indefinitely for
+ *  `next_decision_request` (qc-bridge --follow, scripts/shadow/run.py). Anything else that is not
+ *  a non-negative integer refuses to start rather than guessing a bound. */
+function resolveDecisionTimeoutMs(raw: string | undefined): number | undefined {
+  if (raw === undefined) return undefined;
+  if (!/^\d+$/.test(raw)) {
+    throw new Error(`QC_BRIDGE_DECISION_TIMEOUT_MS must be a non-negative integer (0 = no timeout), got ${JSON.stringify(raw)}`);
+  }
+  return Number(raw);
+}
+
 function resolveMode(raw: string | undefined): LedgerMode {
   if (raw === "live") return "live";
   if (raw === "replay") return "replay";
@@ -126,7 +137,8 @@ async function main(): Promise<void> {
   }
   const bridgeArgs = (process.env.QC_BRIDGE_ARGS ?? "").split(" ").filter(Boolean);
 
-  const bridge = new BridgeClient({ command: bridgeBin, args: bridgeArgs });
+  const decisionTimeoutMs = resolveDecisionTimeoutMs(process.env.QC_BRIDGE_DECISION_TIMEOUT_MS);
+  const bridge = new BridgeClient({ command: bridgeBin, args: bridgeArgs, decisionTimeoutMs });
   bridge.start();
   // Everything below can throw on bad input (QC_FAKE_PROB_THRESHOLD, QC_INSTRUMENT,
   // QC_ENSEMBLE_*): all of it now runs inside this try so a rejected config still shuts the

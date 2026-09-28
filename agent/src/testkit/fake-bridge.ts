@@ -96,8 +96,22 @@ function write(obj: Json): void {
   process.stdout.write(`${JSON.stringify(obj)}\n`);
 }
 
+// quiet_next_decision_request holds the first answer for QC_FAKE_BRIDGE_QUIET_MS, like qc-bridge
+// --follow in a quiet market; quiet_then_crash exits 1 after that long instead of answering.
+const quietMs = Number(process.env.QC_FAKE_BRIDGE_QUIET_MS ?? "0");
+let quietDone = false;
+
 function handleNextDecisionRequest(id: string): void {
   if (mode === "timeout_next_decision_request") return; // never respond, on purpose
+  if (mode === "quiet_then_crash") {
+    setTimeout(() => process.exit(1), quietMs);
+    return;
+  }
+  if (mode === "quiet_next_decision_request" && !quietDone) {
+    quietDone = true;
+    setTimeout(() => handleNextDecisionRequest(id), quietMs);
+    return;
+  }
   if (mode === "malformed_json") {
     process.stdout.write("{not valid json\n");
     return;

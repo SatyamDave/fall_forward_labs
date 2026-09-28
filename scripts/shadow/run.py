@@ -35,14 +35,14 @@ Exit code: 0 only if both children exited zero (the pnl report's own stop-rule e
 surfaced but never folded in here -- a tripped stop rule is a finding for whoever reads the
 report, not a failure of this script). Standard library only.
 
-Real, unattended, multi-day operation needs two things this PR does not attempt to fix (both
-outside this lane's owned paths -- see the PR body's Limitations):
-  - agent/src/bridge.ts's BridgeClient has a fixed 5s per-request timeout; a live feed that goes
-    quiet for longer than that (a real market pause, or `--decide-every` records simply taking a
-    while to arrive one poll at a time) will time out the agent's next_decision_request call
-    before qc-bridge's own --follow ever gets a chance to answer.
-  - a real multi-day run needs an external scheduler (cron/systemd) to invoke this script once
-    per day (`--date` rolls the log/report files over); it is not itself a long-running daemon.
+The agent runs with QC_BRIDGE_DECISION_TIMEOUT_MS=0: qc-bridge --follow holds each
+next_decision_request answer until the growing recording yields a decision, which in a quiet
+market can take longer than BridgeClient's default 5s, so that one op waits indefinitely. Every
+other op keeps its bounded timeout, and a bridge that exits still fails the agent at once (its
+exit handler rejects the pending call), which this script's heartbeat records as downtime.
+
+A real multi-day run needs an external scheduler (cron/systemd) to invoke this script once per
+day (`--date` rolls the log/report files over); it is not itself a long-running daemon.
 """
 
 from __future__ import annotations
@@ -275,6 +275,7 @@ def build_specs(
     agent_env["QC_BRIDGE_BIN"] = str(bridge_bin)
     agent_env["QC_BRIDGE_ARGS"] = " ".join(bridge_args)
     agent_env["QC_AGENT_LEDGER_PATH"] = str(paths.ledger)
+    agent_env["QC_BRIDGE_DECISION_TIMEOUT_MS"] = "0"  # --follow: see module docstring
     agent_cmd = [str(AGENT_DIR / "node_modules" / ".bin" / "tsx"), "src/cli.ts"]
 
     return [
