@@ -6,21 +6,21 @@ Regenerated automatically by `.github/workflows/docs-status.yml` on every merge 
 Narrative docs: [project guide](guide/quant-core-guide.html) ·
 [base status](reports/base-status.md) · [NOW](NOW.md).
 
-Generated from `main` at **e564b3d 2026-09-28**. Latest CI on `main`: **success on 3f66f6b**.
+Generated from `main` at **d7d8254 2026-09-28**. Latest CI on `main`: **in_progress on d7d8254**.
 Paid AI loops: **off**.
 
-## Open pull requests (3)
+## Open pull requests (2)
 
 | PR | Title | Author | Draft |
 |---|---|---|---|
 | [#91](https://github.com/SatyamDave/fall_forward_labs/pull/91) | Live trading refuses to start until every go-live check passes | SatyamDave | no |
 | [#90](https://github.com/SatyamDave/fall_forward_labs/pull/90) | Never send an order when the market is closed | SatyamDave | no |
-| [#89](https://github.com/SatyamDave/fall_forward_labs/pull/89) | Record the full order book, not just the best price | SatyamDave | no |
 
 ## Recently merged
 
 | PR | Title | Merged |
 |---|---|---|
+| [#89](https://github.com/SatyamDave/fall_forward_labs/pull/89) | Record the full order book, not just the best price | 2026-09-28 |
 | [#88](https://github.com/SatyamDave/fall_forward_labs/pull/88) | Bring the docs and roadmap up to date with what's built | 2026-09-28 |
 | [#87](https://github.com/SatyamDave/fall_forward_labs/pull/87) | The kill switch cancels everything at the broker, even if the agent is stuck | 2026-09-28 |
 | [#86](https://github.com/SatyamDave/fall_forward_labs/pull/86) | The PR checklist check accepts sections written as headings | 2026-09-28 |
@@ -35,12 +35,15 @@ Paid AI loops: **off**.
 | [#72](https://github.com/SatyamDave/fall_forward_labs/pull/72) | Make SimVenue consume liquidity and respect queue position | 2026-09-28 |
 | [#75](https://github.com/SatyamDave/fall_forward_labs/pull/75) | Add self-cross, wash-trade and daily-notional dollar caps to qc-risk | 2026-09-28 |
 | [#80](https://github.com/SatyamDave/fall_forward_labs/pull/80) | Replaying a recorded decision gives the same ledger every time | 2026-09-28 |
-| [#74](https://github.com/SatyamDave/fall_forward_labs/pull/74) | Prove the agent can only place orders one way, replay decisions for free, write the live prompt | 2026-09-28 |
 
 ## Recent commits on main
 
 | Commit | Date | Subject |
 |---|---|---|
+| `d7d8254` | 2026-09-28 | Merge pull request #89 from SatyamDave/wave3/level2 |
+| `40ecd57` | 2026-09-28 | docs(status): regenerate live status from e564b3d [skip ci] |
+| `4390f58` | 2026-09-28 | Merge main into wave3/level2 before merging #89 |
+| `25e0a71` | 2026-09-28 | Record the full order book, not just the best price |
 | `e564b3d` | 2026-09-28 | docs(status): regenerate live status from 3f66f6b [skip ci] |
 | `3f66f6b` | 2026-09-28 | Merge pull request #88 from SatyamDave/docs/sync-after-waves |
 | `44b30a8` | 2026-09-28 | docs: bring README, ARCHITECTURE, ROADMAP, NOW, TEAM and the guide up to main |
@@ -49,10 +52,6 @@ Paid AI loops: **off**.
 | `49d66dd` | 2026-09-28 | Merge main into safety/halt-path before merging #87 |
 | `30d58ad` | 2026-09-28 | test(agent): run test files one at a time |
 | `a75ef5d` | 2026-09-28 | The kill switch cancels everything at the broker, even if the agent is stuck |
-| `9b0e697` | 2026-09-28 | docs(status): regenerate live status from aa603d1 [skip ci] |
-| `aa603d1` | 2026-09-28 | Merge pull request #86 from SatyamDave/fix/arch-check-headings |
-| `fa306e1` | 2026-09-28 | fix(ci): accept PR-template sections written as headings without a colon |
-| `e743334` | 2026-09-28 | docs(status): regenerate live status from 13866c8 [skip ci] |
 
 ## Decisions (ADRs)
 
