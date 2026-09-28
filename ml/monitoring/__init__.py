@@ -1,9 +1,11 @@
 """Drift monitoring. Demotion to "no signal" is automatic; promotion never is.
 
 Demoting only ever removes authority, so it needs no approval and writes its record at once.
-Promotion refuses to run without a human-approval record for exactly this artifact. The code
-can only check the record is present and consistent; that a human (not an agent) wrote it is
-enforced by PR review and CODEOWNERS on the registry file.
+Promotion refuses to run unless the record's walk-forward verdict is PASS and a human-approval
+record for exactly this artifact is supplied. The code checks only that the approval is present
+and consistent. `HumanApproval` is a plain record any caller, agent included, can construct;
+nothing in code or repository settings enforces that a human wrote it (CODEOWNERS is not
+enforced on this plan). Only the owner's merge discipline stands behind it today.
 """
 
 import dataclasses
