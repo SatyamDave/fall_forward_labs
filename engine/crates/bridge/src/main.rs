@@ -1,5 +1,5 @@
 //! `qc-bridge <recording> [--limits <path>] [--decide-every <n>] [--tick <decimal>]
-//!            [--model <path> --model-sha256 <hex>]`
+//!            [--model <path> --model-sha256 <hex>] [--venue sim|external]`
 //!
 //! Reads protocol v1 requests as JSON Lines on stdin, writes one JSON Lines
 //! response per request on stdout, and exits after `shutdown` or end of
@@ -9,7 +9,7 @@
 use std::io::{BufRead, Write as _};
 use std::process::ExitCode;
 
-use qc_bridge::engine::{BridgeEngine, LoadedModel};
+use qc_bridge::engine::{BridgeEngine, LoadedModel, VenueMode};
 use qc_inference::linear::LinearModel;
 use qc_risk::{KillSwitch, Limits};
 
@@ -20,6 +20,7 @@ struct Args {
     tick: String,
     model: Option<String>,
     model_sha256: Option<String>,
+    venue: VenueMode,
 }
 
 const DEFAULT_LIMITS: &str = "../config/limits/default.toml";
@@ -35,6 +36,7 @@ fn parse_args(mut rest: impl Iterator<Item = String>) -> Result<Args, String> {
         tick: DEFAULT_TICK.to_owned(),
         model: None,
         model_sha256: None,
+        venue: VenueMode::Sim,
     };
     while let Some(flag) = rest.next() {
         let mut value = || rest.next().ok_or(format!("{flag} needs a value"));
@@ -48,6 +50,7 @@ fn parse_args(mut rest: impl Iterator<Item = String>) -> Result<Args, String> {
             "--tick" => args.tick = value()?,
             "--model" => args.model = Some(value()?),
             "--model-sha256" => args.model_sha256 = Some(value()?),
+            "--venue" => args.venue = value()?.parse()?,
             other => return Err(format!("unknown flag {other}")),
         }
     }
@@ -70,7 +73,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let args = parse_args(std::env::args().skip(1)).map_err(|e| {
         format!(
             "{e}\nusage: qc-bridge <recording> [--limits <path>] [--decide-every <n>] \
-             [--tick <decimal>] [--model <path> --model-sha256 <hex>]"
+             [--tick <decimal>] [--model <path> --model-sha256 <hex>] [--venue sim|external]"
         )
     })?;
     let limits: Limits = toml::from_str(&std::fs::read_to_string(&args.limits)?)?;
@@ -84,6 +87,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         tick,
         args.decide_every,
         model,
+        args.venue,
     );
 
     let stdin = std::io::stdin();

@@ -3,7 +3,7 @@
 //! some of these functions is not dead code.
 #![allow(dead_code)]
 
-use qc_bridge::BridgeEngine;
+use qc_bridge::{BridgeEngine, VenueMode};
 use qc_risk::{KillSwitch, Limits};
 
 /// The workspace's default limits, same file `qc_risk`'s own tests load. Deliberately tiny
@@ -58,6 +58,7 @@ pub fn engine_from_with_limits(csv: &str, decide_every: u32, limits: Limits) -> 
         "0.1".parse().unwrap(),
         decide_every,
         None,
+        VenueMode::Sim,
     )
 }
 
@@ -75,5 +76,23 @@ pub fn engine_with_kill_switch(
         "0.1".parse().unwrap(),
         decide_every,
         None,
+        VenueMode::Sim,
+    )
+}
+
+/// Same as [`engine_from`] but started with `--venue external` (protocol
+/// v1.1, issues #34/#29): an accepted intent is recorded `PendingNew` and
+/// never routed to `SimVenue`, and the result carries a signed `approval`.
+#[must_use]
+pub fn engine_external(csv: &str, decide_every: u32) -> BridgeEngine {
+    let records = BridgeEngine::load_recording(csv).expect("fixture csv parses");
+    BridgeEngine::new(
+        records,
+        limits(),
+        KillSwitch::new(),
+        "0.1".parse().unwrap(),
+        decide_every,
+        None,
+        VenueMode::External,
     )
 }

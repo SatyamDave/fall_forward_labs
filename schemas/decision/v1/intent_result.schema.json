@@ -20,6 +20,9 @@
     },
     "halted": {
       "type": "string"
+    },
+    "approval": {
+      "$ref": "approval.schema.json"
     }
   }
 }
