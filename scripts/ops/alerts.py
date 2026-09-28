@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Alert checker for the live host (#64). Standard library only.
 
-Reads qc-bridge's JSON-lines log and the agent's spend ledger, and raises an alert for each of:
+Reads qc-bridge's JSON-lines log, the agent's spend ledger, and (issue #45/#70) the daily P&L
+report `scripts/reports/pnl_report.py` writes to `fund/track-record/daily/<date>.json`, raising an
+alert for each of:
   - halt              any {"event": "halt"} line (any reason)
   - kill_switch       a halt with reason "kill_switch", or a future "kill_switch_engaged" event
   - reconciliation_mismatch   a halt with reason "reconciliation"
@@ -9,6 +11,7 @@ Reads qc-bridge's JSON-lines log and the agent's spend ledger, and raises an ale
                                trailing --reject-window-sec window
   - spend_cap         the agent ledger's cost_usd sum for the current UTC day exceeds
                        --spend-ratio of --daily-cap-usd
+  - stop_rule         the daily P&L report at --pnl-report has `stop_rule.triggered: true`
 
 Integration notes (for the bridge-v1.1 lane; this is the *contract* this checker needs from
 qc-bridge's own log, not something read from a merged bridge-v1.1 PR -- it runs in parallel):
@@ -40,6 +43,14 @@ is a decimal string (`agent/src/types.ts`, wave 2 -- it was a JSON number throug
 it here via `Decimal(str(cost_usd))` works the same either way (a pre-wave-2 ledger line with a
 bare float still parses), so this checker needed no code change for that fix, only this note.
 
+Daily P&L report (issue #70, `scripts/reports/pnl_report.py`, `fund/track-record/README.md`):
+one JSON object, not JSON-lines, at `--pnl-report` (default: none -- this check is skipped
+unless given a path). This checker reads exactly one field, `stop_rule.triggered`; the report's
+own thresholds (placeholder pending founders' decision #23, per that script) are not re-evaluated
+here. Fires once per calendar date recorded in the report's own `date` field (dedup key
+`stop_rule:<date>`), not once per run, so a human isn't re-alerted every 1-2 minutes for the same
+day's already-seen trip.
+
 Usage (run periodically, e.g. from a systemd timer every 1-2 minutes -- "within minutes" per
 #64 does not need a persistent tailing process). --bridge-log points at whichever log file
 actually carries qc-bridge's output: ops/live/logs/agent.log in today's one-process topology
@@ -47,6 +58,8 @@ actually carries qc-bridge's output: ops/live/logs/agent.log in today's one-proc
 supervisor.py's --bridge-cmd is used (see ops/live/README.md):
     alerts.py --bridge-log ops/live/logs/agent.log --agent-ledger out/agent/ledger.jsonl \\
         --daily-cap-usd 5.00 --state-file ops/live/state/alerts-seen.json
+scripts/ops/daily_close.py (issue #45/#70) calls this checker with --pnl-report set, once a day,
+after writing that day's broker-sourced record.
 Exit code: 1 if any alert fired this run, 0 otherwise (so a systemd OnFailure= hook, or a cron
 mailer, can double as a second notification path).
 """
@@ -76,6 +89,7 @@ RUNBOOKS = {
     "reconciliation_mismatch": "docs/runbooks/reconciliation-mismatch.md",
     "repeated_risk_rejects": "docs/runbooks/repeated-risk-rejects.md",
     "spend_cap": "docs/runbooks/spend-cap.md",
+    "stop_rule": "docs/runbooks/stop-rule-tripped.md",
 }
 
 
@@ -253,6 +267,27 @@ def check_spend_cap(
     ]
 
 
+def check_stop_rule(pnl_report: dict[str, object] | None) -> list[Alert]:
+    """`pnl_report` is the parsed daily record `scripts/reports/pnl_report.py` writes (issue #70)
+    -- `None` (no `--pnl-report` given, or the file doesn't exist yet) means "not checked," which
+    must never be silently treated as "clean." A malformed report fails loud (KeyError/TypeError
+    propagates) rather than being swallowed like a malformed *log line* is elsewhere in this
+    file -- a whole missing/broken report is an operational problem serious enough to want a
+    traceback, not a skip."""
+    if pnl_report is None:
+        return []
+    stop_rule = pnl_report.get("stop_rule")
+    if not isinstance(stop_rule, dict) or not stop_rule.get("triggered"):
+        return []
+    date = pnl_report.get("date", "unknown-date")
+    reasons = "; ".join(str(r) for r in stop_rule.get("reasons", [])) or "no reason recorded"
+    return [
+        Alert(
+            "stop_rule", "critical", f"stop rule tripped for {date}: {reasons}", f"stop_rule:{date}"
+        )
+    ]
+
+
 def load_state(path: Path) -> set[str]:
     if not path.exists():
         return set()
@@ -288,6 +323,12 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     p.add_argument("--spend-ratio", type=float, default=0.8)
     p.add_argument("--webhook-url", help="POST alerts here instead of printing (no default)")
     p.add_argument("--now-ns", type=int, help="override 'now' for deterministic testing")
+    p.add_argument(
+        "--pnl-report",
+        type=Path,
+        help="scripts/reports/pnl_report.py's daily record (fund/track-record/daily/<date>.json); "
+        "alerts if its stop_rule.triggered is true (issue #70). Omit to skip this check.",
+    )
     return p.parse_args(argv)
 
 
@@ -309,6 +350,8 @@ def main(argv: list[str] | None = None) -> int:
     if args.agent_ledger:
         ledger = read_jsonl(args.agent_ledger)
         alerts += check_spend_cap(ledger, now_ns, args.daily_cap_usd, args.spend_ratio)
+    if args.pnl_report and args.pnl_report.exists():
+        alerts += check_stop_rule(json.loads(args.pnl_report.read_text(encoding="utf-8")))
 
     seen = load_state(args.state_file)
     fresh = dedup(alerts, seen)

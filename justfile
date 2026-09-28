@@ -147,6 +147,15 @@ report-ledger *args:
 report-pnl *args:
     python3 scripts/reports/pnl_report.py {{args}}
 
+# Issue #45 (scheduling) + #70: the once-a-day close. Runs (or checks) the day's broker
+# reconciliation, writes the broker-sourced daily P&L (report-pnl --source broker) with that
+# verdict embedded, and alerts (scripts/ops/alerts.py) on a reconcile mismatch or a stop-rule
+# trip. No live host exists yet (ops/live/README.md), so without --reconcile-cmd this always
+# reports reconciliation "unknown" and exits nonzero -- fails closed rather than claiming clean.
+# See scripts/ops/daily_close.py's module docstring for the systemd-timer wiring.
+daily-close *args:
+    python3 scripts/ops/daily_close.py {{args}}
+
 # Issue #50/#51: refuse to start live trading unless every go-live gate passes (ADR-0040 status,
 # founder sign-offs, canary caps, the autonomy policy, the kill switch, reconciliation, secrets,
 # latency). Exit 1 and every failing gate printed in plain language if any gate fails.

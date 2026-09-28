@@ -2,9 +2,10 @@
 """Issue #70: track honest profit, and know when to stop.
 
   scripts/reports/pnl_report.py [--ledger PATH] [--policy PATH] [--date YYYY-MM-DD] [--out DIR]
+      [--source {decision_ledger,broker}] [--broker-journal PATH]
 
-Computes realized + unrealized P&L after fees from the decision ledger, next to two baselines
-(no-trade, buy-and-hold), cumulative drawdown, and AI cost — then evaluates a stop rule read from
+Computes realized + unrealized P&L after fees next to two baselines (no-trade, buy-and-hold),
+cumulative drawdown, and AI cost — then evaluates a stop rule read from
 `scripts/reports/pnl_policy.toml` (placeholder thresholds, pending founders' decision #23; see
 that file's own docstring). Writes one append-only file per day to
 `fund/track-record/daily/<date>.json` (fund/track-record/README.md documents the format);
@@ -12,15 +13,23 @@ that file's own docstring). Writes one append-only file per day to
 
 Money math is `decimal.Decimal` throughout — never a float (root CLAUDE.md: no floats for money).
 
-## Known limitation (recorded, not hidden)
+## Two sources, honestly labelled (issue #45 closes the gap between them)
 
-This reads the *decision* ledger (`out/agent/ledger.jsonl`), not a reconciled venue ledger: issue
-#45 (daily reconciliation against Robinhood's own reported state) does not exist yet. Every fill
-here is an *assumption* — an accepted buy/sell decision is treated as fully filled at its own
-`limit_price` and `qty` — not a real venue fill price. Every report's `source` field says
-`"decision_ledger_estimate"` for exactly this reason, and this script does not claim to be
-`"reconciled"`. Swap in #45's real fills the day that ledger exists; nothing else here changes
-shape (`apply_fill` reads `(side, qty, price)` regardless of where those three values come from).
+`--source decision_ledger` (the default, unchanged behaviour): every accepted buy/sell decision
+is treated as fully filled at its own `limit_price` and `qty` — an *assumption*, not a real venue
+fill. `source` in the written record is `"decision_ledger_estimate"`.
+
+`--source broker` (new): reads the gateway's broker journal (`agent/src/broker/journal.ts`'s
+output, default `out/agent/broker-journal.jsonl`) and, for each accepted decision whose
+`client_order_id` the journal has resolved to `"filled"`/`"partially_filled"`, uses the broker's
+own `filled_qty`/`avg_price` — what Robinhood actually reported via `report_execution` — instead
+of the decision's estimate. A decision whose order was rejected, canceled, or never resolved by
+the broker contributes no fill at all (not a zero-price one); `fills` in the written record counts
+`accepted_orders` vs `matched_fills` so a lagging or incomplete journal is visible, not silently
+papered over. `source` in the written record is `"reconciled"` (matching
+fund/track-record/README.md's documented contract), and `reconciliation` optionally carries the
+day's broker reconciliation-check outcome when the caller (`scripts/ops/daily_close.py`) supplies
+one — this script itself does not talk to a broker or a bridge.
 
 Standard library only, matching every other script in scripts/eval and scripts/reports.
 """
@@ -31,6 +40,7 @@ import argparse
 import datetime as dt
 import json
 import tomllib
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from decimal import Decimal
 from pathlib import Path
@@ -40,7 +50,17 @@ ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_LEDGER = ROOT / "out/agent/ledger.jsonl"
 DEFAULT_POLICY = Path(__file__).resolve().parent / "pnl_policy.toml"
 DEFAULT_OUT = ROOT / "fund/track-record/daily"
-SOURCE = "decision_ledger_estimate"
+DEFAULT_BROKER_JOURNAL = ROOT / "out/agent/broker-journal.jsonl"
+SOURCE_DECISION_LEDGER = "decision_ledger_estimate"
+SOURCE_RECONCILED = (
+    "reconciled"  # fund/track-record/README.md: the label once #45's output feeds this
+)
+SOURCE = SOURCE_DECISION_LEDGER  # back-compat alias: scripts/eval/{live_agent,promote,scenarios}.py
+
+# A fill resolver takes one decision-ledger entry and returns (side, qty, price) if it produced a
+# real fill, else None -- the one seam between "what filled" and the P&L math in compute(), so
+# both sources below share exactly one average-cost engine (apply_fill).
+FillResolver = Callable[[dict[str, Any]], "tuple[str, Decimal, Decimal] | None"]
 
 
 @dataclass
@@ -106,6 +126,86 @@ def load_entries(ledger: Path) -> list[dict[str, Any]]:
     return entries
 
 
+def load_broker_journal(path: Path) -> dict[int, dict[str, Any]]:
+    """Mirrors `agent/src/broker/journal.ts`'s `replayJournal()`: the last entry for a given
+    `client_order_id` wins, and only a `"resolved"` entry (a real `PlaceOrderResult`) is kept --
+    an `"attempt"` with no later `"resolved"` line means the broker never confirmed an outcome
+    for that order, which this resolves to "no fill" (dropping the id), never "filled." A
+    corrupt or unrecognized line fails closed (raises) rather than silently under-counting fills,
+    matching the TS reader and root CLAUDE.md rule 12."""
+    if not path.exists():
+        return {}
+    out: dict[int, dict[str, Any]] = {}
+    for line in path.read_text().splitlines():
+        if not line.strip():
+            continue
+        entry = json.loads(line)
+        client_order_id = entry.get("client_order_id")
+        if not isinstance(client_order_id, int):
+            raise ValueError(
+                f"{path}: journal entry missing an integer client_order_id: {line[:200]}"
+            )
+        phase = entry.get("phase")
+        if phase == "attempt":
+            out.pop(
+                client_order_id, None
+            )  # supersede any earlier resolved line: outcome unknown again
+        elif phase == "resolved" and isinstance(entry.get("result"), dict):
+            out[client_order_id] = entry["result"]
+        else:
+            raise ValueError(f"{path}: journal entry has an unrecognized shape: {line[:200]}")
+    return out
+
+
+def _decision_ledger_fill(entry: dict[str, Any]) -> tuple[str, Decimal, Decimal] | None:
+    """Default resolver: an accepted buy/sell decision is treated as filled in full at its own
+    proposed qty/limit_price -- the pre-#45 assumption (module docstring)."""
+    decision = entry.get("decision", {})
+    result = entry.get("result")
+    action = decision.get("action")
+    if action in ("buy", "sell") and isinstance(result, dict) and result.get("accepted") is True:
+        return action, Decimal(str(decision["qty"])), Decimal(str(decision["limit_price"]))
+    return None
+
+
+def make_broker_fill_resolver(journal: dict[int, dict[str, Any]]) -> FillResolver:
+    """Resolver backing `--source broker`: only a `client_order_id` the journal has resolved to a
+    real fill (`"filled"` or `"partially_filled"`, with both `filled_qty` and `avg_price` present)
+    counts -- a rejected, canceled, or still-unresolved order contributes nothing, never a zero or
+    an assumed fill."""
+
+    def resolve(entry: dict[str, Any]) -> tuple[str, Decimal, Decimal] | None:
+        decision = entry.get("decision", {})
+        result = entry.get("result")
+        action = decision.get("action")
+        if action not in ("buy", "sell"):
+            return None
+        if not isinstance(result, dict) or result.get("accepted") is not True:
+            return None
+        client_order_id = result.get("client_order_id")
+        if not isinstance(client_order_id, int):
+            return None
+        resolved = journal.get(client_order_id)
+        if resolved is None or resolved.get("status") not in ("filled", "partially_filled"):
+            return None
+        filled_qty, avg_price = resolved.get("filled_qty"), resolved.get("avg_price")
+        if not filled_qty or not avg_price:
+            return None
+        return action, Decimal(str(filled_qty)), Decimal(str(avg_price))
+
+    return resolve
+
+
+def _is_accepted_trade(entry: dict[str, Any]) -> bool:
+    decision = entry.get("decision", {})
+    result = entry.get("result")
+    return (
+        decision.get("action") in ("buy", "sell")
+        and isinstance(result, dict)
+        and result.get("accepted") is True
+    )
+
+
 def _day(ts_ns: int) -> str:
     return dt.datetime.fromtimestamp(ts_ns / 1e9, tz=dt.UTC).date().isoformat()
 
@@ -127,23 +227,37 @@ class PnLResult:
     buy_and_hold: dict[str, str] | None
     max_drawdown_usd: str
     ai_cost_usd: str
+    fills: dict[str, int]
     stop_rule: dict[str, Any]
+    # Only meaningful for source="reconciled"; set by the caller (daily_close.py), never computed
+    # here (this module never talks to a broker or a bridge itself). None means "not checked by
+    # this run" -- never coerced into "ok" (root CLAUDE.md rule 10: neither side silently trusted).
+    reconciliation: dict[str, Any] | None = None
 
 
-def compute(entries: list[dict[str, Any]], fee_bps: Decimal) -> tuple[PnLResult, list[EquityPoint]]:
+def compute(
+    entries: list[dict[str, Any]],
+    fee_bps: Decimal,
+    resolve_fill: FillResolver = _decision_ledger_fill,
+) -> tuple[PnLResult, list[EquityPoint]]:
     """Two passes over `entries`, both cheap and both needed for a *fixed* buy-and-hold size:
     pass 1 replays every fill to find the agent's peak absolute position (the buy-and-hold
     baseline is sized to this — see module docstring: no arbitrary reference size is invented);
     pass 2 marks the agent's position and a buy-and-hold position (entered once, at the first
     entry's mid, for that same size) to every entry's own mid, building both equity curves in
-    lockstep for the drawdown and stop-rule checks below."""
+    lockstep for the drawdown and stop-rule checks below.
+
+    `resolve_fill` is the one seam between "what filled" (an assumed decision-ledger fill, or a
+    real broker-journal fill) and this accounting; it defaults to the pre-#45 assumption so every
+    existing caller (this module's own `main`, `scripts/eval/{live_agent,promote,
+    scenarios_from_ledger}.py`) is unchanged."""
     pos = Position()
     position_curve: list[Position] = []
     peak_abs_qty = Decimal(0)
     ai_cost = Decimal(0)
+    accepted_orders = 0
+    matched_fills = 0
     for entry in entries:
-        decision = entry.get("decision", {})
-        result = entry.get("result")
         cost = entry.get("cost_usd")
         # Wave 2: cost_usd is now a decimal string (root CLAUDE.md "no floats for money"); still
         # accept a bare number for any pre-wave-2 fixture/ledger line that hasn't been
@@ -153,15 +267,13 @@ def compute(entries: list[dict[str, Any]], fee_bps: Decimal) -> tuple[PnLResult,
                 ai_cost += Decimal(str(cost))
             except (ArithmeticError, ValueError):
                 pass
-        action = decision.get("action")
-        if (
-            action in ("buy", "sell")
-            and isinstance(result, dict)
-            and result.get("accepted") is True
-        ):
-            qty = Decimal(str(decision["qty"]))
-            price = Decimal(str(decision["limit_price"]))
-            pos = apply_fill(pos, action, qty, price, fee_bps)
+        if _is_accepted_trade(entry):
+            accepted_orders += 1
+        fill = resolve_fill(entry)
+        if fill is not None:
+            side, qty, price = fill
+            pos = apply_fill(pos, side, qty, price, fee_bps)
+            matched_fills += 1
         position_curve.append(pos)
         peak_abs_qty = max(peak_abs_qty, abs(pos.qty))
 
@@ -204,13 +316,14 @@ def compute(entries: list[dict[str, Any]], fee_bps: Decimal) -> tuple[PnLResult,
         }
 
     result = PnLResult(
-        source=SOURCE,
+        source=SOURCE_DECISION_LEDGER,  # caller (build_report/main) overrides for --source broker
         entry_count=len(entries),
         agent=agent_summary,
         no_trade={"total_pnl_usd": "0"},
         buy_and_hold=bh_summary,
         max_drawdown_usd=str(max_drawdown),
         ai_cost_usd=str(ai_cost),
+        fills={"accepted_orders": accepted_orders, "matched_fills": matched_fills},
         stop_rule={},  # filled in by evaluate_stop_rule
     )
     return result, curve
@@ -263,11 +376,24 @@ def load_policy(path: Path) -> dict[str, Any]:
         return tomllib.load(f)
 
 
-def build_report(ledger: Path, policy_path: Path) -> tuple[PnLResult, list[EquityPoint]]:
+def build_report(
+    ledger: Path,
+    policy_path: Path,
+    source: str = SOURCE_DECISION_LEDGER,
+    broker_journal: Path = DEFAULT_BROKER_JOURNAL,
+) -> tuple[PnLResult, list[EquityPoint]]:
     entries = load_entries(ledger)
     policy = load_policy(policy_path)
     fee_bps = Decimal(str(policy["fees"]["fee_bps"]))
-    result, curve = compute(entries, fee_bps)
+    if source == SOURCE_RECONCILED:
+        resolver = make_broker_fill_resolver(load_broker_journal(broker_journal))
+    elif source == SOURCE_DECISION_LEDGER:
+        resolver = _decision_ledger_fill
+    else:
+        expected = f"{SOURCE_DECISION_LEDGER!r} or {SOURCE_RECONCILED!r}"
+        raise ValueError(f"unknown P&L source {source!r} (expected {expected})")
+    result, curve = compute(entries, fee_bps, resolver)
+    result.source = source
     result.stop_rule = evaluate_stop_rule(result, curve, policy)
     return result, curve
 
@@ -298,11 +424,16 @@ def write_daily_record(result: PnLResult, date: str, out_dir: Path) -> Path:
 
 
 def render_markdown(result: PnLResult, date: str) -> str:
+    source_note = (
+        "Not yet reconciled against a venue statement (issue #45)."
+        if result.source == SOURCE_DECISION_LEDGER
+        else f"Fills matched against the broker journal: {result.fills['matched_fills']}/"
+        f"{result.fills['accepted_orders']} accepted order(s) resolved to a real fill."
+    )
     lines = [
         f"# P&L report — {date}",
         "",
-        f"Source: `{result.source}` ({result.entry_count} decision(s)). "
-        "Not yet reconciled against a venue statement (issue #45).",
+        f"Source: `{result.source}` ({result.entry_count} decision(s)). {source_note}",
         "",
         "## Agent (after fees)",
         f"- realized: ${result.agent['realized_pnl_usd']}",
@@ -330,6 +461,15 @@ def render_markdown(result: PnLResult, date: str) -> str:
     for reason in result.stop_rule["reasons"]:
         lines.append(f"  - {reason}")
     lines.append(f"- thresholds: {result.stop_rule['thresholds_source']}")
+    if result.reconciliation is not None:
+        lines += [
+            "",
+            "## Reconciliation",
+            f"- status: {result.reconciliation.get('status')}",
+        ]
+        detail = result.reconciliation.get("detail")
+        if detail:
+            lines.append(f"- detail: {detail}")
     lines.append("")
     return "\n".join(lines)
 
@@ -340,6 +480,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--policy", type=Path, default=DEFAULT_POLICY)
     parser.add_argument("--date", type=str, default=None)
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
+    parser.add_argument(
+        "--source",
+        choices=[SOURCE_DECISION_LEDGER, "broker"],
+        default=SOURCE_DECISION_LEDGER,
+        help="'broker' computes fills from --broker-journal (the gateway's report_execution "
+        "record) instead of assuming every accepted decision filled at its own price/qty",
+    )
+    parser.add_argument("--broker-journal", type=Path, default=DEFAULT_BROKER_JOURNAL)
     args = parser.parse_args(argv)
 
     entries = load_entries(args.ledger)
@@ -351,7 +499,10 @@ def main(argv: list[str] | None = None) -> int:
             else dt.datetime.now(dt.UTC).date().isoformat()
         )
 
-    result, _curve = build_report(args.ledger, args.policy)
+    source = SOURCE_RECONCILED if args.source == "broker" else SOURCE_DECISION_LEDGER
+    result, _curve = build_report(
+        args.ledger, args.policy, source=source, broker_journal=args.broker_journal
+    )
     path = write_daily_record(result, date, args.out)
     print(render_markdown(result, date))
     print(f"(written to {path})")

@@ -253,6 +253,211 @@ def test_write_daily_record_is_idempotent_for_identical_content(tmp_path: Path) 
     assert json.loads(path1.read_text())["date"] == "2026-01-01"
 
 
+# --- --source broker: P&L from the gateway journal's real fills (issue #45) ------------------
+
+
+def _journal_line(client_order_id: int, phase: str, **result_fields: object) -> str:
+    entry: dict = {"client_order_id": client_order_id, "phase": phase}
+    if phase == "resolved":
+        entry["result"] = {"raw": {}, **result_fields}
+    return json.dumps(entry)
+
+
+def test_broker_resolver_uses_the_journals_fill_not_the_decisions_estimate() -> None:
+    # Decision proposed 1@110; the broker actually filled 1@111 (report_execution's own price) --
+    # the whole point of #45 is that this, not the decision's guess, is what P&L is built from.
+    entries = [
+        _entry(
+            "dr-1",
+            0,
+            "buy",
+            "110",
+            {"accepted": True, "client_order_id": 1},
+            0.0,
+            qty="1",
+            limit_price="110",
+        ),
+    ]
+    journal = {1: {"status": "filled", "filled_qty": "1", "avg_price": "111"}}
+    resolver = pnl_report.make_broker_fill_resolver(journal)
+    result, _curve = pnl_report.compute(entries, fee_bps=D(0), resolve_fill=resolver)
+    # bought 1@111 (not 110): mark_final=110 -> unrealized (110-111)*1 = -1
+    assert result.agent["unrealized_pnl_usd"] == "-1"
+    assert result.fills == {"accepted_orders": 1, "matched_fills": 1}
+
+
+def test_broker_resolver_drops_an_order_the_journal_never_resolved() -> None:
+    # Accepted by the bridge, but the broker journal has no resolved entry yet (still in flight,
+    # or the process crashed before learning the outcome) -- must NOT be assumed filled.
+    entries = [
+        _entry(
+            "dr-1",
+            0,
+            "buy",
+            "110",
+            {"accepted": True, "client_order_id": 1},
+            0.0,
+            qty="1",
+            limit_price="110",
+        ),
+    ]
+    resolver = pnl_report.make_broker_fill_resolver({})
+    result, _curve = pnl_report.compute(entries, fee_bps=D(0), resolve_fill=resolver)
+    assert result.agent["unrealized_pnl_usd"] == "0"  # no fill applied at all
+    assert result.fills == {"accepted_orders": 1, "matched_fills": 0}
+
+
+def test_broker_resolver_drops_a_rejected_or_canceled_order() -> None:
+    entries = [
+        _entry(
+            "dr-1",
+            0,
+            "buy",
+            "110",
+            {"accepted": True, "client_order_id": 1},
+            0.0,
+            qty="1",
+            limit_price="110",
+        ),
+    ]
+    journal = {1: {"status": "rejected", "reason": "insufficient_funds"}}
+    resolver = pnl_report.make_broker_fill_resolver(journal)
+    result, _curve = pnl_report.compute(entries, fee_bps=D(0), resolve_fill=resolver)
+    assert result.agent["unrealized_pnl_usd"] == "0"
+    assert result.fills == {"accepted_orders": 1, "matched_fills": 0}
+
+
+def test_broker_resolver_uses_partial_fill_quantity() -> None:
+    entries = [
+        _entry(
+            "dr-1",
+            0,
+            "buy",
+            "110",
+            {"accepted": True, "client_order_id": 1},
+            0.0,
+            qty="10",
+            limit_price="110",
+        ),
+    ]
+    journal = {1: {"status": "partially_filled", "filled_qty": "4", "avg_price": "109"}}
+    resolver = pnl_report.make_broker_fill_resolver(journal)
+    result, _curve = pnl_report.compute(entries, fee_bps=D(0), resolve_fill=resolver)
+    # only 4 filled (not the requested 10) @109: mark_final=110 -> unrealized (110-109)*4 = 4
+    assert result.agent["unrealized_pnl_usd"] == "4"
+
+
+def test_load_broker_journal_last_entry_per_client_order_id_wins(tmp_path: Path) -> None:
+    path = tmp_path / "broker-journal.jsonl"
+    path.write_text(
+        "\n".join(
+            [
+                _journal_line(1, "attempt"),
+                _journal_line(1, "resolved", status="filled", filled_qty="1", avg_price="100"),
+                _journal_line(2, "attempt"),  # never resolved -- must not appear in the map at all
+            ]
+        )
+        + "\n"
+    )
+    journal = pnl_report.load_broker_journal(path)
+    assert journal == {1: {"status": "filled", "filled_qty": "1", "avg_price": "100", "raw": {}}}
+
+
+def test_load_broker_journal_missing_file_is_empty(tmp_path: Path) -> None:
+    assert pnl_report.load_broker_journal(tmp_path / "does-not-exist.jsonl") == {}
+
+
+def test_load_broker_journal_rejects_a_corrupt_line(tmp_path: Path) -> None:
+    path = tmp_path / "broker-journal.jsonl"
+    path.write_text('{"client_order_id": 1, "phase": "sideways"}\n')
+    try:
+        pnl_report.load_broker_journal(path)
+        raised = False
+    except ValueError:
+        raised = True
+    assert raised, "an unrecognized journal entry shape must fail closed, not be skipped"
+
+
+def test_build_report_source_broker_labels_the_result_reconciled(tmp_path: Path) -> None:
+    ledger = tmp_path / "ledger.jsonl"
+    ledger.write_text(
+        json.dumps(
+            _entry(
+                "dr-1",
+                0,
+                "buy",
+                "110",
+                {"accepted": True, "client_order_id": 1},
+                0.0,
+                qty="1",
+                limit_price="110",
+            )
+        )
+        + "\n"
+    )
+    journal = tmp_path / "broker-journal.jsonl"
+    journal.write_text(
+        _journal_line(1, "resolved", status="filled", filled_qty="1", avg_price="111") + "\n"
+    )
+
+    result, _curve = pnl_report.build_report(
+        ledger,
+        pnl_report.DEFAULT_POLICY,
+        source=pnl_report.SOURCE_RECONCILED,
+        broker_journal=journal,
+    )
+    assert result.source == "reconciled"
+    assert result.agent["unrealized_pnl_usd"] == "-1"  # filled at 111, not the decision's 110
+
+
+def test_build_report_default_source_is_unchanged() -> None:
+    result, _curve = pnl_report.build_report(pnl_report.DEFAULT_LEDGER, pnl_report.DEFAULT_POLICY)
+    assert result.source == "decision_ledger_estimate"
+
+
+def test_cli_source_broker_writes_reconciled_and_exits_on_stop_rule(tmp_path: Path) -> None:
+    ledger = tmp_path / "ledger.jsonl"
+    ledger.write_text(
+        json.dumps(
+            _entry(
+                "dr-1",
+                0,
+                "buy",
+                "110",
+                {"accepted": True, "client_order_id": 1},
+                0.0,
+                qty="1",
+                limit_price="110",
+            )
+        )
+        + "\n"
+    )
+    journal = tmp_path / "broker-journal.jsonl"
+    journal.write_text(
+        _journal_line(1, "resolved", status="filled", filled_qty="1", avg_price="111") + "\n"
+    )
+    out_dir = tmp_path / "daily"
+
+    code = pnl_report.main(
+        [
+            "--ledger",
+            str(ledger),
+            "--broker-journal",
+            str(journal),
+            "--source",
+            "broker",
+            "--date",
+            "2026-02-02",
+            "--out",
+            str(out_dir),
+        ]
+    )
+    written = json.loads((out_dir / "2026-02-02.json").read_text())
+    assert written["source"] == "reconciled"
+    assert written["fills"] == {"accepted_orders": 1, "matched_fills": 1}
+    assert code == 0  # stop rule not tripped by this tiny fixture
+
+
 def test_write_daily_record_refuses_to_overwrite_different_content(tmp_path: Path) -> None:
     result, curve = pnl_report.compute(FIXTURE_LEDGER, fee_bps=D(0))
     result.stop_rule = pnl_report.evaluate_stop_rule(result, curve, _policy("1000", 999))
