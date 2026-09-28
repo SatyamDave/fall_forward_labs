@@ -22,3 +22,6 @@ secrets/
 .vscode/
 # Scratch outputs of demo and smoke runs (just walkforward without --record)
 out/
+# Tier 2 live-agent-eval ledger (scripts/eval/live_agent.py): CI artifact only,
+# never committed unless a human deliberately records a result (evals/README.md).
+evals/ledger/*.jsonl

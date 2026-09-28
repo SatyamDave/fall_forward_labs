@@ -7,7 +7,7 @@ research := "research"
 # Python outside research/ and ml/ that ruff also checks, relative to research/. Not listed:
 # autonomy/ and tests/autonomy/ (protected paths that fail ruff today; fixing them needs a T3 PR),
 # and tests/replay/generate_sample_day.py (S311, PTH123; the fixture it wrote must stay identical).
-py_extra := "../data ../scripts ../tests/knowledge ../tests/hooks ../tests/ci ../.claude/hooks"
+py_extra := "../data ../scripts ../tests/knowledge ../tests/hooks ../tests/ci ../tests/evals ../.claude/hooks"
 
 default:
     @just --list
@@ -42,6 +42,7 @@ test:
     cd {{research}} && uv run pytest -q ../tests/knowledge
     cd {{research}} && uv run pytest -q ../tests/autonomy
     cd {{research}} && uv run pytest -q ../tests/ci
+    cd {{research}} && uv run pytest -q ../tests/evals
     cd {{research}} && uv run pytest -q studies/0001-favorite-longshot/tests
 
 # Known-vulnerability and license checks; each tool is skipped with a message if it is not installed
@@ -115,3 +116,8 @@ test-hooks:
 study-0001:
     cd {{research}} && uv run python studies/0001-favorite-longshot/study.py
     cd {{research}} && uv run pytest studies/0001-favorite-longshot/tests -q
+
+# Tier 1 eval suite: free, deterministic, every PR. Writes out/eval/report.{json,md}.
+# See evals/README.md for the tier design (this is Tier 1 of 3).
+eval:
+    python3 scripts/eval/run.py
