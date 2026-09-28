@@ -6,10 +6,10 @@ Regenerated automatically by `.github/workflows/docs-status.yml` on every merge 
 Narrative docs: [project guide](guide/quant-core-guide.html) ·
 [base status](reports/base-status.md) · [NOW](NOW.md).
 
-Generated from `main` at **1f5a183 2026-09-28**. Latest CI on `main`: **in_progress on 1f5a183**.
+Generated from `main` at **153f09e 2026-09-28**. Latest CI on `main`: **in_progress on 153f09e**.
 Paid AI loops: **off**.
 
-## Open pull requests (7)
+## Open pull requests (6)
 
 | PR | Title | Author | Draft |
 |---|---|---|---|
@@ -18,13 +18,13 @@ Paid AI loops: **off**.
 | [#77](https://github.com/SatyamDave/fall_forward_labs/pull/77) | ops: give live trading a safe home and alert on it breaking | SatyamDave | no |
 | [#75](https://github.com/SatyamDave/fall_forward_labs/pull/75) | Add self-cross, wash-trade and daily-notional dollar caps to qc-risk | SatyamDave | no |
 | [#74](https://github.com/SatyamDave/fall_forward_labs/pull/74) | Prove the agent can only place orders one way, replay decisions for free, write the live prompt | SatyamDave | no |
-| [#73](https://github.com/SatyamDave/fall_forward_labs/pull/73) | Build the broker gateway door and a mock Robinhood connection | SatyamDave | no |
 | [#72](https://github.com/SatyamDave/fall_forward_labs/pull/72) | Make SimVenue consume liquidity and respect queue position | SatyamDave | no |
 
 ## Recently merged
 
 | PR | Title | Merged |
 |---|---|---|
+| [#73](https://github.com/SatyamDave/fall_forward_labs/pull/73) | Build the broker gateway door and a mock Robinhood connection | 2026-09-28 |
 | [#76](https://github.com/SatyamDave/fall_forward_labs/pull/76) | Stamp approved orders and prove the bridge refuses what it doesn't understand | 2026-09-28 |
 | [#62](https://github.com/SatyamDave/fall_forward_labs/pull/62) | Record the second merge batch as a dated founder exception | 2026-09-28 |
 | [#56](https://github.com/SatyamDave/fall_forward_labs/pull/56) | Add the three-tier eval harness (just eval, Tier 1) | 2026-09-28 |
@@ -39,24 +39,23 @@ Paid AI loops: **off**.
 | [#6](https://github.com/SatyamDave/fall_forward_labs/pull/6) | Draft team plan and docs/NOW.md for both founders (Phase 1) | 2026-09-28 |
 | [#16](https://github.com/SatyamDave/fall_forward_labs/pull/16) | Test favorite-longshot bias on settled Kalshi markets: insufficient evidence, listing cap dropped every day | 2026-09-28 |
 | [#9](https://github.com/SatyamDave/fall_forward_labs/pull/9) | Propose first vertical in ADR-0020 and plan base completion (Phase 0) | 2026-09-28 |
-| [#4](https://github.com/SatyamDave/fall_forward_labs/pull/4) | Record decision-layer ADRs and TypeSafe vendor review (Phase 1) | 2026-09-28 |
 
 ## Recent commits on main
 
 | Commit | Date | Subject |
 |---|---|---|
+| `153f09e` | 2026-09-28 | Merge pull request #73 from SatyamDave/wave1/gateway |
+| `dd4ee3c` | 2026-09-28 | Merge main into wave1/gateway before merging #73 |
+| `6c3a887` | 2026-09-28 | docs(status): regenerate live status from 1f5a183 [skip ci] |
 | `1f5a183` | 2026-09-28 | Merge pull request #76 from SatyamDave/wave1/bridge-v11 |
+| `60e8d94` | 2026-09-28 | fix(agent/broker): persist a journal so a restart never blind-resubmits an order |
 | `b1fb65c` | 2026-09-28 | style(bridge): cargo fmt the negative-price test |
 | `0172d6e` | 2026-09-28 | docs(bridge): name the clock the gateway must use for approval expiry |
 | `34cc420` | 2026-09-28 | fix(bridge): refuse a negative fill price/qty in report_execution |
 | `d6995f2` | 2026-09-28 | test(bridge): cover report_execution halting on an unknown client_order_id |
 | `1d68507` | 2026-09-28 | feat(bridge): stamp approved orders and refuse anything the bridge doesn't understand |
+| `3169570` | 2026-09-28 | feat(agent/broker): add the broker gateway door and a mock Robinhood connection |
 | `5891507` | 2026-09-28 | docs(status): regenerate live status from 162974a [skip ci] |
-| `162974a` | 2026-09-28 | docs(status): regenerate live status from 360d053 [skip ci] |
-| `360d053` | 2026-09-28 | docs(status): regenerate live status from effb75d [skip ci] |
-| `effb75d` | 2026-09-27 | Merge pull request #62 from SatyamDave/docs/record-merge-exception |
-| `543468b` | 2026-09-27 | docs(team): record the second merge batch as a dated founder exception |
-| `fa7afb9` | 2026-09-28 | docs(status): regenerate live status from 9543372 [skip ci] |
 
 ## Decisions (ADRs)
 
