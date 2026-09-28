@@ -319,6 +319,18 @@ impl BridgeEngine {
         parse_records(text)
     }
 
+    /// Appends newly available records to the feed (protocol v1.2, `--follow`,
+    /// issue #48/shadow lane): lets `main.rs`'s tailing reader (`feed.rs`)
+    /// grow the feed as a recording file grows, instead of requiring the
+    /// whole file up front. Purely additive to [`Self::next_decision_request`]'s
+    /// existing `cursor < self.records.len()` loop — record order and the
+    /// engine's clock/decision logic are unchanged, so "same final file ->
+    /// same decisions" continues to hold regardless of when each append
+    /// happened.
+    pub fn feed_records(&mut self, more: impl IntoIterator<Item = Record>) {
+        self.records.extend(more);
+    }
+
     fn daily_pnl(&self) -> Price {
         let mark = self.book.mid().map_or(0, |m| i128::from(m.raw()));
         let pnl = self.cash + i128::from(self.position.raw()) * mark / i128::from(SCALE);
