@@ -169,10 +169,12 @@ def run(name: str, record_to_registry: bool = False) -> Path:
     best = max(results, key=lambda r: r.metrics["sharpe"])
     rets = best.returns
     perf_pbo = pbo(np.column_stack([r.returns for r in results]), val["pbo_blocks"])
-    # Every config in this run counts as a trial, on top of all earlier ones.
-    earlier = [t["metrics"]["sharpe"] for t in read(out.trials) if t["experiment"] == name]
+    # Every config in this run counts as a trial, on top of all earlier ones. Earlier trials come
+    # from the canonical ledger even in scratch mode, whose own ledger is wiped each run.
+    earlier = [t["metrics"]["sharpe"] for t in read(TRIALS) if t["experiment"] == name]
     all_sr = earlier + [r.metrics["sharpe"] for r in results]
-    n_trials = trial_count(out.trials, name) + len(results)
+    n_recorded = trial_count(TRIALS, name)
+    n_trials = n_recorded + len(results)
     sd = float(np.std(rets))
     skew = float(np.mean((rets - rets.mean()) ** 3) / sd**3) if sd > 0 else 0.0
     kurt = float(np.mean((rets - rets.mean()) ** 4) / sd**4) if sd > 0 else 3.0
@@ -227,7 +229,8 @@ def run(name: str, record_to_registry: bool = False) -> Path:
     mode = (
         "recorded to the canonical registry"
         if record_to_registry
-        else "scratch run; the canonical registry was not touched (`--record` records)"
+        else "scratch run, not evidence; trials not recorded in the canonical registry "
+        "(`--record` records)"
     )
     gate_rows = "\n".join(
         f"| {g} | {'not evaluated' if ok is None else 'met' if ok else 'not met'} |"
@@ -249,8 +252,8 @@ not simulated; signals act on the same event.
 - Sharpe is per trade opportunity (one every {h} events, non-overlapping), not annualized.
 - Folds: {val["n_splits"]} expanding walk-forward folds, purged by the {h}-event label horizon \
 and embargoed {val["embargo_events"]} events; first {val["min_train_events"]} samples train only.
-- Trials: deflated Sharpe uses the cumulative registry count for `{name}` ({n_trials}), \
-failures included.
+- Trials: deflated Sharpe uses {n_trials} trials for `{name}`: {n_recorded} from the canonical \
+registry `{rel(TRIALS)}` plus this run's {len(results)}, failures included.
 
 ## Data
 
@@ -273,7 +276,7 @@ failures included.
 |---|---|
 {gate_rows}
 
-Verdict: **{verdict}**.
+Verdict: **{verdict}**{"" if record_to_registry else " (scratch run, not evidence)"}.
 
 ## Registry
 

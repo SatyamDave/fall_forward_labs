@@ -15,4 +15,6 @@ The experiment registry: append-only JSON Lines, one record per trial or model e
 | `demo` | 4 trials in `trials.jsonl`, 1 challenger in `models.jsonl` | **Demo.** Synthetic data from `data/recorders/synthetic.py`, recorded by the first `just walkforward demo` run on 2026-09-27 (report `backtest/reports/demo/2026-09-27.md`). Tests mechanics only; says nothing about any market. | ml stack PR (#12) |
 | `study-0001-favorite-longshot` | 1 trial | Real registered study, verdict INSUFFICIENT EVIDENCE (no analysable markets). | `research/studies/0001-favorite-longshot/record_trial.py` |
 
-The demo records stay as history; lines are never edited or deleted. `just walkforward demo` now writes to the gitignored `out/` directory and adds nothing here; only `--record` appends to this ledger.
+The demo records stay as history; lines are never edited or deleted. `just walkforward demo` now writes to the gitignored `out/` directory and adds nothing here; only `--record` appends to this ledger. A scratch run still reads the earlier trials for its experiment from this ledger, so its deflated Sharpe counts them plus its own; its report says it is not evidence.
+
+The demo model record predates the `verdict` field, so it has none, and `ml.monitoring.promote` refuses any record whose walk-forward verdict is not PASS. It therefore cannot be promoted, although its status reads `challenger`. Walk-forward runs now register a FAIL as `no_signal`.
