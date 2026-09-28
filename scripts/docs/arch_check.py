@@ -91,12 +91,15 @@ def changed_lines_by_file(diff_text: str) -> dict[str, list[str]]:
 
 def section_text(body: str, label: str) -> str | None:
     """Text of a "<label> <inline>" line, or the body of a "<label>" heading. None if absent."""
+    # Accept "Label: text", "## Label:" and "## Label" (headings are often written without the
+    # colon), case-insensitively.
+    core = label.rstrip(":").strip().lower()
     lines = body.splitlines()
     for i, line in enumerate(lines):
         stripped = line.strip().lstrip("#").strip()
-        if not stripped.startswith(label):
+        if not stripped.lower().startswith(core):
             continue
-        inline = stripped[len(label) :].strip()
+        inline = stripped[len(core) :].lstrip(":").strip()
         if inline:
             return inline
         collected = []
