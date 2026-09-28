@@ -254,6 +254,13 @@ pub fn handle_line(engine: &mut BridgeEngine, line: &str) -> (String, bool) {
         "kill" => (kill(engine, &id, &value), false),
         "cancel_order_intent" => (cancel_order_intent(engine, &id, &value), false),
         "reconcile" => (reconcile(engine, &id, &value), false),
+        "drain_halt_cancels" => (
+            ok_response(
+                &id,
+                extra([("pending_cancels", Value::Array(engine.pending_cancels()))]),
+            ),
+            false,
+        ),
         "shutdown" => (ok_response(&id, Map::new()), true),
         other => (
             error_response(&id, "unknown_op", format!("unknown op {other:?}")),

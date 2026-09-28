@@ -43,30 +43,51 @@ for tripping it:
 
 1. **File trigger (works even if the agent process is dead or hung).** Start `qc-bridge` with
    `--kill-file <path>`, then from an operator shell: `touch <path>` (contents are never read, only
-   existence). The bridge polls this path on every record it processes and every op it dispatches —
-   whatever is still alive and sending the bridge *anything* discovers it, so this does not depend
-   on the agent's cooperation. `tests/chaos.rs`
-   (`kill_file_halts_within_one_second_and_cancels_every_open_order`) proves the 1-second bound
-   **given that something keeps calling the bridge during the outage** — the test's own loop does
-   this by polling directly.
-   **Requirement this crate cannot satisfy by itself (wave-2 review finding):** nothing in the
-   stack today actually provides that "something," independent of the agent's own decision loop.
-   `agent/src/loop.ts`'s reconcile calls are decision-count-based (tied to the loop making
-   progress, not a wall-clock timer), and `ops/live/supervisor.py` only reacts to process *exit*,
-   not to a live-but-unresponsive loop. **A real deployment needs a process that calls `status`
-   (or any op) on a genuine wall-clock interval, independent of whether the decision loop is
-   making progress** — until one exists, `--kill-file` only reliably trips within one second while
-   the decision loop itself keeps calling the bridge; a fully stalled feed with a hung decision
-   loop delays observation until something else touches the bridge.
+   existence). Two independent mechanisms now observe it, so an operator's `touch` is never
+   relying on just one:
+   - The bridge itself polls this path on every record it processes and every op it dispatches
+     (`wire::handle_line`, `engine.rs`'s `process_record`) — whatever is still alive and sending
+     the bridge *anything* discovers it immediately.
+   - **A dedicated watcher thread** (`engine/crates/bridge/src/main.rs`, spawned whenever
+     `--kill-file` is given) polls the same path directly, independent of stdin entirely, holding
+     its own clone of the same `Arc<AtomicBool>` `KillSwitch` (confirmed: `qc_risk::KillSwitch` is
+     exactly that, and already `Clone`). It engages the switch itself the moment the file appears
+     — no op, no record, no cooperation from the agent process required at all. This closes the
+     reopened half of issue #44: "a hung (alive but stuck) agent loop never calls it."
+     **Measured latency** (`tests/kill_file_watcher.rs`, spawns the real released binary, writes
+     zero bytes to its stdin, ever): 12–36 ms across five runs on a development machine, from the
+     file's `fs::write` to the watcher's own `kill_switch_engaged` line appearing on stderr — well
+     inside the 250 ms this thread's own polling interval (50 ms) budgets for, and inside root
+     CLAUDE.md rule 11's one-second bound with wide margin.
+   - `tests/chaos.rs` (`kill_file_halts_within_one_second_and_cancels_every_open_order`) is the
+     older proof, still valid, that the bound holds even by the polling-only path (something
+     keeps calling the bridge during the outage).
 2. **In-band trigger.** If something can still send the bridge a line on its stdin (the gateway, a
    manual `qc-bridge` session), send `{"v":1,"op":"kill","reason":"<why>","id":"<any>"}`. Same
    effect, immediate instead of polled.
 3. Both engage the same shared `KillSwitch` a plain external `engage()` call would (root rule 11),
    and both then run the same one-way `halt`: refuse every new `submit_order_intent`, and cancel
-   every open order (`SimVenue` in `sim` mode; `PendingCancel` in `external` mode, for the gateway
-   to finish against the real venue — the same "confirm cancels in the venue's own view" step below
-   still applies, since this process alone cannot confirm a real fill or cancel).
-4. Everything after tripping the switch is the same as the plain procedure below: confirm, decide on
+   every open order (`SimVenue` in `sim` mode; `PendingCancel` in `external` mode).
+4. **The gateway's own heartbeat is what finishes the job end to end (issue #44 reopened, second
+   half).** `agent/src/broker/heartbeat.ts`'s `Heartbeat` runs a real `setInterval` (default 1s),
+   started by `cli.ts` alongside the loop and **decoupled from it** — it keeps calling the bridge's
+   `status` op even while the decision loop itself is stuck awaiting a decider that never returns
+   (a live LLM call that hangs is the case this exists for). Once a tick observes `halted`, it
+   reads `status.pending_cancels` — a fresh, unexpired, Ed25519-signed cancel `approval` for every
+   order the bridge moved to `PendingCancel`, tagged `"reason":"halt"` in the payload (protocol
+   v1.2.1) — and calls `BrokerGateway.cancelOrder` for each, retrying every tick (the approval is
+   re-minted, never stale, so this is safe to call repeatedly) until nothing is left open at the
+   real broker. **Measured latency** (`agent/tests/heartbeat-halt-cancel.test.ts`, real binary +
+   mock broker, 25 ms heartbeat interval for a fast test): 27–29 ms from the kill file appearing to
+   the heartbeat observing `halted`, across three runs; the same suite proves four resting orders
+   at the mock broker are all cancelled — exactly one cancel call each — within a 5 s timeout, and
+   that the resulting ledger (signature-redacted) and broker journal hash identically across two
+   independent runs. Before this PR, nothing played this role: `agent/src/loop.ts`'s reconcile
+   calls were decision-count-based (tied to loop progress), `ops/live/supervisor.py` only reacts to
+   process *exit*, and no code path minted a cancel approval for a halt-triggered `PendingCancel`
+   order at all (only an explicit, per-order `cancel_order_intent` call did) — so a real deployment
+   could observe the halt but never actually get the resting order cancelled at the broker.
+5. Everything after tripping the switch is the same as the plain procedure below: confirm, decide on
    positions, notify, don't restart blind, write it up.
 
 ## Procedure for a live process (planned, not available)
@@ -101,3 +122,15 @@ would otherwise observe the halt). `alerts.py` raises a generic **halt** alert f
 log file lives and how the alert checker runs, `scripts/ops/alerts.py`'s module docstring for the
 full contract, and `tests/ops/test_bridge_alerts_contract.py` for the real-binary proof that the
 bridge's own stderr output actually drives `alerts.py`'s rules end to end.
+
+One documented exception: a `kill_switch_engaged` line logged by the watcher thread above
+(`source: "file"`, detected with zero stdin traffic) uses a real wall-clock read for `ts_ns`, not
+the bridge's sim/market clock every other log line uses — that clock lives inside `BridgeEngine`,
+owned solely by the main thread, which is exactly what this thread must not wait on. Every other
+event this crate logs, including a `kill_switch_engaged` line the main thread itself logs first
+(the ordinary, polling-only path), still uses market time.
+
+`scripts/ops/alerts.py`'s contract is otherwise unchanged by protocol v1.2.1: a halt-triggered
+cancel approval (`status`/`drain_halt_cancels`'s `pending_cancels`) is not itself a new log event —
+it is silent unless the cancel later fails, in which case the gateway's own
+`report_execution`/`cancel_rejected` path is what surfaces it.

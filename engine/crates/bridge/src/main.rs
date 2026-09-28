@@ -10,11 +10,58 @@
 use std::io::{BufRead, Write as _};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::time::Duration;
 
 use qc_bridge::engine::{BridgeEngine, LoadedModel, VenueMode};
 use qc_bridge::instrument::Instrument;
 use qc_inference::linear::LinearModel;
 use qc_risk::{KillSwitch, Limits};
+
+/// How often the watcher thread below checks `--kill-file`. Well inside the
+/// 250 ms budget issue #44's reopened gap asks for, with headroom for OS
+/// scheduling jitter.
+const KILL_FILE_WATCH_INTERVAL: Duration = Duration::from_millis(50);
+
+/// Issue #44 reopened: "a hung (alive but stuck) agent loop never calls
+/// [the bridge]". Every existing kill-file check
+/// (`BridgeEngine::poll_kill_file`) runs on the *main* thread, inside
+/// `process_record`/`handle_line` — so it only ever fires when something
+/// sends this process a line on stdin. If nothing ever does (the agent
+/// process is wedged, not merely slow, and its own heartbeat has somehow
+/// also stopped), the main thread sits blocked in `stdin.lock().lines()`
+/// forever and never gets a chance to notice the file.
+///
+/// This thread is the fix: it holds its own clone of the same
+/// `Arc<AtomicBool>`-backed [`KillSwitch`] (confirmed at
+/// `engine/crates/risk/src/lib.rs`'s `KillSwitch(Arc<AtomicBool>)`, already
+/// `Clone`) and polls the file directly, independent of stdin, engaging the
+/// switch itself the moment the file appears. `KillSwitch::engage` is a
+/// plain atomic store — safe to call from any thread without touching the
+/// engine, which the main thread alone owns.
+///
+/// ponytail: `eventlog::kill_switch_engaged`'s `ts_ns` is documented
+/// everywhere else in this crate as "always the bridge's own market/sim
+/// clock, never a wall-clock read" — but that clock lives inside
+/// `BridgeEngine`, owned solely by the main thread, and is exactly what this
+/// thread must not wait on. This one event, from this one thread, uses a
+/// real wall-clock read instead; every other event this crate logs is
+/// unaffected. If a caller ever needs this event's `ts_ns` in the same time
+/// domain as the rest of the log, thread the engine's clock out through a
+/// second `Arc` instead of reading `SystemTime::now()` here.
+fn spawn_kill_file_watcher(kill_switch: KillSwitch, path: PathBuf) {
+    std::thread::spawn(move || {
+        loop {
+            if path.exists() && !kill_switch.is_engaged() {
+                kill_switch.engage();
+                let ts_ns = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map_or(0, |d| u64::try_from(d.as_nanos()).unwrap_or(u64::MAX));
+                qc_bridge::eventlog::kill_switch_engaged(ts_ns, "file");
+            }
+            std::thread::sleep(KILL_FILE_WATCH_INTERVAL);
+        }
+    });
+}
 
 struct Args {
     recording: String,
@@ -109,10 +156,19 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let tick = args.tick.parse().map_err(|e| format!("bad --tick: {e}"))?;
     let records = BridgeEngine::load_recording(&std::fs::read_to_string(&args.recording)?)?;
     let model = load_model(&args)?;
+    let kill_switch = KillSwitch::new();
+    // Issue #44 reopened: a clone handed to a dedicated watcher thread, spawned
+    // before the engine (which owns the other clone) ever starts reading
+    // stdin — see spawn_kill_file_watcher's doc comment for why this can't
+    // simply be BridgeEngine::poll_kill_file running more often on the main
+    // thread.
+    if let Some(path) = &args.kill_file {
+        spawn_kill_file_watcher(kill_switch.clone(), path.clone());
+    }
     let mut engine = BridgeEngine::with_instrument(
         records,
         limits,
-        KillSwitch::new(),
+        kill_switch,
         tick,
         args.decide_every,
         model,

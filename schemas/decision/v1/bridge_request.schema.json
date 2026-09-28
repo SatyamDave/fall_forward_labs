@@ -27,6 +27,7 @@
         "kill",
         "cancel_order_intent",
         "reconcile",
+        "drain_halt_cancels",
         "shutdown"
       ]
     },

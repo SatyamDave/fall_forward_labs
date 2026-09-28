@@ -19,6 +19,7 @@
 - `just bridge` (release binary), `just check`
 - `qc-bridge <recording> [--venue sim|external] [--kill-file <path>] [--instrument <path.toml>] ...`
   — no `--kill-file`/`--instrument` is byte-for-byte v1.1 (`schemas/decision/v1/README.md`).
+  `--kill-file` also spawns the watcher thread above (issue #44 reopened).
 
 ## MUST
 - Every response validates against `schemas/decision/v1/*.schema.json` (`tests/schema_conformance.rs`).
@@ -30,10 +31,26 @@
   illegal transition halts with reason `illegal_order_event`, never applied (`tests/external_mode.rs`).
 - Halting (`BridgeEngine::halt`, one-way) always cancels every open order:
   routed to `SimVenue` in `sim`, `PendingCancel` in `external` for the
-  gateway to finish (`tests/kill_and_cancel.rs`, `chaos.rs`).
+  gateway to finish (`tests/kill_and_cancel.rs`, `chaos.rs`). In `external`
+  mode, `status`/`drain_halt_cancels` (protocol v1.2.1, issue #44's
+  cancel-on-halt gap) expose a *fresh, unexpired* signed cancel approval for
+  every such order — minted on demand, not stored, tagged
+  `"reason":"halt"` in the payload — so the gateway's heartbeat can finish
+  the cancel at the real broker without a separate `cancel_order_intent`
+  round trip per order (`tests/kill_and_cancel.rs`).
 - `--kill-file` is polled on every record *and* op (`process_record`, top of
-  `wire::handle_line`), so it works even if the agent never sends another
-  line — `tests/chaos.rs` proves the 1-second budget.
+  `wire::handle_line`), *and* independently by a dedicated watcher thread
+  `main.rs` spawns (holding its own clone of the same `Arc<AtomicBool>`
+  `KillSwitch`) so it works even if nothing ever calls the bridge again —
+  issue #44 reopened: a hung, not merely silent, agent process. The thread
+  polls every 50ms and engages the switch directly; `tests/chaos.rs` proves
+  the 1-second budget when something keeps polling, and
+  `tests/kill_file_watcher.rs` proves the watcher thread alone does it with
+  **zero** stdin traffic at all (spawns the real binary, never writes to its
+  stdin). That one event's `ts_ns` is a wall-clock read, not the sim/market
+  clock (see `main.rs`'s `spawn_kill_file_watcher` doc comment) — the one
+  documented exception to the no-wall-clock rule below, since the engine's
+  clock is owned solely by the main thread this watcher must not depend on.
 - `external` mode refuses `submit_order_intent` until a `reconcile` finds no
   discrepancy (`"unreconciled"`); a discrepancy halts as `reconciliation` (`tests/reconcile.rs`).
 - `cancel_order_intent` never checks `self.halted` (risk never blocks a
@@ -64,8 +81,11 @@ _None yet. Each entry links to the PR or postmortem where it bit us._
 
 ## See also
 - `schemas/decision/v1/README.md` (v1.2: `market_ts_ns`, `kill`,
-  `cancel_order_intent`, `reconcile`, `--kill-file`, `--instrument`),
-  `docs/adr/0040-*.md`, `docs/runbooks/kill-switch.md` (trigger + alerting),
+  `cancel_order_intent`, `reconcile`, `--kill-file`, `--instrument`; v1.2.1:
+  `drain_halt_cancels`, `pending_cancels`), `docs/adr/0040-*.md`,
+  `docs/runbooks/kill-switch.md` (trigger + alerting, measured latency),
   `../replay/src/lib.rs` (`HaltReason` this crate mirrors), `src/approval.rs`
   (also exported as `approval-test-vector.json`), `scripts/ops/alerts.py`
-  (the structured-log contract).
+  (the structured-log contract), `agent/src/broker/heartbeat.ts` (the
+  gateway-side timer that keeps polling this crate's `status` regardless of
+  the decision loop, and drains `pending_cancels` at the real broker).

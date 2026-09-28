@@ -51,8 +51,19 @@ async function maybeBuildExternalMode(bridge: BridgeClient): Promise<ExternalMod
   }
   const assetClass = resolveAssetClass(process.env.QC_ASSET_CLASS);
   const mcp = await connectRobinhoodMcp();
-  const { gateway, reconcile } = await createExternalModeGateway({ bridge, mcp, assetClass, instrument });
-  return { gateway, assetClass, reconcile };
+  const { gateway, reconcile, heartbeat } = await createExternalModeGateway({
+    bridge,
+    mcp,
+    assetClass,
+    instrument,
+    onHalted: (reason) => {
+      // No logging convention exists in agent/ yet (cli.ts's own broker/gateway.ts precedent);
+      // stderr is the best available signal until one does.
+      console.error(`heartbeat observed the bridge halted (${reason}): draining pending cancels`);
+    },
+  });
+  heartbeat.start();
+  return { gateway, assetClass, reconcile, heartbeat };
 }
 
 function resolveMode(raw: string | undefined): LedgerMode {
@@ -104,6 +115,7 @@ async function main(): Promise<void> {
     );
     console.log(`ledger sha256: ${ledgerSha256()}`);
   } finally {
+    external?.heartbeat?.stop();
     await bridge.shutdown();
   }
 }

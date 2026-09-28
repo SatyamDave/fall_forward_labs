@@ -18,6 +18,7 @@
 - Live mode needs `ANTHROPIC_API_KEY` (secret manager, never in git — root rule 2) and a true result from `scripts/ci/ai_gate.py loop-agent-eval`; fake mode needs neither.
 - `src/broker/` executes only an order `qc-bridge` already approved (an approval token bound to the intent hash); it is never one of the two SDK tools above.
 - `src/recorder/` calls Robinhood only through `src/recorder/allowlist.ts`'s `readOnly()` wrapper, whose allowlist holds only quote/book tool names; `agent/tests/recorder/allowlist*.test.ts` proves a place/cancel/preview call throws before it reaches the wire.
+- `src/broker/heartbeat.ts`'s `Heartbeat` runs on its own `setInterval` (default 1s, CLAUDE.md rule 11's budget), independent of `runLoop`'s own await chain — issue #44 reopened: a hung decider (or a stuck feed) must not stop the bridge's `status`/kill-file from ever being observed again. `createExternalModeGateway` builds it but does not start it; `cli.ts` calls `heartbeat.start()`/`stop()` around the loop. Once a tick sees `halted`, it pulls `status.pending_cancels` (protocol v1.2.1) and calls `BrokerGateway.cancelOrder` for each — safe to call every tick until nothing is left open, since the bridge mints a fresh, unexpired approval on every call rather than storing one.
 
 ## NEVER
 - Never register the Robinhood MCP server, or any tool beyond the two above, as an agent tool. Check: `grep -rn 'allowedTools' src` lists only `submit_order_intent` and `no_trade`.
@@ -36,3 +37,4 @@ _None yet. Each entry links to the PR or postmortem where it bit us._
 ## See also
 - schemas/decision/v1/*.schema.json (the handoff contract); engine/crates/risk/CLAUDE.md; engine/crates/oms/CLAUDE.md
 - ADR-0040 (agent handoff): docs/adr/0040-agentic-decision.md
+- engine/crates/bridge/CLAUDE.md (the watcher thread and `pending_cancels`/`drain_halt_cancels` this file's heartbeat consumes); docs/runbooks/kill-switch.md (measured end-to-end latency)
