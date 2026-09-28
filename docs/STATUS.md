@@ -6,19 +6,18 @@ Regenerated automatically by `.github/workflows/docs-status.yml` on every merge 
 Narrative docs: [project guide](guide/quant-core-guide.html) ·
 [base status](reports/base-status.md) · [NOW](NOW.md).
 
-Generated from `main` at **525399d 2026-09-28**. Latest CI on `main`: **in_progress on 525399d**.
+Generated from `main` at **13866c8 2026-09-28**. Latest CI on `main`: **in_progress on 13866c8**.
 Paid AI loops: **off**.
 
-## Open pull requests (1)
+## Open pull requests (0)
 
-| PR | Title | Author | Draft |
-|---|---|---|---|
-| [#84](https://github.com/SatyamDave/fall_forward_labs/pull/84) | Wire the gateway to protocol v1.2: reconciliation, cancel, market clock | SatyamDave | no |
+None.
 
 ## Recently merged
 
 | PR | Title | Merged |
 |---|---|---|
+| [#84](https://github.com/SatyamDave/fall_forward_labs/pull/84) | Wire the gateway to protocol v1.2: reconciliation, cancel, market clock | 2026-09-28 |
 | [#85](https://github.com/SatyamDave/fall_forward_labs/pull/85) | External kill switch, real instrument, and protocol v1.2 for qc-bridge | 2026-09-28 |
 | [#83](https://github.com/SatyamDave/fall_forward_labs/pull/83) | Turn real trades into lessons, and only promote agent changes that prove better | 2026-09-28 |
 | [#82](https://github.com/SatyamDave/fall_forward_labs/pull/82) | Record real Robinhood price data for our asset | 2026-09-28 |
@@ -33,24 +32,23 @@ Paid AI loops: **off**.
 | [#73](https://github.com/SatyamDave/fall_forward_labs/pull/73) | Build the broker gateway door and a mock Robinhood connection | 2026-09-28 |
 | [#76](https://github.com/SatyamDave/fall_forward_labs/pull/76) | Stamp approved orders and prove the bridge refuses what it doesn't understand | 2026-09-28 |
 | [#62](https://github.com/SatyamDave/fall_forward_labs/pull/62) | Record the second merge batch as a dated founder exception | 2026-09-28 |
-| [#56](https://github.com/SatyamDave/fall_forward_labs/pull/56) | Add the three-tier eval harness (just eval, Tier 1) | 2026-09-28 |
 
 ## Recent commits on main
 
 | Commit | Date | Subject |
 |---|---|---|
+| `13866c8` | 2026-09-28 | Merge pull request #84 from SatyamDave/wave2/gateway-integration |
+| `249fc10` | 2026-09-28 | Merge main into wave2/gateway-integration before merging #84 |
+| `69ea482` | 2026-09-28 | test(recorder): give the replay-integration test realistic poll timing |
+| `b720f0f` | 2026-09-28 | docs(status): regenerate live status from 525399d [skip ci] |
+| `6eb4a03` | 2026-09-28 | Merge main into wave2/gateway-integration before merging #84 |
 | `525399d` | 2026-09-28 | Merge pull request #85 from SatyamDave/wave2/bridge-control |
 | `4714a5c` | 2026-09-28 | chore: re-run PR checks after description fix |
 | `9c52c85` | 2026-09-28 | Merge main into wave2/bridge-control before merging #85 |
-| `195a15f` | 2026-09-28 | docs(bridge): document holiday-calendar gap and the missing kill-file heartbeat |
-| `eb26e68` | 2026-09-28 | feat(bridge): external kill switch, real instrument, protocol v1.2 |
-| `b4a9568` | 2026-09-28 | docs(status): regenerate live status from fa22726 [skip ci] |
-| `fa22726` | 2026-09-28 | Merge pull request #83 from SatyamDave/wave2/learning-loop |
-| `4529807` | 2026-09-28 | chore: re-run PR checks after description fix |
-| `6f86a03` | 2026-09-28 | Merge main into wave2/learning-loop before merging #83 |
-| `2000155` | 2026-09-28 | feat(evals): turn real trades into test scenarios, gate agent changes on proof (#52, #53) |
-| `878bdbe` | 2026-09-28 | docs(status): regenerate live status from 90b2ac1 [skip ci] |
-| `90b2ac1` | 2026-09-28 | Merge pull request #82 from SatyamDave/wave2/recorder |
+| `1cfbed8` | 2026-09-28 | feat(agent): run just agent-sim-external against the real qc-bridge binary |
+| `8a2a324` | 2026-09-28 | fix(agent): read the reconcile verdict from the nested field, not the RPC envelope |
+| `7710e37` | 2026-09-28 | merge: origin/main into gateway-integration |
+| `f5ab916` | 2026-09-28 | merge: wave2/bridge-control (protocol v1.2 real qc-bridge) into gateway-integration |
 
 ## Decisions (ADRs)
 
