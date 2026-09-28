@@ -8,7 +8,7 @@ agent := "agent"
 # Python outside research/ and ml/ that ruff also checks, relative to research/. Not listed:
 # autonomy/ and tests/autonomy/ (protected paths that fail ruff today; fixing them needs a T3 PR),
 # and tests/replay/generate_sample_day.py (S311, PTH123; the fixture it wrote must stay identical).
-py_extra := "../data ../scripts ../tests/knowledge ../tests/hooks ../tests/ci ../tests/evals ../.claude/hooks"
+py_extra := "../data ../scripts ../tests/knowledge ../tests/hooks ../tests/ci ../tests/evals ../tests/ops ../ops/live ../.claude/hooks"
 
 default:
     @just --list
@@ -44,6 +44,7 @@ test:
     cd {{research}} && uv run pytest -q ../tests/autonomy
     cd {{research}} && uv run pytest -q ../tests/ci
     cd {{research}} && uv run pytest -q ../tests/evals
+    cd {{research}} && uv run pytest -q ../tests/ops
     cd {{research}} && uv run pytest -q studies/0001-favorite-longshot/tests
 
 # Known-vulnerability and license checks; each tool is skipped with a message if it is not installed
