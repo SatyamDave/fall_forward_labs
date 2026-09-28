@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // `just agent-sim-external` (wave2-spec.md, issue #45 + gateway-integration's wave2 scope):
-// agent (fake decider) -> qc-bridge --venue external -> gateway -> mock Robinhood MCP ->
+// agent (fake decider) -> the REAL qc-bridge --venue external -> gateway -> mock Robinhood MCP ->
 // report_execution, exercising at least one partial fill, one reject, and one cancel, and
 // proving two independent runs produce identical ledger and broker-journal hashes.
 //
@@ -13,8 +13,12 @@
 // not in cli.ts -- this file follows it, wiring the exact same production pieces
 // (BridgeClient, createExternalModeGateway, runLoop) to an in-memory MCP transport instead.
 //
-// Until wave2/bridge-control merges (this lane's own fake-bridge-v12.ts stands in for qc-bridge
-// until then), see the PR body for how to point QC_BRIDGE_BIN at the real binary instead.
+// Wave-2 integration: now spawns the REAL qc-bridge binary (built from wave2/bridge-control,
+// protocol v1.2's `hello`/`cancel_order_intent`/`reconcile`/`--venue external`) via
+// real-bridge-bin.ts/real-bridge-fixtures.ts, replacing this lane's own fake-bridge-v12.ts here
+// -- that fake is kept as a unit-test fixture only (agent/tests/bridge-v12.test.ts,
+// agent/tests/loop-external.test.ts), not as this demo's stand-in for the real binary anymore.
+// Set QC_BRIDGE_BIN to override (e.g. a prebuilt binary, or the fake, for a one-off check).
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -26,18 +30,19 @@ import { BridgeClient } from "../bridge.js";
 import { connectRobinhoodMcp } from "../broker/mcp-client.js";
 import { createExternalModeGateway } from "../broker/external-mode.js";
 import { FakeDecider } from "../decider/fake.js";
-import { ledgerSha256 } from "../ledger.js";
+import { ledgerSha256RedactingApprovalSignatures } from "../ledger.js";
 import { runLoop } from "../loop.js";
 import { repoRoot } from "../paths.js";
 import { createMockRobinhoodServer, type MockScenario } from "./mock-robinhood-mcp.js";
+import { resolveRealBridgeBin } from "./real-bridge-bin.js";
+import { FIRST_TRADE_DECISION, writeRealBridgeFixtures } from "./real-bridge-fixtures.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const AGENT_ROOT = path.resolve(HERE, "..", "..");
-const DEFAULT_SCENARIO = path.join(AGENT_ROOT, "tests", "fixtures", "external-sim-scenario.json");
 
-/** client_order_id -> broker outcome, matching external-sim-scenario.json's 4 requests in
- *  order: a clean fill, a partial fill, a broker rejection, and one left open for an explicit
- *  cancel afterward -- "at least one partial fill, one reject, and one cancel" (wave2-spec.md). */
+/** client_order_id -> broker outcome, matching real-bridge-fixtures.ts's RECORDING (exactly 4
+ *  decision points, all buys, in order): a clean fill, a partial fill, a broker rejection, and
+ *  one left open for an explicit cancel afterward -- "at least one partial fill, one reject, and
+ *  one cancel" (wave2-spec.md). */
 const SCENARIOS: Record<string, MockScenario> = {
   "1": "filled",
   "2": "partially_filled",
@@ -59,10 +64,9 @@ export interface ExternalSimResult {
 }
 
 export interface RunExternalSimOptions {
-  scenarioPath?: string;
-  /** Directory to write ledger.jsonl/broker-journal.jsonl into; defaults to a fresh temp dir per
-   *  call so two calls in the same process (or two `just` invocations) never share state unless
-   *  the caller asks them to. */
+  /** Directory to write ledger.jsonl/broker-journal.jsonl (and the generated bridge fixtures)
+   *  into; defaults to a fresh temp dir per call so two calls in the same process (or two `just`
+   *  invocations) never share state unless the caller asks them to. */
   outDir?: string;
 }
 
@@ -72,11 +76,25 @@ export async function runExternalSim(opts: RunExternalSimOptions = {}): Promise<
   const ledgerPath = path.join(outDir, "ledger.jsonl");
   const journalPath = path.join(outDir, "broker-journal.jsonl");
 
-  const bridgeScript = path.join(AGENT_ROOT, "src", "testkit", "fake-bridge-v12.ts");
-  const tsxBin = path.join(AGENT_ROOT, "node_modules", ".bin", "tsx");
-  const scenarioPath = opts.scenarioPath ?? DEFAULT_SCENARIO;
+  const bridgeBin = resolveRealBridgeBin();
+  const fixtures = writeRealBridgeFixtures(path.join(outDir, "bridge-fixtures"));
 
-  const bridge = new BridgeClient({ command: tsxBin, args: [bridgeScript, "--venue", "external", "--scenario", scenarioPath] });
+  const bridge = new BridgeClient({
+    command: bridgeBin,
+    args: [
+      fixtures.recordingPath,
+      "--limits",
+      fixtures.limitsPath,
+      "--model",
+      fixtures.modelPath,
+      "--model-sha256",
+      fixtures.modelSha256,
+      "--decide-every",
+      "1",
+      "--venue",
+      "external",
+    ],
+  });
   bridge.start();
 
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -85,19 +103,22 @@ export async function runExternalSim(opts: RunExternalSimOptions = {}): Promise<
     // No explicit `position`: the mock derives it from its own recorded fills (order 1 fills in
     // full, order 2 fills half, order 3 is rejected -- see mock-robinhood-mcp.ts), which is what
     // makes it agree with the bridge's OMS at both the startup reconcile (nothing placed yet,
-    // position 0) and the one periodic reconcile this demo triggers (reconcileEveryNDecisions: 3,
-    // below, lands right after client_order_id 3 resolves).
+    // position 0) and the one periodic reconcile this demo triggers
+    // (reconcileEveryNDecisions below), lands right after client_order_id 3 resolves.
     cash: "10000.00",
   });
   await server.connect(serverTransport);
   const mcp = await connectRobinhoodMcp({ transport: clientTransport });
 
   try {
+    // "1": the v1 hard-coded instrument label real-bridge-fixtures.ts's RECORDING uses (no
+    // `--instrument` flag is passed to the bridge above, so this is what DecisionRequest.instrument
+    // actually carries).
     const { gateway, reconcile } = await createExternalModeGateway({
       bridge,
       mcp,
       assetClass: "equity",
-      instrument: "SPY",
+      instrument: "1",
       journalPath,
     });
 
@@ -108,10 +129,13 @@ export async function runExternalSim(opts: RunExternalSimOptions = {}): Promise<
       promptVersion: "v1",
       model: "fake-rule-v1",
       ledgerPath,
-      // 3 (not the default 20): lands exactly once, right after client_order_id 3 resolves and
-      // before client_order_id 4 is even placed -- see the mock server construction above for
-      // why that specific landing point matters here.
-      external: { gateway, assetClass: "equity", reconcile, reconcileEveryNDecisions: 3 },
+      // FIRST_TRADE_DECISION + 2 (not the default 20): real-bridge-fixtures.ts's RECORDING spends
+      // its first FIRST_TRADE_DECISION-1 decisions warming up the classifier's feature window
+      // (always no_trade, see that file's doc comment) before the 4 trading decisions land; this
+      // lands the periodic reconcile exactly once, right after client_order_id 3 resolves and
+      // before client_order_id 4 is even placed -- see the mock server construction above for why
+      // that specific landing point matters here.
+      external: { gateway, assetClass: "equity", reconcile, reconcileEveryNDecisions: FIRST_TRADE_DECISION + 2 },
     });
 
     // Exercise the cancel path explicitly: client_order_id 4 (scenario "accepted") is left open
@@ -121,12 +145,17 @@ export async function runExternalSim(opts: RunExternalSimOptions = {}): Promise<
     if (!cancelResp.ok || !cancelResp.result?.approval) {
       throw new Error(`cancel_order_intent for client_order_id 4 failed: ${JSON.stringify(cancelResp.error ?? cancelResp.result)}`);
     }
-    await gateway.cancelOrder(4, "SPY", "equity", cancelResp.result.approval);
+    await gateway.cancelOrder(4, "1", "equity", cancelResp.result.approval);
 
     return {
       ledgerPath,
       journalPath,
-      ledgerSha256: ledgerSha256(ledgerPath),
+      // Redacted, not the raw file hash: external mode's approval is signed with a fresh
+      // Ed25519 key the real bridge generates once per PROCESS and never persists (by design --
+      // see ledgerSha256RedactingApprovalSignatures's doc comment), so the raw signature bytes
+      // are expected to differ between two independent runs even though every order/decision/
+      // execution outcome they wrap is identical. This is what proves that.
+      ledgerSha256: ledgerSha256RedactingApprovalSignatures(ledgerPath),
       journalSha256: sha256(journalPath),
       counts,
     };
@@ -141,8 +170,8 @@ async function main(): Promise<void> {
   const first = await runExternalSim();
   const second = await runExternalSim();
 
-  console.log(`run 1: decisions=${JSON.stringify(first.counts)} ledger=${first.ledgerSha256} journal=${first.journalSha256}`);
-  console.log(`run 2: decisions=${JSON.stringify(second.counts)} ledger=${second.ledgerSha256} journal=${second.journalSha256}`);
+  console.log(`run 1: decisions=${JSON.stringify(first.counts)} ledger(sig-redacted)=${first.ledgerSha256} journal=${first.journalSha256}`);
+  console.log(`run 2: decisions=${JSON.stringify(second.counts)} ledger(sig-redacted)=${second.ledgerSha256} journal=${second.journalSha256}`);
 
   // Keep the latest run's artifacts where other tooling (evals, CI) looks for them, same
   // convention as justfile's agent-sim recipe.

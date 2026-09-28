@@ -61,7 +61,14 @@ function errorResult(message: string): CallToolResult {
 }
 
 function placeBody(scenario: MockScenario, clientOrderId: string, qty: string, price: string): Record<string, unknown> {
-  const venueOrderId = `SYN-${clientOrderId}`;
+  // Wave-2 integration finding: this used to be `SYN-${clientOrderId}`, which
+  // engine/crates/bridge/src/wire.rs's `parse_venue_order_id` rejects -- `qc_core::VenueOrderId`
+  // is a `u64` newtype, and the real bridge requires the wire's `venue_order_id` to be a
+  // decimal-integer string (documented as UNVERIFIED against a real broker until #26, in exactly
+  // this one place). A synthetic id only ever needs to be distinct and traceable back to the
+  // client_order_id that produced it, not to look like a human-readable label, so this is
+  // decimal instead: real Robinhood order ids may not be, once #26 verifies the actual format.
+  const venueOrderId = String(900_000 + Number(clientOrderId));
   switch (scenario) {
     case "rejected":
       return { state: "rejected", id: venueOrderId, client_order_id: clientOrderId, reject_reason: "SYNTHETIC: insufficient buying power" };

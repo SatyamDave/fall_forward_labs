@@ -7,6 +7,7 @@
 // client_order_id we've already resolved, and never blind-retry an outcome we don't know --
 // query status first.
 import type { KeyObject } from "node:crypto";
+import { toFixed } from "../decimal.js";
 import { brokerJournalPath as defaultBrokerJournalPath } from "../paths.js";
 import { verifyEd25519 } from "./crypto.js";
 import { openJournal, replayJournal, type Journal } from "./journal.js";
@@ -203,12 +204,22 @@ export class BrokerGateway {
       throw new GatewayRejection("approval payload is missing or has malformed fields");
     }
 
+    // qty/limit_price: compare by decimal VALUE (toFixed's bigint), not by string. Wave-2
+    // integration finding: the real qc-bridge always signs a fixed 8-fractional-digit spelling
+    // ("1.00000000"), but agent/src/decimal.ts's fromFixed() trims trailing zeros ("1") -- the
+    // exact same numeric quantity the decider proposed and the bridge risk-checked would fail a
+    // byte-for-byte string comparison here on every order whose quantity isn't already spelled
+    // with 8 fractional digits, which is effectively every order. This lane's own fake bridge
+    // happened to emit the same trimmed spelling the TS side uses, which is why this only
+    // surfaced once run against the real binary. The signature itself still covers the exact
+    // bytes qc-bridge signed (verifyApprovalPayload, above); only this field-match step compares
+    // by value.
     if (
       parsed.client_order_id !== order.client_order_id ||
       parsed.instrument !== order.instrument ||
       parsed.side !== order.side ||
-      parsed.qty !== order.qty ||
-      parsed.limit_price !== order.limit_price ||
+      toFixed(parsed.qty) !== toFixed(order.qty) ||
+      toFixed(parsed.limit_price) !== toFixed(order.limit_price) ||
       parsed.time_in_force !== order.time_in_force ||
       parsed.request_id !== order.request_id
     ) {
