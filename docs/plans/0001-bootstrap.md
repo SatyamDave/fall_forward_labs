@@ -48,6 +48,8 @@ main
 
 ## Status
 
+> **Status note, 2026-09-28:** the table below is the plan as written and is out of date. Current state, including which phases were built and merged, is in [docs/reports/base-status.md](../reports/base-status.md).
+
 | Phase | Branch | PR | Status |
 |---|---|---|---|
 | 0 Decisions (plan, ADR-0000 to ADR-0005) | bootstrap/phase-0-decisions | [#5](https://github.com/SatyamDave/fall_forward_labs/pull/5) | Ready for review. All ADRs are "Proposed" and wait for human approval. |

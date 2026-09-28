@@ -1,80 +1,122 @@
 # Architecture
 
-quant-core has two halves that share data but never share a process: an offline side (recorders, research, ML, the agent swarm) and a live side (the Rust engine). Models cross from offline to live only as exported, hash-checked artifacts. No AI call crosses into the engine (root rule 1).
+What is built on `main` at `9f39eee` (2026-09-28), then what is planned. Nothing
+here is on `main` yet; see [docs/reports/base-status.md](reports/base-status.md).
 
-## Components and data flow
+quant-core has two halves that share files but never a process: an offline side (data, research,
+ML, reports) and an execution side (the Rust engine). Today the execution side runs only against a
+simulated venue on a synthetic recording. No code connects to any venue, reads credentials, or
+calls an AI API.
+
+The engine is the in-house `qc-*` crates under `engine/crates/`. ADR-0001 (Proposed) recommends
+building on NautilusTrader and hftbacktest; neither is a dependency, and nothing here wraps them.
+
+## Current flow
 
 ```mermaid
 flowchart LR
-  venue[(Venues)]
-
-  subgraph offline["Offline side: no venue trading keys"]
-    direction LR
-    rec["data/recorders<br/>Parquet, exchange + local ts"]
-    dq["data/quality<br/>gaps, duplicates, clock skew"]
-    cat[("data/catalog<br/>object storage index")]
-    res["research/<br/>point-in-time features,<br/>walk-forward"]
-    sbx["research/sandbox<br/>factor discovery,<br/>no credentials"]
-    bt["backtest/<br/>fill + latency models"]
-    ml["ml/<br/>datasets, features, train,<br/>validate, monitor"]
-    reg[("experiment + model<br/>registry")]
-    exp["ml/export<br/>artifact + registry hash"]
-    swarm["agents/<br/>offline swarm"]
-    prs["branches, PRs,<br/>reports, registry entries"]
+  subgraph offline["Offline (Python, research/.venv)"]
+    syn["data/recorders/synthetic.py<br/>synthetic book events"]
+    dq["data/quality<br/>gaps, duplicates, skew"]
+    ds["ml/datasets + ml/features<br/>point-in-time rows, tob-v1"]
+    tr["ml/training<br/>logistic regression"]
+    wf["ml/validation/walkforward.py<br/>purged folds, DSR, PBO"]
+    reg[("research/registry/log/<br/>trials.jsonl, models.jsonl")]
+    rep["backtest/reports/demo/DATE.md"]
+    ex["ml/export<br/>model JSON + sha256"]
   end
-
-  subgraph engine["engine/ (Rust, deterministic): the hard boundary, no AI calls cross it"]
-    direction LR
-    gw_in["qc-gateway<br/>market data in"]
+  subgraph engine["Engine (Rust, deterministic, no network)"]
+    rec["tests/replay/sample_day.csv<br/>synthetic recording"]
     book["qc-orderbook"]
-    strat["qc-strategy-runtime<br/>+ strategies/"]
-    inf["qc-inference"]
-    risk["qc-risk (protected)"]
+    strat["qc-strategy-runtime<br/>InsideQuoter fixture"]
+    risk["qc-risk + KillSwitch"]
     oms["qc-oms"]
-    gw_out["qc-gateway<br/>orders out"]
+    sim["qc-gateway SimVenue"]
+    log["order log, sha256"]
+    inf["qc-inference<br/>parity tests only"]
   end
-
-  human{{"human approval"}}
-
-  venue -- market data --> rec --> dq --> cat
-  cat --> res --> bt
-  cat --> ml
-  sbx -- candidate factors --> res
-  res --> reg
-  bt --> reg
-  ml --> reg
-  reg --> exp
-  exp -- promotion dossier --> human
-  human -- approved artifact --> inf
-
-  venue -- market data --> gw_in --> book --> strat
-  inf -- "Signal or no signal" --> strat
-  strat -- OrderRequest --> risk -- passed --> oms --> gw_out --> venue
-  gw_out -. "fills, acks" .-> oms
-
-  swarm --> prs
-  prs -. human review .-> human
+  syn --> dq --> ds --> tr --> wf --> reg
+  wf --> rep
+  tr --> ex -. "fixtures" .-> inf
+  rec --> book --> strat -- Command --> risk -- pass --> oms --> sim
+  sim -- "acks, fills" --> oms
+  sim --> book
+  oms --> log
+  venue["Venue adapter, live data, signal store<br/>(planned, not built)"]:::planned -.-> book
+  classDef planned stroke-dasharray: 5 5
 ```
 
-Read left to right:
+## Modules and interfaces
 
-1. **Recorders** (`data/recorders`) write venue market data to Parquet with both exchange and local timestamps. **Quality checks** (`data/quality`) run on ingest, and the **catalog** (`data/catalog`) records what exists and where.
-2. **Research** (`research/`) and **ML** (`ml/`) read point-in-time data from the catalog. Backtests (`backtest/`) and walk-forward runs record every trial, failures included, in the **registry**. The **sandbox** (`research/sandbox`) proposes candidate factors that re-enter the same gates and count toward the trial total.
-3. **Export** (`ml/export`) produces a small deterministic model artifact stamped with its registry hash. Promotion to live needs statistical gates and a human approval.
-4. Inside the **engine**, `qc-gateway` brings market data in, `qc-orderbook` maintains the book, and `qc-strategy-runtime` drives strategies with events. `qc-inference` loads only approved, hash-matching artifacts and returns a signal or no signal.
-5. Every `OrderRequest` passes `qc-risk` (limits, stale data, kill switch) before `qc-oms` tracks it and `qc-gateway` sends it. Fills and acknowledgements flow back to the OMS, which reconciles with the venue.
-6. The **agent swarm** (`agents/`) runs on the offline side only. Its outputs are branches, PRs, reports, and registry entries, all of which pass human review.
+| Crate or package | Interface | Behavior today |
+|---|---|---|
+| `qc-core` | `Price`, `Qty` (fixed-point `i64`, scale 1e8), IDs, `Timestamp`, `Clock`/`SimClock`, `MarketEvent`, `OrderEvent`, `OrderRequest` | No floats for money; time only through `Clock` or events |
+| `qc-orderbook` | `OrderBook::apply_snapshot`, `apply(&BookDelta)`, `status()` | Rejects crossed or locked results, sequence gaps, negative quantities; moves to `NeedsResync` until a snapshot; 256 levels a side |
+| `qc-strategy-runtime` | `Strategy::on_event(&mut self, &Event, &OrderBook, &mut Vec<Command>)`; `Command::{Submit, Cancel}` | `InsideQuoter` is a test fixture, not a strategy |
+| `qc-risk` (protected) | `RiskCheck::check(&OrderRequest, &RiskContext) -> Result<(), RiskReject>`; `RiskEngine`; `KillSwitch` | Kill switch first, then invalid order, stale data, daily loss, price band, notional, position (incl. open orders), order rate (1 s window). Limits from `config/limits/default.toml` |
+| `qc-oms` | `Oms::insert`, `request_cancel`, `apply(&OrderEvent)`; `reconcile(&Oms, &[VenueOrder])` | Exhaustive 7-state machine; refuses overfills; any reconciliation discrepancy returns `halt() == true` |
+| `qc-gateway` | `VenueAdapter { submit, cancel, poll, order_snapshot }`; record parser; `SimVenue`; `TokenBucket`; `reconnect_delay_ms` | Only `SimVenue` implements the trait. It ignores queue position and does not reduce displayed size, so two aggressive orders can take the same quantity |
+| `qc-replay` | `Engine::on_record`, `reconcile`; binary `qc-replay <recording> <log> [limits.toml]` | Runs book, strategy, risk, OMS and SimVenue; reconciles every 60 s of simulated time |
+| `qc-inference` | `Model` trait; `LinearModel::load(bytes, expected_sha256)`; `FeatureState` | Loads only when the hash matches; Python/Rust parity tests on fixtures. Not wired into the replay engine |
+| `qc-telemetry`, `qc-benches` | `MetricSink`; criterion benches | Benches build; no numbers recorded |
+| `data/`, `ml/` (Python) | schemas, quality checks, datasets, features, training, validation, registry, monitoring, export | Runs from `research/`'s uv environment |
+| `research/registry/` | `REGISTRY_DIR`, `TRIALS`, `record(path, entry)`, `read`, `trial_count(path, experiment)` | Append-only JSONL, one ledger at `research/registry/log/` (`QC_REGISTRY_DIR` overrides) |
+
+## State transitions
+
+Order states in `qc-oms` (`transition()` in `engine/crates/oms/src/lib.rs`):
+`PendingNew → New` on accept; any live state → `PartiallyFilled` / `Filled` on fills;
+`PendingNew | New | PartiallyFilled → PendingCancel` on a cancel request; `PendingCancel →
+Canceled`, or back to `New`/`PartiallyFilled` on `CancelRejected`; fills may still race a pending
+cancel. `Filled`, `Canceled` and `Rejected` are terminal. Illegal pairs return `None`, which halts
+the engine (`IllegalOrderEvent`).
+
+Book status: a new book accepts only a snapshot; then `Synced` → `NeedsResync` on any rejected
+delta → `Synced` after a valid snapshot.
+
+Engine halt: `halted = None` until one of `KillSwitch`, `MaxDailyLoss`, `IllegalOrderEvent`,
+`Reconciliation`, or `Runaway` (one record causing more than 10,000 follow-up events). Halting is one-way within the
+process.
+
+## Failure behavior
+
+| Failure | What happens | What does not happen |
+|---|---|---|
+| Kill switch engaged (another thread) | Next record: engine halts, risk rejects new orders, cancels sent for every working order and resent on every record until none is open (also while disconnected) | Positions are not flattened; no external command engages it |
+| Sequence gap or crossing delta | Delta rejected, book `NeedsResync`, strategy pulls quotes | No guessed book |
+| Stale data past `stale_data_ms` | Risk rejects new orders | Existing orders stay until the strategy cancels |
+| Daily loss reaches `max_daily_loss` (realized plus unrealized) | Engine halts (`MaxDailyLoss`) and cancels working orders; risk rejects every new order | Positions are not flattened |
+| Reconciliation discrepancy, including an unknown venue order | Engine halts and cancels | |
+| Reconcile not yet succeeded, or last one failed | New orders are dropped (`unreconciled`) until a reconcile succeeds | Positions are not reconciled (no position endpoint) |
+| Model artifact hash mismatch | `LinearModel::load` returns an error | Provenance is not proven: the same PR can change bytes and hash |
+| Walk-forward gate miss | Report says FAIL; the model is recorded as `no_signal`, never a challenger | Exit code stays 0 |
+
+## Data and artifact flow
+
+| Artifact | Written by | Location | Committed? |
+|---|---|---|---|
+| Replay fixture | `tests/replay/generate_sample_day.py` | `tests/replay/sample_day.csv` (synthetic) | yes |
+| Replay order log | `just replay` | a temp directory; hash printed | no |
+| Synthetic market data | `data/recorders/synthetic.py` | `data/raw/synthetic/` | no (gitignored) |
+| Walk-forward scratch run | `just walkforward <name>` | `out/walkforward/<name>/` (report, ledgers, data, artifact; replaced each run) | no (gitignored) |
+| Trials, challengers | `just walkforward <name> --record`, `record_trial.py` | `research/registry/log/*.jsonl` | yes (4 demo rows, 1 study row) |
+| Walk-forward report | `just walkforward <name> --record` | `backtest/reports/<name>/<date>.md` | yes |
+| Study 0001 raw pages | `fetch.py` (network) | `data/raw/study-0001/` | no; hashes in `data/catalog/study-0001.json`; snapshot kept outside git on one founder's machine |
+| Study 0001 results | `just study-0001` | `research/studies/0001-favorite-longshot/results.json` | yes |
 
 ## Boundaries
 
-- **The engine boundary.** No crate under `engine/` and no process holding venue credentials calls an AI API. Models enter only as exported artifacts; there is no runtime download.
-- **Credentials.** Venue keys are trade-only, IP-allowlisted, and scoped per strategy and environment. They are injected into the gateway at runtime from the secret manager and never exist on the offline side.
-- **Determinism.** The engine reads time only through `qc_core::Clock`, uses fixed-point `Price` and `Qty`, and avoids hash-ordered collections, so `qc-replay` can replay a recorded day and reproduce identical orders.
-- **Protected zones.** `engine/crates/risk`, `config/limits`, `ops/deploy`, `fund`, `.github/workflows`, `.claude/hooks`, `.claude/settings.json`, and `autonomy/` change only with human approval.
+- No crate under `engine/` makes a network call or reads credentials; no process calls an AI API.
+- Protected paths are listed in root `CLAUDE.md` rule 3. What enforces them today, and what does
+  not, is in [docs/TEAM.md](TEAM.md#review-and-the-enforcement-gap).
 
-## Supporting crates
+## Planned, not built
 
-- `qc-core`: fixed-point prices and quantities, IDs, clocks, events shared by every crate.
-- `qc-telemetry`: metric types and sinks kept off the hot path.
-- `qc-replay`: replays recorded events through a strategy to reproduce its orders.
-- `qc-benches`: criterion benchmarks for hot paths.
+| Component | Source | Blocked on |
+|---|---|---|
+| Venue adapter, market-data recorder, catalog in object storage | Bootstrap spec, ADR-0005, ADR-0020 | Vertical and jurisdiction decision |
+| Fill and latency models with queue position (`backtest/`) | Bootstrap spec, ADR-0001 | Real data |
+| `just backtest`, paper trading | justfile placeholders | Adapter and fill model |
+| Slow-signal store with staleness and influence bounds | Final base spec | Vertical |
+| Decision layer (`platform/decide`) | ADR-0010, ADR-0011 | Measured need; distillation blocked |
+| L0-L3 learning, autonomy loops B-H, agent swarm | ADR-0013, ADR-0006, POLICY.yaml | A validated signal; enforced review |

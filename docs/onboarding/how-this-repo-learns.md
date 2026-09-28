@@ -1,7 +1,10 @@
 # How this repo learns
 
 Nothing here self-modifies silently. Every change to instructions, rules, or skills is a reviewed
-PR with a traceable source. This is the loop (spec §8):
+PR with a traceable source. This is the designed loop (bootstrap spec §8). Status on 2026-09-28:
+the Stop hook is on `main` and tested (#11); the workflows are on `main` (#10) but have never run:
+`scripts/ci/ai_gate.py` denies them under `autonomy/POLICY.yaml`, no `ANTHROPIC_API_KEY` exists,
+and they open PRs with `GITHUB_TOKEN`, which triggers no checks. Nothing below is live.
 
 ```
 Claude Code session
@@ -52,14 +55,11 @@ paths, finds skills nobody's used, and checks that every alert-linked runbook st
 
 ## Autonomy, decision layer, and model learning
 
-This section is a placeholder. The knowledge loop above only covers how contributor-facing
-documentation and Claude Code configuration learn from sessions. It does not cover:
-
-- how much an agent is allowed to do without a human in the loop (autonomy tiers),
-- how the system decides which idea, model, or strategy to promote (the decision layer),
-- or how models themselves retrain and get challenged (see `docs/GLOSSARY.md` for
-  champion/challenger, shadow mode, and canary — the mechanics live in the ml/self-learning
-  phase, not here).
-
-A later phase fills this section in once that machinery exists. Until then, don't assume any of
-it is live — check `.claude/rules/`, `autonomy/` (if present), and `ml/` directly.
+- **Autonomy tiers** (#3): `autonomy/POLICY.yaml` and `autonomy/classify.py` classify a PR into
+  T0-T3 and the `autonomy-gate` check reports the approvals it needs. No loop exists, nothing
+  auto-merges; the AI workflows read `POLICY.yaml` through `scripts/ci/ai_gate.py` and stay off.
+- **Decision layer** (#4): ADRs only. No code; distillation blocked by the vendor contract.
+- **Model learning** (#12): an offline pipeline (datasets, training, walk-forward, registry,
+  monitoring) exercised on synthetic data. Nothing retrains on a schedule. L0-L3 (#2) is an ADR.
+- **Research memory:** the JSONL registry, `docs/research/graveyard.md` and study reports
+  (`research/studies/`) are the only learning that has actually accumulated.

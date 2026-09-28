@@ -7,14 +7,16 @@ without a teammate walking you through it step by step.
 
 **Engine.** Read all of `engine/crates/{core,orderbook,oms}/`. Understand the order state
 machine (`oms`) and why it has no wildcard match arms. Run `just bench` and read one criterion
-report. Try `engine/.claude/skills/replay-debug` on a failing replay (ask for a fixture if none
-exists yet).
+report. Run `just replay` (expect `replay deterministic`) and read
+`engine/.claude/skills/replay-debug/SKILL.md`. Chaos tests: `engine/crates/replay/tests/chaos.rs`.
 
-**Research / ML.** Read `research/README.md` and `ml/README.md`. Walk through
+**Research / ML.** Read `research/README.md` and `ml/CLAUDE.md`. Walk through
 `docs/research/graveyard.md` and the experiment registry (`research/registry/`) — every trial,
-including failures, is recorded there. Run `.claude/skills/run-walkforward` (or read it if the
-`walkforward` recipe isn't wired up yet) to see what a validated result has to report: net Sharpe
-after costs, deflated Sharpe using the *true* trial count, PBO, max drawdown, turnover.
+including failures, is recorded there. Read the skill `research/.claude/skills/run-walkforward/SKILL.md`,
+then run `just walkforward demo` (it writes only to gitignored `out/`; `--record` would
+write the committed registry) to see what a result has to report: Sharpe, deflated Sharpe using
+the *true* trial count, PBO, max drawdown, turnover. On the synthetic demo it ends in Verdict
+FAIL, which is expected.
 
 **Agents / tooling.** Read `.claude/` end to end: `settings.json`, `hooks/`, `rules/`, `agents/`,
 `skills/`. Try starting a Claude Code session from inside `engine/crates/risk/` and run `/context`
@@ -30,8 +32,8 @@ advance.
 
 ## Understand the knowledge loop
 
-Read `docs/onboarding/how-this-repo-learns.md`. Find a real entry in a nested `CLAUDE.md`
-"Learned" section and trace it back to the PR or postmortem it came from.
+Read `docs/onboarding/how-this-repo-learns.md`. Every nested `CLAUDE.md` "Learned"
+section is still an empty comment; the knowledge workflows have never run.
 
 ## By Friday
 

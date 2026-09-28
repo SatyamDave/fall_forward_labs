@@ -1,5 +1,8 @@
 # Runbook: venue outage
 
+> Status 2026-09-27: planned procedure. No venue adapter, venue key or live process exists, so
+> none of these steps can be exercised yet. Owner: @SatyamDave. Blocked on M1 ([ROADMAP](../ROADMAP.md)).
+
 **Recognize.** A `gateway/` adapter reports repeated connection failures or reconnect-with-backoff
 exhaustion, market data goes stale past `stale_data_ms` (`config/limits/default.toml`), or the
 venue itself posts a status-page incident.
@@ -27,5 +30,5 @@ venue itself posts a status-page incident.
 ## After
 
 Write a postmortem if the outage caused a halt, a missed reconciliation, or any manual
-intervention. `TODO (data phase): automated data-quality check for gaps at ingest` may already
-catch this — check `data/quality/` before assuming it needs a new check.
+intervention. `data/quality/` (#12) already checks recorded data for sequence gaps, duplicates and
+clock skew; check it before assuming a new check is needed.

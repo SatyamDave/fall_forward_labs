@@ -36,15 +36,17 @@ autonomy/**
 
 `guard-protected.sh` (`.claude/hooks/`) blocks an agent from editing these without
 `QC_ALLOW_PROTECTED=1`, and even then refuses any diff that loosens a numeric limit in
-`config/limits/`. A GitHub ruleset (added in the security-pipeline phase) is what actually
-requires two human approvals on these paths in the GitHub UI — CODEOWNERS alone can only request
-review, not require a count, so don't rely on CODEOWNERS as the enforcement mechanism. Loosening a
+`config/limits/`. That hook binds Claude Code Edit/Write only, not Bash, humans or CI. No GitHub
+rule enforces review today: branch protection and rulesets return 403 on this plan, CODEOWNERS
+only requests review, and a PR author cannot approve their own PR (see
+[docs/TEAM.md](docs/TEAM.md#review-and-the-enforcement-gap)). Loosening a
 risk limit specifically always needs two human approvals (root rule 4), regardless of who or what
 proposed it.
 
 ## The knowledge loop
 
-Session learnings land in `.claude/learnings/inbox/` (via the Stop hook), get triaged into nested
+Designed, not yet running (the workflows need an API key and have never run). Session learnings
+land in `.claude/learnings/inbox/` (via the Stop hook), get triaged into nested
 `CLAUDE.md` "Learned" sections, skills, or rules by `knowledge-sync.yml` and weekly triage, and go
 out as a single PR labeled `knowledge` for human review. Don't hand-edit a nested `CLAUDE.md`
 outside of a `knowledge`-labeled PR unless a human asks you to — that defeats the point of having
@@ -65,9 +67,24 @@ a reviewable trail. See `docs/onboarding/how-this-repo-learns.md` for the full l
   version against the live docs (https://code.claude.com/docs/llms.txt) if it ever seems to
   behave differently than described here, since this file can't auto-update when the CLI does.
 
+## Checks
+
+Run from the repo root. Expected results are from the verified run on 2026-09-27
+([docs/reports/base-status.md](docs/reports/base-status.md)).
+
+| Command | Purpose | Expected output |
+|---|---|---|
+| `just setup` | Fetch crates, create `research/.venv` from `uv.lock` | exit 0 |
+| `just check` | fmt check, clippy `-D warnings`, ruff, mypy, `just test`, `just audit` | exit 0. A `SKIPPED (not a pass)` line means an audit tool is missing: a warning locally, a failure in CI |
+| `just test` | Rust tests, then pytest for research/ml/data, hooks, knowledge, autonomy, `tests/ci`, study 0001 | 47 Rust; 27, 62, 16, 29, 17 passed; study 13 passed, 1 skipped by design |
+| `just replay` | determinism of the engine on the synthetic day | two identical sha256 lines equal to `tests/replay/expected_order_log.sha256` |
+| `git diff --name-only <base>... \| python3 scripts/knowledge/scope_check.py` | Scope, CLAUDE.md budgets and Learned format for docs-only PRs (reads changed paths) | exit 0, no output |
+
+`just backtest` is a placeholder that exits 2, and `just paper` refuses (exit 1).
+
 ## Before opening a PR
 
-- `just check` passes locally (or in the devcontainer).
+- `just check` passes locally.
 - Tests were added or updated for behavior changes, and — where the change is a bug fix — you can
   show the test failing before the fix.
 - Docs are updated for any changed behavior (a nested `CLAUDE.md`, a runbook, the glossary).

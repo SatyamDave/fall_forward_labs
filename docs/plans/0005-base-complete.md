@@ -17,6 +17,8 @@ The core must support any market family (order-book markets, event contracts, la
 
 ## Status
 
+> **Status note, 2026-09-28:** the table below is the plan as written and is out of date. Current state, including which phases were built and merged, is in [docs/reports/base-status.md](../reports/base-status.md).
+
 | Phase | Deliverable | Branch / PR | Status |
 |---|---|---|---|
 | 0 | `docs/adr/0020-first-vertical.md` (Proposed) and this plan | `base/phase-0-vertical-adr` | Draft PR open; waiting on the human's vertical decision |

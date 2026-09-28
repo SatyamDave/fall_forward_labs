@@ -45,11 +45,14 @@ just replay | just backtest <cfg> | just paper <strategy> | just learnings
 just fmt | just lint | just walkforward <name>
 ```
 `just` finds the root justfile from any subdirectory, so these work wherever you are.
-Run `just check` before every push. No CI workflow runs it until #13 (`ci.yml`) merges.
+Run `just check` before every push; CI (`ci.yml`) runs the same recipe on every PR and on `main`.
+`just backtest` is a placeholder that exits 2 and `just paper` refuses; `just test` runs every
+suite (Rust, research/ml/data, hooks, knowledge, autonomy, ci, study 0001).
 
 ## How we work
-- Start every session with docs/NOW.md: the current milestone, next task and blockers. If a task
-  does not serve the milestone, say so and ask before proceeding.
+- Start every session with docs/NOW.md: the current milestone (M0, offline foundation; see
+  docs/ROADMAP.md), next task and blockers. If a task does not serve the milestone, say so and ask
+  before proceeding. Owners and handoffs: docs/TEAM.md. Governing specs: docs/specs/README.md.
 - Research follows docs/process/research-cycle.md (register before measuring, baseline, leakage-free
   evaluation, independent re-run, explicit decision). A cycle may end in rejection.
 - Tag material claims VERIFIED / HYPOTHESIS / UNKNOWN / REFUTED with the source, file, test or run.
@@ -60,17 +63,18 @@ Run `just check` before every push. No CI workflow runs it until #13 (`ci.yml`) 
 
 ## Guidance versus enforcement
 This file is guidance loaded into context; Claude Code does not enforce it, and it does not
-override anyone's personal instructions. Controls that enforce, as of 2026-09-27:
+override anyone's personal instructions. Controls that enforce, as of 2026-09-28:
 - Enforced on `main`: nothing. Branch protection and rulesets return HTTP 403 on this private
   repo's current GitHub plan, so the two-approval rule (rules 3, 4) and required checks are unenforced.
-- Built and tested, not merged: `.claude/settings.json` deny rules plus `guard-secrets.sh` and
-  `guard-protected.sh` hooks (#11, 30 script-level tests; never run in a live session; they bind
-  only Claude Code sessions, not humans or other tools); knowledge scope check (#10, 10 tests);
-  autonomy gate (#3, 23 tests; reports only, cannot be made required without branch protection).
-- Built, not merged, CI results not inspected: `ci.yml`, `security.yml`, pre-commit, `deny.toml`,
-  `scripts/harden-repo.sh` (#13; the harden script cannot apply branch protection on this plan).
-- Not built yet: kill switch (rule 11); replay gate (rule 7); two-person approval; CODEOWNERS (#8, one
-  owner, and it cannot require two reviews).
+  The 2026-09-28 merges waived the second approval by the sole founder's decision (base-status).
+- On `main`, tested, binding only Claude Code sessions: `.claude/settings.json` deny rules and the
+  `guard-secrets.sh` / `guard-protected.sh` hooks (62 hook tests; never run in a live session).
+- On `main`, running in CI but not required: `ci.yml` (`just check`, incl. the kill-switch chaos test
+  and `just replay` against a committed hash), `security.yml`, the knowledge scope check, the
+  autonomy gate (reports only), and `scripts/ci/ai_gate.py`, which keeps the paid AI workflows off
+  unless `autonomy/POLICY.yaml` allows them.
+- Not possible on this plan: two-person approval; CODEOWNERS cannot require two reviews.
+Current state, verification and open defects: docs/reports/base-status.md.
 Risk limits belong in runtime checks and permission boundaries, not in this text.
 
 ## How to work here
