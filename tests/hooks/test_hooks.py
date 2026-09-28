@@ -336,3 +336,35 @@ def test_non_toml_under_limits_blocked_with_flag(repo: Path) -> None:
     result = write_new_limits(repo, "strat-x.json", '{"max_position": "1000000"}')
     assert result.returncode == 2
 
+
+# capture-learnings redaction
+
+
+def load_capture_learnings():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("capture_learnings", HOOKS / "capture-learnings.py")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.mark.parametrize(
+    ("text", "secret"),
+    [
+        ('{"api_key": "AbC123xyzAbC123xyz"}', "AbC123xyzAbC123xyz"),
+        ("{'password': 'hunter2 with spaces'}", "hunter2"),
+        ('"client_secret" : "s3cr3tvalue"', "s3cr3tvalue"),
+        ("Authorization: Bearer abc.def-ghi_jkl", "abc.def-ghi_jkl"),
+        (
+            "token eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2lnbmF0dXJl here",
+            "eyJhbGciOiJIUzI1NiJ9",
+        ),
+        ("postgres://admin:S3cr3tP4ss@db.internal:5432/x", "S3cr3tP4ss"),
+        ("https://user:pa%40ss@example.com/", "pa%40ss"),
+    ],
+)
+def test_snippet_redacts_common_secret_shapes(text: str, secret: str) -> None:
+    out = load_capture_learnings().snippet(text)
+    assert secret not in out
+    assert "[REDACTED" in out
