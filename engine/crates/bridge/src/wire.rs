@@ -3,11 +3,11 @@
 //! decides what is a protocol error versus a business decision (an
 //! `IntentResult`), which is exactly what schema conformance tests check.
 
-use qc_core::{OrderType, Price, Qty, Side};
+use qc_core::{ClientOrderId, OrderEvent, OrderType, Price, Qty, Side, Timestamp, VenueOrderId};
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
-use crate::engine::BridgeEngine;
+use crate::engine::{BridgeEngine, VenueMode};
 
 const PROTOCOL_VERSION: u64 = 1;
 
@@ -30,7 +30,9 @@ enum WireTimeInForce {
 /// fails here with the same message `qc_core` would give a config file.
 #[derive(Debug, Deserialize)]
 struct WireOrderIntent {
-    #[allow(dead_code)] // carried on the wire for the caller's own correlation, not used by risk
+    // Bound into the approval payload (protocol v1.1) when accepted in
+    // `external` venue mode; otherwise carried only for the caller's own
+    // correlation.
     request_id: String,
     instrument: String,
     side: WireSide,
@@ -39,6 +41,90 @@ struct WireOrderIntent {
     time_in_force: WireTimeInForce,
     #[allow(dead_code)]
     reason: String,
+}
+
+/// `order_execution.schema.json`'s `event` values.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum WireExecutionEvent {
+    Accepted,
+    Rejected,
+    PartiallyFilled,
+    Filled,
+    Canceled,
+    CancelRejected,
+}
+
+/// `order_execution.schema.json`. `qty`/`price`/`venue_order_id` are only
+/// required for the event kinds that need them; that is checked in
+/// [`execution_to_order_event`], not here, so a missing-but-not-needed field
+/// never becomes a spurious protocol error.
+#[derive(Debug, Deserialize)]
+struct WireExecution {
+    client_order_id: u64,
+    event: WireExecutionEvent,
+    qty: Option<Qty>,
+    price: Option<Price>,
+    venue_order_id: Option<String>,
+    ts_ns: u64,
+    #[allow(dead_code)]
+    reason: Option<String>,
+}
+
+/// Robinhood/broker order IDs are opaque strings on a real venue;
+/// `qc_core::VenueOrderId` is a `u64` newtype today (the mapping is
+/// UNVERIFIED until #26). Until then this is the one place that assumes the
+/// wire's `venue_order_id` is a decimal integer string.
+fn parse_venue_order_id(s: &str) -> Result<VenueOrderId, String> {
+    s.parse::<u64>()
+        .map(VenueOrderId)
+        .map_err(|_| format!("venue_order_id {s:?} must be a decimal integer (see issue #26)"))
+}
+
+fn execution_to_order_event(exec: &WireExecution) -> Result<(OrderEvent, u64), String> {
+    let client_id = ClientOrderId(exec.client_order_id);
+    let ts = Timestamp(exec.ts_ns);
+    let event = match exec.event {
+        WireExecutionEvent::Accepted => {
+            let Some(venue_order_id) = exec.venue_order_id.as_deref() else {
+                return Err("\"venue_order_id\" is required for an \"accepted\" execution".into());
+            };
+            OrderEvent::Accepted {
+                client_id,
+                venue_id: parse_venue_order_id(venue_order_id)?,
+                ts,
+            }
+        }
+        WireExecutionEvent::Rejected => OrderEvent::Rejected { client_id, ts },
+        WireExecutionEvent::PartiallyFilled | WireExecutionEvent::Filled => {
+            // Both wire event names map onto `OrderEvent::Filled`: the OMS's
+            // own cumulative-quantity arithmetic decides partial vs. final,
+            // rather than trusting the label the report claims.
+            let (Some(qty), Some(price)) = (exec.qty, exec.price) else {
+                return Err("\"qty\" and \"price\" are required for a fill execution".into());
+            };
+            // A fill qty/price is a magnitude, never signed: `Qty`/`Price`
+            // parse a leading '-' without complaint (it means something else
+            // in other contexts, e.g. a short position), so this is the one
+            // place that must refuse it. The OMS's own overfill check already
+            // happens to reject a non-positive qty, but nothing upstream
+            // guards price, and an unchecked negative price flips the sign of
+            // the cash delta `apply_order_event` computes -- corrupting the
+            // exact bookkeeping the max-daily-loss kill switch reads.
+            if qty <= Qty::ZERO || price <= Price::ZERO {
+                return Err("\"qty\" and \"price\" must be positive for a fill execution".into());
+            }
+            OrderEvent::Filled {
+                client_id,
+                price,
+                qty,
+                ts,
+            }
+        }
+        WireExecutionEvent::Canceled => OrderEvent::Canceled { client_id, ts },
+        WireExecutionEvent::CancelRejected => OrderEvent::CancelRejected { client_id, ts },
+    };
+    Ok((event, exec.ts_ns))
 }
 
 #[derive(Debug, Deserialize)]
@@ -119,6 +205,8 @@ pub fn handle_line(engine: &mut BridgeEngine, line: &str) -> (String, bool) {
             ok_response(&id, extra([("status", engine.status())])),
             false,
         ),
+        "hello" => (ok_response(&id, extra([("hello", engine.hello())])), false),
+        "report_execution" => (report_execution(engine, &id, &value), false),
         "shutdown" => (ok_response(&id, Map::new()), true),
         other => (
             error_response(&id, "unknown_op", format!("unknown op {other:?}")),
@@ -150,6 +238,41 @@ fn submit_order_intent(engine: &mut BridgeEngine, id: &str, value: &Value) -> St
         WireTimeInForce::Ioc => OrderType::Ioc,
         WireTimeInForce::Gtc => OrderType::Limit,
     };
-    let result = engine.submit_order_intent(side, intent.qty, intent.limit_price, tif);
+    let result = engine.submit_order_intent(
+        &intent.request_id,
+        side,
+        intent.qty,
+        intent.limit_price,
+        tif,
+    );
     ok_response(id, extra([("result", result)]))
+}
+
+/// `report_execution` (protocol v1.1, issue #34): only meaningful in
+/// `external` venue mode, where the TS gateway — not `SimVenue` — is the
+/// source of truth for what happened to an order. Refused as a protocol
+/// error in `sim` mode, rather than silently accepted and ignored.
+fn report_execution(engine: &mut BridgeEngine, id: &str, value: &Value) -> String {
+    if engine.venue_mode() != VenueMode::External {
+        return error_response(
+            id,
+            "invalid_mode",
+            "report_execution is only valid in --venue external",
+        );
+    }
+    let Some(execution) = value.get("execution") else {
+        return error_response(id, "invalid_fields", "\"execution\" is required");
+    };
+    let exec: WireExecution = match serde_json::from_value(execution.clone()) {
+        Ok(e) => e,
+        Err(e) => return error_response(id, "invalid_fields", e.to_string()),
+    };
+    let (event, ts_ns) = match execution_to_order_event(&exec) {
+        Ok(pair) => pair,
+        Err(message) => return error_response(id, "invalid_fields", message),
+    };
+    match engine.report_execution(event, ts_ns) {
+        Ok(()) => ok_response(id, Map::new()),
+        Err(e) => error_response(id, "illegal_transition", format!("{e:?}")),
+    }
 }

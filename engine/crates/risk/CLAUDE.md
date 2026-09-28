@@ -2,7 +2,7 @@
 
 ## Owns / does not own
 - Protected (root rule 3): every change needs human approval and risk-auditor review. Limits may be tightened automatically, loosened only with two human approvals (root rule 4).
-- Owns: `Limits` (serde, `deny_unknown_fields`), `RiskContext`, `RiskReject`, the `RiskCheck` trait and its implementations: max position, max notional, max order rate, max daily loss, fat-finger price band, stale-data halt, kill switch.
+- Owns: `Limits` (serde, `deny_unknown_fields`), `RiskContext`, `RiskReject`, the `RiskCheck` trait and its implementations: max position, max notional, max daily notional (#41), max order rate (#42, per RiskEngine instance = per instrument), max daily loss, fat-finger price band, stale-data halt, self-cross against our own resting orders (#40), wash-trade pattern (#40), kill switch.
 - Does not own: limit values (`config/limits/*.toml`, also protected), order state (qc-oms), sending orders (qc-gateway), the trade decision itself (`agent/`, ADR-0040).
 
 ## Commands
@@ -16,6 +16,8 @@
 - The kill switch is checked first and wins over every other result.
 - Market data older than `stale_data_ms` rejects with `StaleData`.
 - Unknown keys in a limits file fail to parse (`deny_unknown_fields` stays).
+- Wash-trade history is fed only from fills (`RiskEngine::record_fill`), never from order acceptance, in both sim and gateway-reported (`report_execution`) paths. Callers fill `RiskContext::own_best_bid/own_best_ask` from their open orders, PendingNew and PendingCancel included.
+- Production defaults stay small; tests that need headroom load their own limits file (e.g. `tests/replay/limits.toml`), never a loosened default.
 - Every PR here requests risk-auditor review and states which limits changed and in which direction.
 - An intent submitted by the agent service (ADR-0040) through `qc-bridge` runs `RiskCheck::check` and the kill switch exactly like any other order; there is no separate, lighter path for agent-submitted intents.
 
@@ -26,7 +28,8 @@
 - No floats in limit math. Check: `grep -rnwE 'f32|f64' src | grep -v '//'` prints nothing.
 
 ## Gotchas
-_None yet. Each entry links to the PR or postmortem where it bit us._
+- A wash-trade check fed from order acceptance flags ordinary requoting as a wash trade; feed it fills only ([#75](https://github.com/SatyamDave/fall_forward_labs/pull/75)).
+- `max_daily_notional` was first sized to fit the replay fixture; the fixture now has its own limits file ([#75](https://github.com/SatyamDave/fall_forward_labs/pull/75)).
 
 ## Learned
 <!-- None yet. Entries arrive only through knowledge-sync PRs, newest first, max 15, format: - YYYY-MM-DD: <lesson> ([#N](https://github.com/SatyamDave/fall_forward_labs/pull/N)) -->

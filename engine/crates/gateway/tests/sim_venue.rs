@@ -161,3 +161,170 @@ fn sim_venue_replays_the_fixture_session_exactly() {
         ]
     );
 }
+
+/// The old bug: `SimVenue` never reduced the displayed size a fill took from,
+/// so a second aggressive order arriving before the next book update could
+/// take the same quantity again ("double-take"). This must fail before the
+/// fix that tracks consumed size per level.
+#[test]
+fn aggressive_orders_consume_displayed_liquidity_so_a_second_cannot_double_take() {
+    let records = record::parse("S,1,1,1000,1000,,100@2\n").unwrap();
+    let mut v = SimVenue::new(VenueId(1), InstrumentId(1));
+    let c = ClientOrderId;
+    let t = Timestamp(1000);
+
+    v.on_record(&records[0]);
+    v.submit(&order(1, Side::Buy, OrderType::Ioc, "100", "2"))
+        .unwrap();
+    assert_eq!(
+        drain(&mut v),
+        [
+            OrderEvent::Accepted {
+                client_id: c(1),
+                venue_id: VenueOrderId(1),
+                ts: t
+            },
+            OrderEvent::Filled {
+                client_id: c(1),
+                price: p("100"),
+                qty: q("2"),
+                ts: t
+            },
+        ]
+    );
+
+    // Same displayed level, no book update in between: nothing is left to
+    // take, so this order gets no fill and its IOC remainder is canceled.
+    v.submit(&order(2, Side::Buy, OrderType::Ioc, "100", "2"))
+        .unwrap();
+    assert_eq!(
+        drain(&mut v),
+        [
+            OrderEvent::Accepted {
+                client_id: c(2),
+                venue_id: VenueOrderId(2),
+                ts: t
+            },
+            OrderEvent::Canceled {
+                client_id: c(2),
+                ts: t
+            },
+        ]
+    );
+}
+
+/// A level that trades all the way down still fills in full once the feed
+/// republishes it: the next book update that touches a level replaces
+/// whatever was tracked as consumed from it.
+#[test]
+fn a_book_update_that_replaces_the_level_resets_what_was_consumed_from_it() {
+    let records = record::parse("S,1,1,1000,1000,,100@2\nD,1,2,S,100,2,2000,2000\n").unwrap();
+    let mut v = SimVenue::new(VenueId(1), InstrumentId(1));
+    let c = ClientOrderId;
+    let t1 = Timestamp(1000);
+    let t2 = Timestamp(2000);
+
+    v.on_record(&records[0]);
+    v.submit(&order(1, Side::Buy, OrderType::Ioc, "100", "2"))
+        .unwrap();
+    assert_eq!(
+        drain(&mut v),
+        [
+            OrderEvent::Accepted {
+                client_id: c(1),
+                venue_id: VenueOrderId(1),
+                ts: t1
+            },
+            OrderEvent::Filled {
+                client_id: c(1),
+                price: p("100"),
+                qty: q("2"),
+                ts: t1
+            },
+        ]
+    );
+
+    // The feed republishes the level (still showing 2): a fresh view, so the
+    // next aggressive order can take the full displayed size again.
+    v.on_record(&records[1]);
+    v.submit(&order(2, Side::Buy, OrderType::Ioc, "100", "2"))
+        .unwrap();
+    assert_eq!(
+        drain(&mut v),
+        [
+            OrderEvent::Accepted {
+                client_id: c(2),
+                venue_id: VenueOrderId(2),
+                ts: t2
+            },
+            OrderEvent::Filled {
+                client_id: c(2),
+                price: p("100"),
+                qty: q("2"),
+                ts: t2
+            },
+        ]
+    );
+}
+
+/// The old bug: `SimVenue` ignored queue position, so a resting order filled
+/// the instant any qualifying trade printed, regardless of how much size was
+/// already displayed ahead of it. This must fail before the fix.
+#[test]
+fn resting_orders_queue_behind_displayed_size_and_fill_only_once_it_trades_through() {
+    let records = record::parse("S,1,1,1000,1000,,100@3\n").unwrap();
+    let mut v = SimVenue::new(VenueId(1), InstrumentId(1));
+    let c = ClientOrderId;
+    let t1 = Timestamp(1000);
+    let trade =
+        |ts: u64, qty: &str| record::parse(&format!("T,1,B,100,{qty},{ts},{ts}\n")).unwrap();
+
+    v.on_record(&records[0]);
+    // Rests behind the 3 already displayed at 100; nothing crosses (no bids).
+    v.submit(&order(1, Side::Sell, OrderType::Limit, "100", "2"))
+        .unwrap();
+    assert_eq!(
+        drain(&mut v),
+        [OrderEvent::Accepted {
+            client_id: c(1),
+            venue_id: VenueOrderId(1),
+            ts: t1
+        }]
+    );
+
+    // 2 units trade through: only depletes the queue ahead (3 -> 1), no fill.
+    v.on_record(&trade(2000, "2")[0]);
+    assert_eq!(drain(&mut v), []);
+
+    // 2 more units: 1 clears the remaining queue, the other 1 fills us
+    // (partial fill: our qty is 2, only 1 is filled so far).
+    v.on_record(&trade(3000, "2")[0]);
+    assert_eq!(
+        drain(&mut v),
+        [OrderEvent::Filled {
+            client_id: c(1),
+            price: p("100"),
+            qty: q("1"),
+            ts: Timestamp(3000)
+        }]
+    );
+
+    // A further trade fills the remainder.
+    v.on_record(&trade(4000, "5")[0]);
+    assert_eq!(
+        drain(&mut v),
+        [OrderEvent::Filled {
+            client_id: c(1),
+            price: p("100"),
+            qty: q("1"),
+            ts: Timestamp(4000)
+        }]
+    );
+
+    let snapshot = v.order_snapshot().unwrap();
+    let summary: Vec<_> = snapshot
+        .iter()
+        .map(|o| (o.client_id.unwrap().0, o.open, o.filled))
+        .collect();
+    assert_eq!(summary, [(1, false, q("2"))]);
+}

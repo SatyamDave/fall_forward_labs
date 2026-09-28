@@ -13,7 +13,8 @@ exiting nonzero on any failure. Cases today:
 | Case | What it checks |
 |---|---|
 | `replay_determinism` | `just replay`: replaying `tests/replay/sample_day.csv` twice through `qc-replay` reproduces the committed order-log sha256 (root CLAUDE.md rule 7). |
-| `risk_invariants` | `cargo test -p qc-risk` (pre-trade checks, protected zone) plus the chaos suite (`engine/crates/replay/tests/chaos.rs`: kill switch, disconnect, stale book, reconciliation, daily loss). |
+| `risk_invariants` | `cargo test -p qc-risk` (pre-trade checks, protected zone), the chaos suite (`engine/crates/replay/tests/chaos.rs`: kill switch, disconnect, stale book, reconciliation, daily loss), and `cargo test -p qc-bridge` (kill-switch and oversized-order rejection asserted against the in-process `BridgeEngine`). |
+| `risk_invariants_bridge_sessions` | `scripts/eval/bridge_sessions.py`: oversized order, an order-rate burst, and stale market data, each driven as a real JSON-Lines session against the *compiled* `qc-bridge` binary (a black-box check across the process boundary). The stale-data case also reruns the identical scenario against a deliberately loosened `stale_data_ms` and asserts it then accepts — proof this case would fail loudly if the real limit were ever weakened the same way (root CLAUDE.md rule 4). |
 | `walkforward_demo_regression` | `just walkforward demo`'s deflated Sharpe and PBO stay within the tolerance committed in `evals/baselines/walkforward-demo.json`. **This is a regression check, not a performance claim**: `GATE_DSR=1.0` in `ml/validation/walkforward.py` is designed to be unreachable today, so verdict `FAIL` is the correct, expected result. The case exists to catch an unintended change to the walk-forward math or the synthetic data, not to bless a return. |
 | `registry_integrity` | `research/tests/test_registry.py`: no duplicate `(experiment, config_hash)` rows in the committed trial ledger, and no second `trials.jsonl` anywhere under `research/registry/`. |
 | `study_0001_guard` | `studies/0001-favorite-longshot/study.py` refuses to run without its exact snapshot. That snapshot is gitignored and kept outside git, so on any clean checkout or CI runner it is always absent — exit code 2 is the expected, correct result, proving the guard still fires. |
@@ -26,8 +27,8 @@ contract (`exit_code()`).
 ## Tier 2 — merge to main / nightly / manual dispatch, paid, gated
 
 `scripts/eval/live_agent.py` runs the live agent over the frozen scenario set in
-`evals/scenarios/` (three synthetic worldlines sliced from `tests/replay/sample_day.csv`; see
-`evals/scenarios/README.md`) and appends one result per scenario to
+`evals/scenarios/` (four synthetic worldlines, one of them a deliberately adversarial price-shock
+case; see `evals/scenarios/README.md`) and appends one result per scenario to
 `evals/ledger/agent-evals.jsonl` (gitignored; a human decides whether to commit a run — see
 `evals/ledger/README.md`).
 
@@ -42,6 +43,24 @@ visible in the report, not silently swallowed. `loop-agent-eval` does not exist 
 `autonomy/POLICY.yaml` yet — `agentic/agent-service` adds it, disabled and zero-budget — so this
 tier is gated off everywhere today, matching `docs/reports/base-status.md` item 6 (no
 `ANTHROPIC_API_KEY` in this repo).
+
+**Baselines, next to every result, not the agent's score alone (issue #37).** Each scenario's
+result reports the live agent's P&L next to `no_trade` (always 0), `buy_and_hold` (a fixed-size
+position, sized to `config/limits/default.toml`'s `max_position`, entered at the scenario's first
+quoted mid and marked at its last — computed via a real `qc-bridge` session, not a
+reimplementation of order-book logic in Python), and `classifier_only` (this same scenario run in
+`QC_AGENT_MODE=fake`: free, deterministic, no API key — this *is* the pre-agent fixed rule
+ADR-0040 §5 describes, so it always runs regardless of the live gate). Per
+`llm-trading-eval-research.md` §5 (FORESIGHT-9): an equal-weight buy-and-hold baseline beat LLM
+agents in 31 of 36 frozen-scenario runs — the right prior is "the agent probably doesn't beat the
+dumb baseline," not the reverse, and this is the check that proves it one way or the other on
+every run rather than reporting the agent's own number in isolation.
+
+The live and classifier-only runs call the agent CLI once each, directly — not through `just
+agent-sim`, which unconditionally runs twice and demands identical ledger hashes. That
+determinism check is right for fake mode but is not one a genuinely nondeterministic live run can
+ever pass (ADR-0040 §5: "live mode cannot meet this bar"), so routing a live run through it would
+have reported FAIL on every run's determinism alone, never on anything about the decision itself.
 
 ## Why paid evals don't run on every PR push
 

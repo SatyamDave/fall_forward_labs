@@ -12,6 +12,7 @@ fn oversized_notional_is_rejected_and_never_routed() {
 
     // 1000 units at ~99.8 is far past both max_notional (500) and max_position (0.01).
     let result = engine.submit_order_intent(
+        "dr-1",
         Side::Buy,
         "1000".parse().unwrap(),
         "99.8".parse().unwrap(),
@@ -34,6 +35,7 @@ fn oversized_position_is_rejected_when_notional_alone_would_pass() {
     // A cheap enough price keeps notional under the limit, but the size
     // still blows through max_position (0.01).
     let result = engine.submit_order_intent(
+        "dr-1",
         Side::Buy,
         "1".parse().unwrap(),
         "99.8".parse().unwrap(),
@@ -50,6 +52,7 @@ fn a_valid_intent_after_a_rejected_one_is_still_accepted() {
     assert!(engine.next_decision_request().is_some());
 
     let rejected = engine.submit_order_intent(
+        "dr-1",
         Side::Buy,
         "1000".parse().unwrap(),
         "99.8".parse().unwrap(),
@@ -58,6 +61,7 @@ fn a_valid_intent_after_a_rejected_one_is_still_accepted() {
     assert_eq!(rejected["accepted"], false);
 
     let accepted = engine.submit_order_intent(
+        "dr-2",
         Side::Buy,
         "0.001".parse().unwrap(),
         "99.8".parse().unwrap(),

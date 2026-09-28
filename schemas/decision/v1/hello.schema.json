@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://fall-forward-labs.local/schemas/decision/v1/hello.schema.json",
+  "title": "Hello",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "protocol",
+    "venue_mode",
+    "approval_public_key"
+  ],
+  "properties": {
+    "protocol": {
+      "type": "string",
+      "const": "1.1"
+    },
+    "venue_mode": {
+      "enum": [
+        "sim",
+        "external"
+      ]
+    },
+    "approval_public_key": {
+      "type": "string",
+      "description": "Base64 (standard alphabet, padded) of the raw 32-byte Ed25519 public key every approval this process mints can be verified against."
+    }
+  }
+}

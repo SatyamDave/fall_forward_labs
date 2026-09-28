@@ -52,3 +52,19 @@ Until they exist, the steps below are the intended shape, not a working procedur
    zone, a human has approved resuming.
 7. **Write it up** with `docs/postmortems/0000-template.md`. Every action item becomes a test, a
    rule or a runbook change.
+
+## Alerting (#64)
+
+This section is about `qc-bridge` (`engine/crates/bridge/`), the live/agent-facing engine (ADR-0040)
+-- a separate binary from `qc_replay::Engine` above, though both share `qc_risk`'s `KillSwitch` and
+`RiskEngine`. `qc-bridge` has no structured event log yet; `scripts/ops/alerts.py`'s contract asks
+for one JSON object per line, reusing the same snake_case vocabulary its `submit_order_intent`
+wire result already uses (`risk_reject_code()` and the `halted` field in
+`engine/crates/bridge/src/engine.rs`): `{"ts_ns", "event": "halt", "reason":
+"kill_switch"|"max_daily_loss"|"reconciliation"|"illegal_order_event", "detail"?}` (the last two
+are anticipated from protocol v1.1's `report_execution`, not yet implemented). It raises a generic
+**halt** alert for any `event: "halt"` line, and a narrower **kill_switch** alert specifically when
+`reason == "kill_switch"` (or a future `event: "kill_switch_engaged"` line, for the externally
+triggered switch in #44, which may fire before the bridge's next message observes the halt). Both
+fire from the same log line. See `ops/live/README.md` for where the log file lives and how the
+alert checker runs, and `scripts/ops/alerts.py`'s module docstring for the full contract.

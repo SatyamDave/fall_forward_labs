@@ -8,7 +8,9 @@ use qc_risk::Limits;
 use sha2::{Digest, Sha256};
 
 const DAY: &str = include_str!("../../../../tests/replay/sample_day.csv");
-const LIMITS: &str = include_str!("../../../../config/limits/default.toml");
+// Fixture-only limits (headroom for this day's ~$92k exercised notional), not the tiny
+// production default in config/limits/default.toml. See tests/replay/limits.toml.
+const LIMITS: &str = include_str!("../../../../tests/replay/limits.toml");
 const EXPECTED_SHA256: &str = include_str!("../../../../tests/replay/expected_order_log.sha256");
 
 #[test]

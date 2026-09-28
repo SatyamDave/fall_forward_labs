@@ -105,8 +105,9 @@ def case_replay_determinism(root: Path) -> CaseResult:
 def case_risk_invariants(root: Path) -> CaseResult:
     """cargo test -p qc-risk (pre-trade risk checks, protected zone) plus the chaos suite
     (engine/crates/replay/tests/chaos.rs: kill switch, disconnect, stale book, reconciliation,
-    daily loss). Two cargo invocations because the chaos tests live in qc-replay's integration
-    tests, not in qc-risk itself."""
+    daily loss), plus cargo test -p qc-bridge (kill_switch.rs, risk_rejection.rs and friends,
+    asserted against the in-process BridgeEngine the compiled binary wraps). Three cargo
+    invocations because these live in three different crates' integration tests."""
     start = time.monotonic()
     engine = root / "engine"
     risk = _run(["cargo", "test", "-p", "qc-risk", "--locked"], cwd=engine, timeout=600)
@@ -115,10 +116,14 @@ def case_risk_invariants(root: Path) -> CaseResult:
         cwd=engine,
         timeout=600,
     )
+    bridge = _run(["cargo", "test", "-p", "qc-bridge", "--locked"], cwd=engine, timeout=600)
     duration = time.monotonic() - start
-    if risk.returncode == 0 and chaos.returncode == 0:
+    if risk.returncode == 0 and chaos.returncode == 0 and bridge.returncode == 0:
         return CaseResult(
-            "risk_invariants", PASS, "qc-risk unit tests and the chaos suite both pass", duration
+            "risk_invariants",
+            PASS,
+            "qc-risk unit tests, the chaos suite and qc-bridge's session tests all pass",
+            duration,
         )
     detail = []
     if risk.returncode != 0:
@@ -130,7 +135,38 @@ def case_risk_invariants(root: Path) -> CaseResult:
             f"cargo test -p qc-replay --test chaos exited {chaos.returncode}\n"
             f"{_tail(chaos.stdout + chaos.stderr)}"
         )
+    if bridge.returncode != 0:
+        detail.append(
+            f"cargo test -p qc-bridge exited {bridge.returncode}\n"
+            f"{_tail(bridge.stdout + bridge.stderr)}"
+        )
     return CaseResult("risk_invariants", FAIL, "\n\n".join(detail), duration)
+
+
+def case_risk_invariants_bridge_sessions(root: Path) -> CaseResult:
+    """Issue #38: known-bad inputs (oversized order, an order-rate burst, stale market data)
+    driven as real JSON-Lines sessions against the compiled `qc-bridge` binary — a black-box
+    check across the process boundary, distinct from case_risk_invariants' cargo test runs.
+    See scripts/eval/bridge_sessions.py for the scenario and the loosened-limit control that
+    proves this case would fail loudly if a real limit were weakened. Kill-switch coverage stays
+    in case_risk_invariants (cargo test -p qc-bridge): there is no wire op to engage the kill
+    switch from outside the process, so that one can only be asserted in-process."""
+    start = time.monotonic()
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import bridge_sessions  # loaded lazily so a missing binary does not break --help
+
+    outcomes = bridge_sessions.run_all(root)
+    duration = time.monotonic() - start
+    failed = [(name, detail) for name, ok, detail in outcomes if not ok]
+    detail_lines = "\n".join(f"{name}: {detail}" for name, _ok, detail in outcomes)
+    if failed:
+        return CaseResult(
+            "risk_invariants_bridge_sessions",
+            FAIL,
+            "\n".join(f"{name}: {detail}" for name, detail in failed) + f"\n\nall:\n{detail_lines}",
+            duration,
+        )
+    return CaseResult("risk_invariants_bridge_sessions", PASS, detail_lines, duration)
 
 
 def case_walkforward_regression(root: Path) -> CaseResult:
@@ -321,6 +357,7 @@ def case_agent_sim(root: Path) -> CaseResult:
 CASES = (
     case_replay_determinism,
     case_risk_invariants,
+    case_risk_invariants_bridge_sessions,
     case_walkforward_regression,
     case_registry_integrity,
     case_study_0001_guard,

@@ -265,18 +265,22 @@ impl<S: Strategy, V: VenueAdapter> Engine<S, V> {
                 client_id,
                 price,
                 qty,
-                ..
+                ts,
             } = order_event
                 && let Some(order) = self.oms.get(client_id)
             {
+                let (instrument, side) = (order.request.instrument, order.request.side);
                 let notional = i128::from(price.raw()) * i128::from(qty.raw()) / i128::from(SCALE);
-                let (dq, dc) = match order.request.side {
+                let (dq, dc) = match side {
                     Side::Buy => (qty.raw(), -notional),
                     Side::Sell => (-qty.raw(), notional),
                 };
                 self.position = Qty::from_raw(self.position.raw() + dq);
                 self.cash += dc;
                 self.check_daily_loss();
+                // #40: a wash-trade pattern is about completed trades, not merely
+                // accepted-then-canceled quotes, so this is fed on fill, not on submit.
+                self.risk.record_fill(instrument, side, price, qty, ts);
             }
             self.dispatch(&Event::Order(order_event));
         }
@@ -284,11 +288,22 @@ impl<S: Strategy, V: VenueAdapter> Engine<S, V> {
 
     fn context(&self, order: &OrderRequest) -> RiskContext {
         let (mut open_buy, mut open_sell) = (0_i64, 0_i64);
+        let (mut own_best_bid, mut own_best_ask) = (None, None);
         for o in self.oms.open_orders() {
             if o.request.instrument == order.instrument {
                 match o.request.side {
-                    Side::Buy => open_buy += o.open_qty().raw(),
-                    Side::Sell => open_sell += o.open_qty().raw(),
+                    Side::Buy => {
+                        open_buy += o.open_qty().raw();
+                        own_best_bid = Some(
+                            own_best_bid.map_or(o.request.price, |b: Price| b.max(o.request.price)),
+                        );
+                    }
+                    Side::Sell => {
+                        open_sell += o.open_qty().raw();
+                        own_best_ask = Some(
+                            own_best_ask.map_or(o.request.price, |a: Price| a.min(o.request.price)),
+                        );
+                    }
                 }
             }
         }
@@ -304,6 +319,8 @@ impl<S: Strategy, V: VenueAdapter> Engine<S, V> {
                 .mid()
                 .filter(|_| self.book.status() == BookStatus::Synced),
             daily_pnl: self.daily_pnl(),
+            own_best_bid,
+            own_best_ask,
         }
     }
 
@@ -340,8 +357,11 @@ impl<S: Strategy, V: VenueAdapter> Engine<S, V> {
                 RiskReject::InvalidOrder
                 | RiskReject::StaleData
                 | RiskReject::PriceBand
+                | RiskReject::SelfCross
                 | RiskReject::MaxNotional
+                | RiskReject::MaxDailyNotional
                 | RiskReject::MaxPosition
+                | RiskReject::WashTrade
                 | RiskReject::MaxOrderRate => self.reject_locally(order),
             }
             return;

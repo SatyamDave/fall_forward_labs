@@ -16,6 +16,7 @@ fn engaged_kill_switch_halts_submit_before_risk_or_the_venue() {
 
     // A perfectly ordinary order, well inside every limit.
     let ok = engine.submit_order_intent(
+        "dr-1",
         Side::Buy,
         "0.001".parse().unwrap(),
         "99.8".parse().unwrap(),
@@ -28,6 +29,7 @@ fn engaged_kill_switch_halts_submit_before_risk_or_the_venue() {
 
     kill_switch.engage();
     let halted = engine.submit_order_intent(
+        "dr-2",
         Side::Buy,
         "0.001".parse().unwrap(),
         "99.8".parse().unwrap(),
