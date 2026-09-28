@@ -236,6 +236,66 @@ def test_malformed_lines_do_not_crash_the_checker(
     assert "halt" in out
 
 
+# --- stop_rule (issue #45/#70: the daily P&L report's own stop-rule verdict) -----------------
+
+
+def test_stop_rule_alert_fires_when_pnl_report_says_triggered(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    code, out = run(
+        ["--pnl-report", str(FIXTURES / "pnl_report_stop_rule_tripped.json"), "--now-ns", "1"],
+        tmp_path,
+        capsys,
+    )
+    assert code == 1
+    assert "stop_rule: stop rule tripped for 2026-02-02" in out
+    assert "drawdown $75 exceeds $50" in out
+    assert alerts.RUNBOOKS["stop_rule"] in out
+
+
+def test_stop_rule_alert_does_not_fire_when_not_triggered(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    code, out = run(
+        ["--pnl-report", str(FIXTURES / "pnl_report_stop_rule_clean.json"), "--now-ns", "1"],
+        tmp_path,
+        capsys,
+    )
+    assert code == 0
+    assert out == ""
+
+
+def test_stop_rule_alert_is_skipped_when_no_pnl_report_given(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    code, out = run([], tmp_path, capsys)
+    assert code == 0
+    assert out == ""
+
+
+def test_stop_rule_alert_is_skipped_when_the_pnl_report_path_does_not_exist(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    code, out = run(
+        ["--pnl-report", str(tmp_path / "does-not-exist.json"), "--now-ns", "1"], tmp_path, capsys
+    )
+    assert code == 0
+    assert out == ""
+
+
+def test_stop_rule_alert_does_not_repeat_for_the_same_date_across_runs(tmp_path: Path) -> None:
+    argv = ["--pnl-report", str(FIXTURES / "pnl_report_stop_rule_tripped.json"), "--now-ns", "1"]
+    state_file = tmp_path / "alerts-seen.json"
+    first = alerts.main([*argv, "--state-file", str(state_file)])
+    second = alerts.main([*argv, "--state-file", str(state_file)])
+    assert first == 1
+    assert second == 0  # already alerted for this date
+
+
+def test_check_stop_rule_returns_nothing_for_none() -> None:
+    assert alerts.check_stop_rule(None) == []
+
+
 def test_console_notifier_is_the_default_and_makes_no_network_call(
     tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:

@@ -147,6 +147,15 @@ report-ledger *args:
 report-pnl *args:
     python3 scripts/reports/pnl_report.py {{args}}
 
+# Issue #45 (scheduling) + #70: the once-a-day close. Runs (or checks) the day's broker
+# reconciliation, writes the broker-sourced daily P&L (report-pnl --source broker) with that
+# verdict embedded, and alerts (scripts/ops/alerts.py) on a reconcile mismatch or a stop-rule
+# trip. No live host exists yet (ops/live/README.md), so without --reconcile-cmd this always
+# reports reconciliation "unknown" and exits nonzero -- fails closed rather than claiming clean.
+# See scripts/ops/daily_close.py's module docstring for the systemd-timer wiring.
+daily-close *args:
+    python3 scripts/ops/daily_close.py {{args}}
+
 # Issue #52: turn decision-ledger entries with known outcomes into new frozen scenarios under
 # evals/scenarios/from_ledger/ (provenance sidecar, synthetic/real label; never leaks the
 # outcome into the generated scenario's decision inputs). No-op, exit 0, if no ledger exists yet.
