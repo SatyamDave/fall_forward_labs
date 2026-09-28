@@ -8,7 +8,7 @@ agent := "agent"
 # Python outside research/ and ml/ that ruff also checks, relative to research/. Not listed:
 # autonomy/ and tests/autonomy/ (protected paths that fail ruff today; fixing them needs a T3 PR),
 # and tests/replay/generate_sample_day.py (S311, PTH123; the fixture it wrote must stay identical).
-py_extra := "../data ../scripts ../tests/knowledge ../tests/hooks ../tests/ci ../.claude/hooks"
+py_extra := "../data ../scripts ../tests/knowledge ../tests/hooks ../tests/ci ../tests/evals ../.claude/hooks"
 
 default:
     @just --list
@@ -43,6 +43,7 @@ test:
     cd {{research}} && uv run pytest -q ../tests/knowledge
     cd {{research}} && uv run pytest -q ../tests/autonomy
     cd {{research}} && uv run pytest -q ../tests/ci
+    cd {{research}} && uv run pytest -q ../tests/evals
     cd {{research}} && uv run pytest -q studies/0001-favorite-longshot/tests
 
 # Known-vulnerability and license checks; each tool is skipped with a message if it is not installed
@@ -121,6 +122,11 @@ study-0001:
     cd {{research}} && uv run python studies/0001-favorite-longshot/study.py
     cd {{research}} && uv run pytest studies/0001-favorite-longshot/tests -q
 
+# Tier 1 eval suite: free, deterministic, every PR. Writes out/eval/report.{json,md}.
+# See evals/README.md for the tier design (this is Tier 1 of 3).
+eval:
+    python3 scripts/eval/run.py
+
 # ADR-0040 agent service (agent/): install pinned dependencies (npm ci, committed lockfile)
 agent-setup:
     cd {{agent}} && npm ci
@@ -131,11 +137,9 @@ agent-setup:
 agent-test:
     cd {{agent}} && npm test
 
-# End-to-end fake-mode demo over tests/replay/sample_day.csv. Builds qc-bridge when its crate
-# and cargo are both available (informational: catches build breaks early), but always drives
-# the actual loop through the bundled fake bridge stand-in (src/testkit/fake-bridge.ts) unless
-# the caller sets QC_BRIDGE_BIN — the real binary's CLI args aren't fixed by this lane. Runs
-# the loop twice into separate ledgers and fails unless both sha256 hashes match.
+# End-to-end fake-mode demo: builds the real qc-bridge and drives it over
+# tests/replay/sample_day.csv (set QC_BRIDGE_BIN to use another bridge, e.g. the TS stand-in
+# src/testkit/fake-bridge.ts). Runs the loop twice and fails unless both ledger hashes match.
 agent-sim:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -155,6 +159,8 @@ agent-sim:
     run() {
       local out; out=$(mktemp -d)
       QC_AGENT_LEDGER_PATH="$out/ledger.jsonl" node_modules/.bin/tsx src/cli.ts >&2
+      # Keep the latest ledger where evals and CI artifacts look for it.
+      mkdir -p ../out/agent && cp "$out/ledger.jsonl" ../out/agent/ledger.jsonl
       sha "$out/ledger.jsonl"
     }
     hash1=$(run)

@@ -1,0 +1,88 @@
+# evals
+
+Three tiers, cheapest first (`llm-trading-eval-research.md` §5: recorded-response replay per PR,
+a frozen scenario suite per merge, prospective shadow last). Root CLAUDE.md rule 6: every
+experiment is recorded, including failures; a check that could not run is a skip, never a pass.
+
+## Tier 1 — every PR, free, deterministic
+
+`just eval` runs `scripts/eval/run.py`, which executes named cases and writes
+`out/eval/report.json` and `out/eval/report.md` (both gitignored, uploaded as a CI artifact),
+exiting nonzero on any failure. Cases today:
+
+| Case | What it checks |
+|---|---|
+| `replay_determinism` | `just replay`: replaying `tests/replay/sample_day.csv` twice through `qc-replay` reproduces the committed order-log sha256 (root CLAUDE.md rule 7). |
+| `risk_invariants` | `cargo test -p qc-risk` (pre-trade checks, protected zone) plus the chaos suite (`engine/crates/replay/tests/chaos.rs`: kill switch, disconnect, stale book, reconciliation, daily loss). |
+| `walkforward_demo_regression` | `just walkforward demo`'s deflated Sharpe and PBO stay within the tolerance committed in `evals/baselines/walkforward-demo.json`. **This is a regression check, not a performance claim**: `GATE_DSR=1.0` in `ml/validation/walkforward.py` is designed to be unreachable today, so verdict `FAIL` is the correct, expected result. The case exists to catch an unintended change to the walk-forward math or the synthetic data, not to bless a return. |
+| `registry_integrity` | `research/tests/test_registry.py`: no duplicate `(experiment, config_hash)` rows in the committed trial ledger, and no second `trials.jsonl` anywhere under `research/registry/`. |
+| `study_0001_guard` | `studies/0001-favorite-longshot/study.py` refuses to run without its exact snapshot. That snapshot is gitignored and kept outside git, so on any clean checkout or CI runner it is always absent — exit code 2 is the expected, correct result, proving the guard still fires. |
+| `agent_sim_fake` | If the `agent-sim` recipe exists (it arrives from `agentic/agent-service`): runs it twice in fake mode, requires identical `out/agent/ledger.jsonl` hashes and zero ledger-schema violations, then runs `just agent-test`. Until that recipe exists, this case is recorded as **skipped** — `"not yet available (depends on agentic/agent-service)"` — never as a pass or a failure. |
+
+A skip is listed in the report separately from a pass and never turns a failing run green; a
+failure elsewhere is never hidden by a skip. See `scripts/eval/run.py`'s docstring for the exact
+contract (`exit_code()`).
+
+## Tier 2 — merge to main / nightly / manual dispatch, paid, gated
+
+`scripts/eval/live_agent.py` runs the live agent over the frozen scenario set in
+`evals/scenarios/` (three synthetic worldlines sliced from `tests/replay/sample_day.csv`; see
+`evals/scenarios/README.md`) and appends one result per scenario to
+`evals/ledger/agent-evals.jsonl` (gitignored; a human decides whether to commit a run — see
+`evals/ledger/README.md`).
+
+It runs only if both hold:
+- `python3 scripts/ci/ai_gate.py loop-agent-eval` allows (reads `autonomy/POLICY.yaml`, fails
+  closed — same contract as every other paid loop in this repo, `scripts/ci/ai_gate.py`'s own
+  docstring);
+- `ANTHROPIC_API_KEY` is set.
+
+Otherwise it exits 0 and prints `"skipped: gated off"` (with the reason), and that skip is
+visible in the report, not silently swallowed. `loop-agent-eval` does not exist in
+`autonomy/POLICY.yaml` yet — `agentic/agent-service` adds it, disabled and zero-budget — so this
+tier is gated off everywhere today, matching `docs/reports/base-status.md` item 6 (no
+`ANTHROPIC_API_KEY` in this repo).
+
+## Why paid evals don't run on every PR push
+
+Two reasons, both evidenced in `llm-trading-eval-research.md`:
+
+1. **Cost.** A live LLM call per PR push, multiplied by every push on every open PR, is
+   unbounded spend for a check whose main job (catching a code regression) Tier 1's free,
+   deterministic cases already do. `autonomy/POLICY.yaml`'s global and per-loop dollar caps exist
+   precisely because an ungated paid loop can spend a day's budget on iteration noise, not signal.
+2. **Nondeterminism.** An LLM agent's output is not reproducible run to run (`agent-sdk-research.md`:
+   no temperature/seed knob on the Agent SDK), so a paid run on every push would be a flaky gate,
+   not a stable one — and small-sample, single-split live-LLM comparisons are exactly the kind of
+   result the Ordinal-Gates critique (§4 of the research) shows can look like a real effect and
+   not survive a second split. Running it less often, against a frozen scenario set, with a fixed
+   baseline to beat, is the cheap version of the mitigation the research recommends (§5,
+   FORESIGHT-9: several frozen worldlines, not one window; a dumb baseline as the bar).
+
+## Tier 3 — shadow, prospective (not built)
+
+Documented here only; no code yet.
+
+- **Design:** the agent decides on live data; orders go only to `SimVenue`/paper, never live
+  capital (root CLAUDE.md rules 3-5, agentic-spec.md's recursive-learning-loop section). Every
+  decision, outcome and gate reason is recorded to the decision ledger (`agentic-spec.md`'s
+  handoff protocol v1), the same append-only discipline as the Tier 2 ledger.
+- **Forward-only.** Per `llm-trading-eval-research.md` §1: a passive backtest cannot separate
+  genuine skill from an LLM's recency/memorization confound (Zhang & Stadie, arXiv:2608.02985;
+  Gao/Jiang/Yan, arXiv:2512.23847). The only mitigation with no residual leakage channel is
+  evaluating strictly on data collected as it happens, after the fact of the decision, never
+  replayed against pre-cutoff history as if it were a backtest.
+- **Pre-planned sample size**, decided before the data is collected so the stopping rule cannot
+  be chosen post hoc: `n ≈ 16·p·(1-p)/δ²` at the conventional 80% power / 5% significance,
+  where `p` is the current champion's baseline rate for the metric being compared and `δ` the
+  smallest improvement worth acting on (§5 of the research; the same formula
+  `docs/plans/0002-autonomy.md`-style phase work would use for a promotion decision).
+- **Holm correction** across every simultaneous comparison in a shadow run (candidate vs.
+  champion vs. no-trade vs. buy-and-hold, per scenario) before any one of them is called
+  significant — per the Ordinal-Gates community critique (§4): an uncorrected single-split result
+  can look like a real effect (their headline `+9.2pp/yr`) and evaporate under correction
+  (`+1.17pp`, not significant). Romano-Wolf is an acceptable stronger alternative where the
+  comparisons are many and correlated.
+- **Forward-only, not "mostly forward-only."** No pre-cutoff data is reused as if it were a
+  shadow result, and no result is reported until the pre-planned sample size is reached — a
+  peek-and-stop is exactly the failure mode the sample-size plan exists to prevent.
