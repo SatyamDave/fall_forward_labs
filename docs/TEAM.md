@@ -72,6 +72,13 @@ founder**. Agent reviewers left COMMENT reviews, which are not approvals. This r
 decision; it is not enforcement and not a precedent. Details:
 [base-status](reports/base-status.md#how-the-prs-were-merged).
 
+Dated exception, 2026-09-28 (second batch): on the owner's explicit instruction ("merge
+everything"), PRs #56, #58, #59, #60 and #61 were merged. They include ADR-0040, which amends root
+rule 1 (the agent may make the final trade decision), protected workflow files and
+`autonomy/POLICY.yaml`. Rohit (@rovivek) had not reviewed them: his approval of ADR-0040 is still
+required by the decision protocol above and is tracked in issue #20. Until he approves, treat
+ADR-0040 as accepted by Satyam only; nothing beyond fake-mode and simulated trading may run.
+
 Proposed policy, for both founders to accept or change (nothing here is applied):
 
 1. Until a second founder is a collaborator, no PR touching a protected zone merges. The owner
