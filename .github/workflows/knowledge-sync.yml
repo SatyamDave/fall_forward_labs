@@ -8,6 +8,14 @@
 # Two jobs: `propose` runs Claude with a read-only token on the PR's text (which
 # is data, not instructions) and exports a patch; `open-pr` has write access,
 # runs no model, scope-checks the patch and opens the PR.
+#
+# Opening the PR: `open-pr` uses GITHUB_TOKEN. The repository setting "Allow
+# GitHub Actions to create pull requests" is off (SECURITY runbook step 4), so
+# `gh pr create` fails and the job fails with the branch kept. Even with the
+# setting on, a PR created with GITHUB_TOKEN triggers no workflows, so its
+# required checks would never run. Until a GitHub App token replaces it, this
+# loop cannot open PRs; its paid step is also gated off by scripts/ci/ai_gate.py
+# once the AI workflow gating (#17) lands.
 name: knowledge-sync
 
 on:
