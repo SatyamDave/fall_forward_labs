@@ -2,15 +2,22 @@
 
 This stub writes JSON Lines to a local file so the trial count used for deflated
 Sharpe is honest from the first experiment. ADR-0005 picks the real backend.
+
+REGISTRY_DIR is the one ledger location every writer and reader uses: research/registry/log/,
+or the directory in QC_REGISTRY_DIR when that is set.
 """
 
 import json
+import os
 from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from _typeshed import DataclassInstance
+
+REGISTRY_DIR = Path(os.environ.get("QC_REGISTRY_DIR", Path(__file__).resolve().parent / "log"))
+TRIALS = REGISTRY_DIR / "trials.jsonl"
 
 
 @dataclass(frozen=True)

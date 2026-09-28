@@ -6,19 +6,14 @@ or the registry needs a UI. Records are never edited: a status change is a new r
 same artifact hash, and the latest record wins.
 """
 
-import os
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Literal
 
-from registry import read, record
+from registry import REGISTRY_DIR, read, record
 
 Status = Literal["challenger", "no_signal", "promoted"]
 
-REGISTRY_DIR = Path(
-    os.environ.get("QC_REGISTRY_DIR", Path(__file__).resolve().parents[2] / "research/registry/log")
-)
-TRIALS = REGISTRY_DIR / "trials.jsonl"
 MODELS = REGISTRY_DIR / "models.jsonl"
 
 

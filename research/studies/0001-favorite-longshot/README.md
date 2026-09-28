@@ -13,7 +13,7 @@ Consequential assumption, made by the agent on 2026-09-27 and stated here so a f
 - `study.py`: selection, features, chronological split, leakage guard, metrics, decision. Offline.
 - `tests/test_leakage.py`: the leakage guard passes clean rows and trips on a price after its decision time, a label field in a feature row, and a train label settling after the first test decision.
 - `tests/test_recompute.py`: recomputes the primary metric straight from the raw JSON with separate code and asserts equality. Skips when the snapshot is absent (CI has no raw data).
-- `record_trial.py`: appends the one registered trial to `research/registry/trials.jsonl` via `registry.record`; refuses a second append for the same config hash.
+- `record_trial.py`: appends the one registered trial to the canonical ledger `research/registry/log/trials.jsonl` via `registry.record`; refuses a second append for the same config hash.
 
 ## Commands
 

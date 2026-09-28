@@ -25,10 +25,10 @@ from data.recorders.synthetic import TICK, write_day
 from ml.datasets import DOWN, UP, Dataset, build, replay_top_of_book
 from ml.export import export
 from ml.features import FEATURE_NAMES, FEATURE_VERSION
-from ml.registry import TRIALS, ModelRecord, append
+from ml.registry import ModelRecord, append
 from ml.training import TrainConfig, train
 from ml.validation import deflated_sharpe, pbo, purged_walk_forward, sharpe
-from registry import Trial, read, record, trial_count
+from registry import TRIALS, Trial, read, record, trial_count
 
 ROOT = Path(__file__).resolve().parents[2]
 REQUIRED = ("costs", "latency", "fill_model")
