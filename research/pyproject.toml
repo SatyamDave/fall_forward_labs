@@ -1,0 +1,34 @@
+[project]
+name = "qc-research"
+version = "0.1.0"
+description = "Fall Forward Labs research and ML environment (research/ and ml/)"
+requires-python = ">=3.12"
+dependencies = []
+
+[dependency-groups]
+dev = ["pytest", "ruff", "mypy"]
+
+[tool.uv]
+# Not an installable package: research/ and ../ml are imported from source via
+# pytest's pythonpath, so one lockfile and one venv serve both.
+package = false
+
+[tool.pytest.ini_options]
+pythonpath = [".", ".."]
+testpaths = ["tests"]
+addopts = ["--import-mode=importlib", "--strict-markers"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B", "UP", "S", "PTH", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**" = ["S101"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+mypy_path = ["."]

@@ -1,0 +1,7 @@
+# Real orders with tiny capital, after the paper gate passes and a human approves.
+# No secrets here: credentials are injected at runtime from the secret manager.
+
+name = "canary"
+real_orders = true
+limits = "config/limits/default.toml"
+kill_switch_max_ms = 1000

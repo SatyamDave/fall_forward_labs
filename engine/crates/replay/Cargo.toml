@@ -1,0 +1,15 @@
+[package]
+name = "qc-replay"
+description = "Replays recorded events through a strategy to reproduce its orders"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+qc-core.workspace = true
+qc-strategy-runtime.workspace = true
