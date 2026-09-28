@@ -2,11 +2,15 @@
 //!
 //! Matching model, deliberately simple (fill modelling proper lives in `backtest/`):
 //! - A marketable order fills immediately against the displayed opposite levels
-//!   at their prices, up to its limit. The displayed book is not reduced, so two
-//!   aggressive orders in a row can both take the same displayed quantity.
+//!   at their prices, up to its limit. Each fill consumes displayed size at that
+//!   level (tracked separately from the book, which only the feed itself moves),
+//!   so a second aggressive order arriving before the next book update sees the
+//!   remaining size, not the full displayed size again.
 //! - Resting orders fill only when a recorded trade prints at or through their
 //!   price with the opposite aggressor, best price first then oldest first, up to
-//!   the trade's size. Queue position is ignored.
+//!   the trade's size. A resting order also gets a queue position: the size
+//!   displayed on its own side at its own price when it arrived. That much
+//!   volume must trade at or through the price before the order gets any fill.
 //! - `PostOnly` that would take liquidity is rejected; the `Ioc` remainder is canceled.
 //!
 //! Venue time is the local timestamp of the last record fed in.
@@ -32,6 +36,11 @@ struct SimOrder {
     qty: Qty,
     filled: Qty,
     open: bool,
+    /// Displayed size ahead of this order at its price when it arrived. A
+    /// recorded trade at or through the price must exhaust this before any of
+    /// it can fill this order (queue position, best-price/oldest-first is the
+    /// rest of the priority; see [`SimVenue::match_trade`]).
+    queue_ahead: Qty,
 }
 
 #[derive(Debug)]
@@ -45,6 +54,11 @@ pub struct SimVenue {
     orders: BTreeMap<VenueOrderId, SimOrder>,
     by_client: BTreeMap<ClientOrderId, VenueOrderId>,
     events: VecDeque<Event>,
+    /// Size already taken from a displayed level by an aggressive order since
+    /// the last book update touched that (side, price) level. Cleared for a
+    /// level as soon as a snapshot or delta replaces it, since the fresh
+    /// displayed size then reflects the world's current view.
+    consumed: BTreeMap<(Side, Price), Qty>,
 }
 
 impl SimVenue {
@@ -59,6 +73,7 @@ impl SimVenue {
             orders: BTreeMap::new(),
             by_client: BTreeMap::new(),
             events: VecDeque::new(),
+            consumed: BTreeMap::new(),
         }
     }
 
@@ -81,10 +96,17 @@ impl SimVenue {
         self.now = self.now.max(record.ts_local());
         match record {
             Record::Snapshot(s) => {
-                let _ = self.book.apply_snapshot(s);
+                if self.book.apply_snapshot(s).is_ok() {
+                    // A snapshot replaces every level on both sides.
+                    self.consumed.clear();
+                }
             }
             Record::Market(MarketEvent::BookDelta(d)) => {
-                let _ = self.book.apply(d);
+                if self.book.apply(d).is_ok() {
+                    // This exact level was just replaced by the feed; any size an
+                    // aggressive order took from it no longer applies.
+                    self.consumed.remove(&(d.side, d.price));
+                }
             }
             Record::Market(MarketEvent::Trade(t)) => {
                 if t.instrument == self.book.instrument() {
@@ -115,6 +137,14 @@ impl SimVenue {
                 break;
             }
             let order = self.orders.get_mut(&id).expect("id came from the map");
+            // This trade first has to clear whatever was displayed ahead of the
+            // order when it arrived; only volume beyond that can fill it.
+            let ahead = order.queue_ahead.min(size);
+            order.queue_ahead = Qty::from_raw(order.queue_ahead.raw() - ahead.raw());
+            size = Qty::from_raw(size.raw() - ahead.raw());
+            if size <= Qty::ZERO {
+                continue;
+            }
             let open = Qty::from_raw(order.qty.raw() - order.filled.raw());
             let take = open.min(size);
             size = Qty::from_raw(size.raw() - take.raw());
@@ -165,6 +195,7 @@ impl SimVenue {
                 qty,
                 filled: Qty::ZERO,
                 open: true,
+                queue_ahead: Qty::ZERO,
             },
         );
         venue_id
@@ -206,6 +237,14 @@ impl VenueAdapter for SimVenue {
         }
         let venue_id = VenueOrderId(self.next_venue_id);
         self.next_venue_id += 1;
+        // Queue position: the size already displayed on our own side at our own
+        // price when we arrive. A resting order joins the back of that queue.
+        let queue_ahead = self
+            .book
+            .levels(order.side)
+            .iter()
+            .find(|(p, _)| *p == order.price)
+            .map_or(Qty::ZERO, |(_, q)| *q);
         self.orders.insert(
             venue_id,
             SimOrder {
@@ -216,6 +255,7 @@ impl VenueAdapter for SimVenue {
                 qty: order.qty,
                 filled: Qty::ZERO,
                 open: true,
+                queue_ahead,
             },
         );
         self.by_client.insert(client_id, venue_id);
@@ -236,8 +276,21 @@ impl VenueAdapter for SimVenue {
             if remaining <= Qty::ZERO {
                 break;
             }
-            let take = displayed.min(remaining);
+            let already_taken = self
+                .consumed
+                .get(&(opposite, price))
+                .copied()
+                .unwrap_or(Qty::ZERO);
+            let available = Qty::from_raw((displayed.raw() - already_taken.raw()).max(0));
+            if available <= Qty::ZERO {
+                continue;
+            }
+            let take = available.min(remaining);
             remaining = Qty::from_raw(remaining.raw() - take.raw());
+            self.consumed.insert(
+                (opposite, price),
+                Qty::from_raw(already_taken.raw() + take.raw()),
+            );
             self.fill(venue_id, price, take);
         }
         let order_type = order.order_type;
