@@ -6,7 +6,7 @@ Regenerated automatically by `.github/workflows/docs-status.yml` on every merge 
 Narrative docs: [project guide](guide/quant-core-guide.html) ·
 [base status](reports/base-status.md) · [NOW](NOW.md).
 
-Generated from `main` at **b44607a 2026-09-28**. Latest CI on `main`: **in_progress on b44607a**.
+Generated from `main` at **ebb8db5 2026-09-28**. Latest CI on `main`: **in_progress on ebb8db5**.
 Paid AI loops: **off**.
 
 ## Open pull requests (2)
@@ -20,6 +20,7 @@ Paid AI loops: **off**.
 
 | PR | Title | Merged |
 |---|---|---|
+| [#93](https://github.com/SatyamDave/fall_forward_labs/pull/93) | Keep the sample SPY limits inside the canary caps | 2026-09-28 |
 | [#90](https://github.com/SatyamDave/fall_forward_labs/pull/90) | Never send an order when the market is closed | 2026-09-28 |
 | [#89](https://github.com/SatyamDave/fall_forward_labs/pull/89) | Record the full order book, not just the best price | 2026-09-28 |
 | [#88](https://github.com/SatyamDave/fall_forward_labs/pull/88) | Bring the docs and roadmap up to date with what's built | 2026-09-28 |
@@ -34,12 +35,15 @@ Paid AI loops: **off**.
 | [#77](https://github.com/SatyamDave/fall_forward_labs/pull/77) | ops: give live trading a safe home and alert on it breaking | 2026-09-28 |
 | [#79](https://github.com/SatyamDave/fall_forward_labs/pull/79) | Baseline-checked evals, decision/PnL reports, and a stop rule | 2026-09-28 |
 | [#72](https://github.com/SatyamDave/fall_forward_labs/pull/72) | Make SimVenue consume liquidity and respect queue position | 2026-09-28 |
-| [#75](https://github.com/SatyamDave/fall_forward_labs/pull/75) | Add self-cross, wash-trade and daily-notional dollar caps to qc-risk | 2026-09-28 |
 
 ## Recent commits on main
 
 | Commit | Date | Subject |
 |---|---|---|
+| `ebb8db5` | 2026-09-28 | Merge pull request #93 from SatyamDave/fix/spy-limits-within-canary |
+| `7d46c30` | 2026-09-28 | Merge main into fix/spy-limits-within-canary before merging #93 |
+| `b0b8df7` | 2026-09-28 | fix(limits): keep the sample SPY limits inside the canary caps |
+| `44bdf96` | 2026-09-28 | docs(status): regenerate live status from b44607a [skip ci] |
 | `b44607a` | 2026-09-28 | Merge pull request #90 from SatyamDave/wave3/calendar |
 | `130a5f5` | 2026-09-28 | Merge main into wave3/calendar before merging #90 |
 | `0cb401b` | 2026-09-28 | docs(status): regenerate live status from d7d8254 [skip ci] |
@@ -48,10 +52,6 @@ Paid AI loops: **off**.
 | `4390f58` | 2026-09-28 | Merge main into wave3/level2 before merging #89 |
 | `b40f7fe` | 2026-09-28 | feat(engine/bridge): add NYSE holiday and early-close calendar to the trading-hours gate |
 | `25e0a71` | 2026-09-28 | Record the full order book, not just the best price |
-| `e564b3d` | 2026-09-28 | docs(status): regenerate live status from 3f66f6b [skip ci] |
-| `3f66f6b` | 2026-09-28 | Merge pull request #88 from SatyamDave/docs/sync-after-waves |
-| `44b30a8` | 2026-09-28 | docs: bring README, ARCHITECTURE, ROADMAP, NOW, TEAM and the guide up to main |
-| `013f3b1` | 2026-09-28 | docs(status): regenerate live status from c0958a5 [skip ci] |
 
 ## Decisions (ADRs)
 
