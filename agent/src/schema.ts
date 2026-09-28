@@ -13,7 +13,14 @@ export type SchemaName =
   | "decision"
   | "order_intent"
   | "intent_result"
-  | "decision_ledger_entry";
+  | "decision_ledger_entry"
+  // Protocol v1.1 additions (issues #34, #29): referenced by $ref from
+  // bridge_request/bridge_response/intent_result, so ajv's strict-mode
+  // schema compilation fails to resolve those refs unless these are loaded
+  // too, even for a plain v1 (sim-mode) message.
+  | "order_execution"
+  | "approval"
+  | "hello";
 
 const SCHEMA_NAMES: readonly SchemaName[] = [
   "bridge_request",
@@ -23,6 +30,9 @@ const SCHEMA_NAMES: readonly SchemaName[] = [
   "order_intent",
   "intent_result",
   "decision_ledger_entry",
+  "order_execution",
+  "approval",
+  "hello",
 ];
 
 const SCHEMA_ID_PREFIX = "https://fall-forward-labs.local/schemas/decision/v1/";

@@ -6,7 +6,7 @@ mod support;
 
 use std::io::Write as _;
 
-use qc_bridge::{BridgeEngine, LoadedModel};
+use qc_bridge::{BridgeEngine, LoadedModel, VenueMode};
 use qc_inference::linear::{LinearModel, sha256_hex};
 use qc_risk::KillSwitch;
 
@@ -37,6 +37,7 @@ fn decision_request_carries_a_signal_once_a_model_is_configured_and_warmed_up() 
         "0.1".parse().unwrap(),
         1,
         Some(loaded),
+        VenueMode::Sim,
     );
 
     let mut seen_signal = false;
