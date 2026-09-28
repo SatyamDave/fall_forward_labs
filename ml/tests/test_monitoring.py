@@ -9,8 +9,10 @@ from ml.registry import ModelRecord, append, latest
 NAMES = ("a", "b")
 
 
-def _challenger(path: Path) -> ModelRecord:
-    m = ModelRecord("exp", "f" * 64, "challenger", "d" * 64, "tob-v1", {"seed": 7}, {})
+def _challenger(path: Path, verdict: str = "PASS") -> ModelRecord:
+    m = ModelRecord(
+        "exp", "f" * 64, "challenger", "d" * 64, "tob-v1", {"seed": 7}, {}, verdict=verdict
+    )
     append(m, path)
     return m
 
@@ -67,3 +69,16 @@ def test_demoted_model_cannot_be_promoted(tmp_path: Path) -> None:
     demote_on_drift(m, rng.normal(size=(999, 2)), rng.normal(size=(999, 2)) + 3, NAMES, path=log)
     with pytest.raises(PermissionError, match="only a registered challenger"):
         promote(m.artifact_sha256, _approval(), path=log)
+
+
+@pytest.mark.parametrize("verdict", ["FAIL", ""])  # "" is a legacy record written before verdicts
+def test_promotion_refuses_a_challenger_without_a_walk_forward_pass(
+    tmp_path: Path, verdict: str
+) -> None:
+    log = tmp_path / "models.jsonl"
+    m = _challenger(log, verdict)
+    with pytest.raises(PermissionError, match="walk-forward PASS"):
+        promote(m.artifact_sha256, _approval(), path=log)
+    rec = latest(m.artifact_sha256, log)
+    assert rec is not None
+    assert rec.status == "challenger"

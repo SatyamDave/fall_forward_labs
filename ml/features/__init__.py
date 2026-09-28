@@ -2,8 +2,8 @@
 
 Inputs are top-of-book states as raw fixed-point integers (price and qty at SCALE 1e8). Integer
 arithmetic is exact; floats appear only in the final ratios, computed in the same order as the
-Rust code so both sides agree to the last bit. Changing any formula or `OFI_WINDOW` means a new
-`FEATURE_VERSION`, a regenerated parity fixture, and a new model.
+Rust code; the parity tests hold both sides within 1e-9 relative. Changing any formula or
+`OFI_WINDOW` means a new `FEATURE_VERSION`, a regenerated parity fixture, and a new model.
 
 Order-flow imbalance follows Cont, Kukanov & Stoikov (2014), "The Price Impact of Order Book
 Events", Journal of Financial Econometrics 12(1).
