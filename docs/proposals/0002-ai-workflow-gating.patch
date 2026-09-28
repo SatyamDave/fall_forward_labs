@@ -1,0 +1,274 @@
+Proposal 0002: gate every paid AI workflow on autonomy/POLICY.yaml. NOT APPLIED.
+
+PROTECTED: every file in this patch is a protected path (.github/workflows/**,
+autonomy/**; T3 in autonomy/POLICY.yaml, two human approvals). Apply only after
+a human edit or explicit owner approval of this protected-file change:
+
+    git apply docs/proposals/0002-ai-workflow-gating.patch
+
+What it does:
+- knowledge-sync, learnings-triage, gardener (loop "loop-knowledge") and
+  ai-review (new loop "loop-review") each get a `gate` job that runs
+  scripts/ci/ai_gate.py from a trusted ref (main, or the PR's base commit
+  for ai-review, so a PR cannot enable its own review) and exports
+  run / max_turns / max_budget_usd / timeout_minutes.
+- Every job with a Claude step `needs: gate`, runs only when run == 'true',
+  takes timeout-minutes from the policy, and passes --max-turns and
+  --max-budget-usd from the policy. claude-code-security-review has no turn
+  or dollar input, so it is bounded by timeout only (claudecode-timeout).
+- POLICY.yaml gains "loop-review", disabled with a zero budget, so the gate
+  denies until a human sets real numbers.
+
+Limits: --max-budget-usd is per run and is set to the loop's daily_usd;
+nothing meters spend across runs in a day, and the global caps are not
+enforced by this gate.
+
+diff --git a/.github/workflows/ai-review.yml b/.github/workflows/ai-review.yml
+index 83be4f5..c242641 100644
+--- a/.github/workflows/ai-review.yml
++++ b/.github/workflows/ai-review.yml
+@@ -17,10 +17,36 @@ concurrency:
+   cancel-in-progress: true
+ 
+ jobs:
++  # Reads autonomy/POLICY.yaml and scripts/ci/ai_gate.py from a trusted ref; the paid
++  # job below runs only on run=true, with the loop's turn, dollar and time budget.
++  gate:
++    runs-on: ubuntu-24.04
++    timeout-minutes: 5
++    permissions:
++      contents: read
++    outputs:
++      run: ${{ steps.gate.outputs.run }}
++      max_turns: ${{ steps.gate.outputs.max_turns }}
++      max_budget_usd: ${{ steps.gate.outputs.max_budget_usd }}
++      timeout_minutes: ${{ steps.gate.outputs.timeout_minutes }}
++    steps:
++      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
++        with:
++          ref: ${{ github.event.pull_request.base.sha }}
++          persist-credentials: false
++          sparse-checkout: |
++            autonomy
++            scripts/ci
++      - id: gate
++        env:
++          AUTONOMY_ENABLED: ${{ vars.AUTONOMY_ENABLED }}
++        run: python3 scripts/ci/ai_gate.py loop-review || echo "::notice::paid step skipped by ai_gate.py"
++
+   security-review:
+-    if: github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft
++    needs: gate
++    if: needs.gate.outputs.run == 'true' && github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft
+     runs-on: ubuntu-24.04
+-    timeout-minutes: 30
++    timeout-minutes: ${{ fromJSON(needs.gate.outputs.timeout_minutes) }}
+     permissions:
+       contents: read
+       pull-requests: write # post review comments
+@@ -51,11 +77,14 @@ jobs:
+           claude-api-key: ${{ secrets.ANTHROPIC_API_KEY }}
+           comment-pr: true
+           custom-security-scan-instructions: ${{ steps.prompt.outputs.path }}
++          # This action takes no turn or dollar cap; the job timeout and this are its only bounds.
++          claudecode-timeout: ${{ needs.gate.outputs.timeout_minutes }}
+ 
+   code-review:
+-    if: github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft
++    needs: gate
++    if: needs.gate.outputs.run == 'true' && github.event.pull_request.head.repo.full_name == github.repository && !github.event.pull_request.draft
+     runs-on: ubuntu-24.04
+-    timeout-minutes: 30
++    timeout-minutes: ${{ fromJSON(needs.gate.outputs.timeout_minutes) }}
+     permissions:
+       contents: read
+       pull-requests: write # post review comments
+@@ -102,4 +131,6 @@ jobs:
+           github_token: ${{ github.token }}
+           prompt: ${{ steps.prompt.outputs.text }}
+           claude_args: |
++            --max-turns ${{ needs.gate.outputs.max_turns }}
++            --max-budget-usd ${{ needs.gate.outputs.max_budget_usd }}
+             --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Read,Grep,Glob"
+diff --git a/.github/workflows/gardener.yml b/.github/workflows/gardener.yml
+index 4faf7c3..75c6f85 100644
+--- a/.github/workflows/gardener.yml
++++ b/.github/workflows/gardener.yml
+@@ -15,9 +15,36 @@ concurrency:
+   cancel-in-progress: false
+ 
+ jobs:
++  # Reads autonomy/POLICY.yaml and scripts/ci/ai_gate.py from a trusted ref; the paid
++  # job below runs only on run=true, with the loop's turn, dollar and time budget.
++  gate:
++    runs-on: ubuntu-24.04
++    timeout-minutes: 5
++    permissions:
++      contents: read
++    outputs:
++      run: ${{ steps.gate.outputs.run }}
++      max_turns: ${{ steps.gate.outputs.max_turns }}
++      max_budget_usd: ${{ steps.gate.outputs.max_budget_usd }}
++      timeout_minutes: ${{ steps.gate.outputs.timeout_minutes }}
++    steps:
++      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
++        with:
++          ref: main
++          persist-credentials: false
++          sparse-checkout: |
++            autonomy
++            scripts/ci
++      - id: gate
++        env:
++          AUTONOMY_ENABLED: ${{ vars.AUTONOMY_ENABLED }}
++        run: python3 scripts/ci/ai_gate.py loop-knowledge || echo "::notice::paid step skipped by ai_gate.py"
++
+   propose:
++    needs: gate
++    if: needs.gate.outputs.run == 'true'
+     runs-on: ubuntu-latest
+-    timeout-minutes: 30
++    timeout-minutes: ${{ fromJSON(needs.gate.outputs.timeout_minutes) }}
+     permissions:
+       contents: read
+       pull-requests: read
+@@ -48,7 +75,8 @@ jobs:
+           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+           github_token: ${{ github.token }}
+           claude_args: |
+-            --max-turns 60
++            --max-turns ${{ needs.gate.outputs.max_turns }}
++            --max-budget-usd ${{ needs.gate.outputs.max_budget_usd }}
+             --allowedTools "Read,Edit,Write,Glob,Grep"
+             --disallowedTools "Bash,WebFetch,WebSearch"
+             --add-dir ${{ runner.temp }}/knowledge
+diff --git a/.github/workflows/knowledge-sync.yml b/.github/workflows/knowledge-sync.yml
+index af7f2a4..8c827d1 100644
+--- a/.github/workflows/knowledge-sync.yml
++++ b/.github/workflows/knowledge-sync.yml
+@@ -28,15 +28,42 @@ concurrency:
+   cancel-in-progress: false
+ 
+ jobs:
++  # Reads autonomy/POLICY.yaml and scripts/ci/ai_gate.py from a trusted ref; the paid
++  # job below runs only on run=true, with the loop's turn, dollar and time budget.
++  gate:
++    runs-on: ubuntu-24.04
++    timeout-minutes: 5
++    permissions:
++      contents: read
++    outputs:
++      run: ${{ steps.gate.outputs.run }}
++      max_turns: ${{ steps.gate.outputs.max_turns }}
++      max_budget_usd: ${{ steps.gate.outputs.max_budget_usd }}
++      timeout_minutes: ${{ steps.gate.outputs.timeout_minutes }}
++    steps:
++      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
++        with:
++          ref: main
++          persist-credentials: false
++          sparse-checkout: |
++            autonomy
++            scripts/ci
++      - id: gate
++        env:
++          AUTONOMY_ENABLED: ${{ vars.AUTONOMY_ENABLED }}
++        run: python3 scripts/ci/ai_gate.py loop-knowledge || echo "::notice::paid step skipped by ai_gate.py"
++
+   propose:
++    needs: gate
+     # Skip knowledge PRs themselves so merging one does not start another.
+     if: >-
+-      github.event_name == 'workflow_dispatch' ||
+-      (github.event.pull_request.merged &&
+-       !startsWith(github.event.pull_request.head.ref, 'knowledge/') &&
+-       !contains(github.event.pull_request.labels.*.name, 'knowledge'))
++      needs.gate.outputs.run == 'true' &&
++      (github.event_name == 'workflow_dispatch' ||
++       (github.event.pull_request.merged &&
++        !startsWith(github.event.pull_request.head.ref, 'knowledge/') &&
++        !contains(github.event.pull_request.labels.*.name, 'knowledge')))
+     runs-on: ubuntu-latest
+-    timeout-minutes: 30
++    timeout-minutes: ${{ fromJSON(needs.gate.outputs.timeout_minutes) }}
+     permissions:
+       contents: read
+       pull-requests: read
+@@ -80,7 +107,8 @@ jobs:
+           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+           github_token: ${{ github.token }}
+           claude_args: |
+-            --max-turns 40
++            --max-turns ${{ needs.gate.outputs.max_turns }}
++            --max-budget-usd ${{ needs.gate.outputs.max_budget_usd }}
+             --allowedTools "Read,Edit,Write,Glob,Grep"
+             --disallowedTools "Bash,WebFetch,WebSearch"
+             --add-dir ${{ runner.temp }}/knowledge
+diff --git a/.github/workflows/learnings-triage.yml b/.github/workflows/learnings-triage.yml
+index 1e9701c..11c9f39 100644
+--- a/.github/workflows/learnings-triage.yml
++++ b/.github/workflows/learnings-triage.yml
+@@ -15,9 +15,36 @@ concurrency:
+   cancel-in-progress: false
+ 
+ jobs:
++  # Reads autonomy/POLICY.yaml and scripts/ci/ai_gate.py from a trusted ref; the paid
++  # job below runs only on run=true, with the loop's turn, dollar and time budget.
++  gate:
++    runs-on: ubuntu-24.04
++    timeout-minutes: 5
++    permissions:
++      contents: read
++    outputs:
++      run: ${{ steps.gate.outputs.run }}
++      max_turns: ${{ steps.gate.outputs.max_turns }}
++      max_budget_usd: ${{ steps.gate.outputs.max_budget_usd }}
++      timeout_minutes: ${{ steps.gate.outputs.timeout_minutes }}
++    steps:
++      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
++        with:
++          ref: main
++          persist-credentials: false
++          sparse-checkout: |
++            autonomy
++            scripts/ci
++      - id: gate
++        env:
++          AUTONOMY_ENABLED: ${{ vars.AUTONOMY_ENABLED }}
++        run: python3 scripts/ci/ai_gate.py loop-knowledge || echo "::notice::paid step skipped by ai_gate.py"
++
+   propose:
++    needs: gate
++    if: needs.gate.outputs.run == 'true'
+     runs-on: ubuntu-latest
+-    timeout-minutes: 30
++    timeout-minutes: ${{ fromJSON(needs.gate.outputs.timeout_minutes) }}
+     permissions:
+       contents: read
+     outputs:
+@@ -45,7 +72,8 @@ jobs:
+           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+           github_token: ${{ github.token }}
+           claude_args: |
+-            --max-turns 60
++            --max-turns ${{ needs.gate.outputs.max_turns }}
++            --max-budget-usd ${{ needs.gate.outputs.max_budget_usd }}
+             --allowedTools "Read,Edit,Write,Glob,Grep"
+             --disallowedTools "Bash,WebFetch,WebSearch"
+             --add-dir ${{ runner.temp }}/knowledge
+diff --git a/autonomy/POLICY.yaml b/autonomy/POLICY.yaml
+index 1aecdfd..7574a84 100644
+--- a/autonomy/POLICY.yaml
++++ b/autonomy/POLICY.yaml
+@@ -175,7 +175,10 @@
+     "loop-models":    {"enabled": false, "daily_usd": 4, "max_turns": 30, "timeout_minutes": 90, "open_pr_cap": 1},
+     "loop-backlog":   {"enabled": false, "daily_usd": 1, "max_turns": 10, "timeout_minutes": 10, "open_pr_cap": 0},
+     "loop-meta":      {"enabled": false, "daily_usd": 5, "max_turns": 30, "timeout_minutes": 60, "open_pr_cap": 1},
+-    "loop-report":    {"enabled": false, "daily_usd": 1, "max_turns": 10, "timeout_minutes": 10, "open_pr_cap": 1}
++    "loop-report":    {"enabled": false, "daily_usd": 1, "max_turns": 10, "timeout_minutes": 10, "open_pr_cap": 1},
++    # ai-review.yml (both jobs). Zero budget on purpose: scripts/ci/ai_gate.py denies until a
++    # human sets real numbers from measured cost per review.
++    "loop-review":    {"enabled": false, "daily_usd": 0, "max_turns": 0, "timeout_minutes": 30, "open_pr_cap": 0}
+   },
+ 
+   # Backlog ranking (Phase C): rank = expected_value * confidence / cost,

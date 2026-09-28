@@ -5,6 +5,7 @@ Each file here is a prepared change that is **not applied**, because it needs a 
 | Patch | What it changes | Why it is not applied | Needs |
 |---|---|---|---|
 | `0001-rust-toolchain-pin.patch` | `engine/rust-toolchain.toml` from `channel = "stable"` to `"1.98.1"`, and the matching sentence in `engine/fuzz/README.md` | ADR-0004 is Proposed, not approved | A human approving ADR-0004's pin |
+| `0002-ai-workflow-gating.patch` | A `gate` job running `scripts/ci/ai_gate.py` in knowledge-sync, learnings-triage, gardener and ai-review; the paid jobs run only on `run == 'true'` with turns, dollars and timeout from the policy; a disabled, zero-budget `loop-review` entry in `autonomy/POLICY.yaml` | Every file is protected (`.github/workflows/**`, `autonomy/**`, T3) | A human edit, or explicit owner approval of this protected-file change |
 
 ## Current toolchain reality (2026-09-27)
 
