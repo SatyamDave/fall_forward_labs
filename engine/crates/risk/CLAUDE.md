@@ -3,7 +3,7 @@
 ## Owns / does not own
 - Protected (root rule 3): every change needs human approval and risk-auditor review. Limits may be tightened automatically, loosened only with two human approvals (root rule 4).
 - Owns: `Limits` (serde, `deny_unknown_fields`), `RiskContext`, `RiskReject`, the `RiskCheck` trait and its implementations: max position, max notional, max order rate, max daily loss, fat-finger price band, stale-data halt, kill switch.
-- Does not own: limit values (`config/limits/*.toml`, also protected), order state (qc-oms), sending orders (qc-gateway).
+- Does not own: limit values (`config/limits/*.toml`, also protected), order state (qc-oms), sending orders (qc-gateway), the trade decision itself (`agent/`, ADR-0040).
 
 ## Commands
 - `cargo test -p qc-risk --locked`
@@ -17,6 +17,7 @@
 - Market data older than `stale_data_ms` rejects with `StaleData`.
 - Unknown keys in a limits file fail to parse (`deny_unknown_fields` stays).
 - Every PR here requests risk-auditor review and states which limits changed and in which direction.
+- An intent submitted by the agent service (ADR-0040) through `qc-bridge` runs `RiskCheck::check` and the kill switch exactly like any other order; there is no separate, lighter path for agent-submitted intents.
 
 ## NEVER
 - No bypass flag, feature, or env var that skips checks in production builds. Check: `grep -rnE 'cfg\(feature|skip_risk|bypass_risk|RISK_BYPASS' src` prints nothing.
@@ -33,3 +34,4 @@ _None yet. Each entry links to the PR or postmortem where it bit us._
 ## See also
 - Rule: .claude/rules/risk-guard.md; agent: .claude/agents/risk-auditor.md
 - config/limits/default.toml, strategies/_template/GATES.md, tests/chaos/ (kill switch)
+- ADR-0040 (agent handoff): docs/adr/0040-agentic-decision.md

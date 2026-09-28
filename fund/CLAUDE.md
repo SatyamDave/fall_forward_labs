@@ -13,6 +13,7 @@
 - Records are append-only: new files or appended lines only (check above).
 - A reconciliation mismatch is recorded as-is with an incident link, never smoothed.
 - Investor-facing content gets legal review before it is shared.
+- The ADR-0040 agentic trading account reconciles daily like any other venue account (root rule 10). Scaling it past trivial amounts needs counsel review (Robinhood agentic beta terms, Anthropic Usage Policy) first — that approval is recorded here, not decided here.
 
 ## NEVER
 - Never edit or delete a past record (check above).
@@ -28,3 +29,4 @@ _None yet. Each entry links to the PR or postmortem where it bit us._
 
 ## See also
 - Rule: .claude/rules/risk-guard.md; docs/runbooks/; SECURITY.md
+- ADR-0040 (agent handoff, agent account): docs/adr/0040-agentic-decision.md

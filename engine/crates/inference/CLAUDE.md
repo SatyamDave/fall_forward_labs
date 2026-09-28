@@ -2,7 +2,7 @@
 
 ## Owns / does not own
 - Owns: `Signal { edge_bps: i32 }`, the `Model` trait (`predict(&[f32]) -> Option<Signal>`), loading exported models and checking their registry hash, the Rust side of feature parity.
-- Does not own: training, validation, or export (ml/), promotion decisions (humans, via promotion-dossier), feature definitions' source of truth (ml/features).
+- Does not own: training, validation, or export (ml/), promotion decisions (humans, via promotion-dossier), feature definitions' source of truth (ml/features), the trade decision (`agent/`, ADR-0040) — this crate's output stays a signal, never an order.
 
 ## Commands
 - `cargo test -p qc-inference --locked`
@@ -31,3 +31,4 @@ _None yet. Each entry links to the PR or postmortem where it bit us._
 
 ## See also
 - ml/CLAUDE.md, ml/export/README.md, skill: promotion-dossier (ml/.claude/skills/)
+- ADR-0040 (agent handoff): docs/adr/0040-agentic-decision.md
