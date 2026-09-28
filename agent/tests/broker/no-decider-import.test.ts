@@ -8,6 +8,14 @@
 // under agent/src (excluding this directory itself and testkit/) for an import specifier that
 // resolves into agent/src/broker/, so it starts exercising real enforcement the moment that
 // lane's files land, without needing to be re-written then.
+//
+// agent/src/recorder/ (issue #46, wave2-spec lane D) is a deliberate, documented exception: it
+// reads quotes through agent/src/broker/robinhood.ts + mcp-client.ts by design (through a
+// read-only tool allowlist -- agent/src/recorder/allowlist.ts -- that a separate test,
+// agent/tests/recorder/allowlist*.test.ts, proves never lets an order/cancel tool through). What
+// this test actually guards against is the *decider* reaching the broker directly, bypassing
+// qc-bridge's approval; a read-only market-data recorder is not that path, so it's excluded here
+// rather than silently making this test fail on every future recorder change.
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -27,7 +35,9 @@ function walk(dir: string): string[] {
   return out;
 }
 
-const IMPORT_SPECIFIER = /(?:from|require\()\s*['"]([^'"]+)['"]/g;
+// Matches `from "x"`, `require("x")`, dynamic `import("x")`, side-effect `import "x"`,
+// and `export ... from "x"`: any of them can pull the broker into a module.
+const IMPORT_SPECIFIER = /(?:\bfrom|\brequire\(|\bimport\(|\bimport)\s*['"]([^'"]+)['"]/g;
 
 function importsBroker(file: string): string[] {
   const src = readFileSync(file, "utf8");
@@ -44,9 +54,27 @@ function importsBroker(file: string): string[] {
 }
 
 describe("agent/src/decider/ cannot import agent/src/broker/", () => {
-  it("no file under src/decider (or anywhere outside src/broker itself) imports src/broker", () => {
-    const files = walk(AGENT_SRC).filter((f) => !f.includes(`${path.sep}src${path.sep}broker${path.sep}`));
+  it("no file under src/decider (or anywhere outside src/broker/src/recorder) imports src/broker", () => {
+    const files = walk(AGENT_SRC).filter(
+      (f) => !f.includes(`${path.sep}src${path.sep}broker${path.sep}`) && !f.includes(`${path.sep}src${path.sep}recorder${path.sep}`),
+    );
     const offenders = files.flatMap((f) => importsBroker(f).map((spec) => `${path.relative(AGENT_SRC, f)}: imports "${spec}"`));
+    expect(offenders).toEqual([]);
+  });
+
+  it("nothing outside src/recorder imports src/recorder, so the recorder can't be a side door to the broker", () => {
+    // The recorder is excluded above because it legitimately imports the broker's read-only
+    // quote mapping. That exception is only safe if no other code (decider, loop, bridge client)
+    // can reach the broker through the recorder.
+    const files = walk(AGENT_SRC).filter((f) => !f.includes(`${path.sep}src${path.sep}recorder${path.sep}`));
+    const offenders = files.flatMap((f) => {
+      const src = readFileSync(f, "utf8");
+      return [...src.matchAll(IMPORT_SPECIFIER)]
+        .map((m) => m[1]!)
+        .filter((spec) => spec.startsWith("."))
+        .filter((spec) => path.resolve(path.dirname(f), spec).includes(`${path.sep}src${path.sep}recorder`))
+        .map((spec) => `${path.relative(AGENT_SRC, f)}: imports "${spec}"`);
+    });
     expect(offenders).toEqual([]);
   });
 
