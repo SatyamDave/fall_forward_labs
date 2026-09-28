@@ -3,6 +3,7 @@
 ## Owns / does not own
 - Owns: `VenueAdapter` trait (`submit`, `cancel`, non-blocking `poll`), `GatewayError`, one module per venue, rate limiting, reconnect with backoff, snapshot plus delta sync, venue message parsing.
 - Does not own: order state (qc-oms), pre-trade checks (qc-risk), credentials storage (secret manager, ops/), venue choice (ADR-0003), the trade decision (`agent/`, ADR-0040) — an order reaches this crate only after qc-risk and qc-oms have accepted it, agent-submitted or not.
+- `SimVenue` (the only adapter today) models fills more realistically than "instant at the quoted price": an aggressive order consumes displayed size at the level it takes, tracked until the next book update replaces that level, so two aggressive orders in a row cannot take the same displayed quantity; a resting order gets a queue position (the size already displayed at its price when it arrived) and only fills once a recorded trade has traded that much volume at or through the price (#30).
 
 ## Commands
 - `cargo test -p qc-gateway --locked`
@@ -25,7 +26,7 @@
 - `poll` never blocks: no `sleep`, no blocking reads.
 
 ## Gotchas
-_None yet. Each entry links to the PR or postmortem where it bit us._
+- Before #30, `SimVenue` never reduced a level's displayed size after a fill and ignored queue position entirely, so shadow-mode P&L against it was systematically optimistic versus real depth. Fixed by tracking consumed size per level and a queue position per resting order.
 
 ## Learned
 <!-- None yet. Entries arrive only through knowledge-sync PRs, newest first, max 15, format: - YYYY-MM-DD: <lesson> ([#N](https://github.com/SatyamDave/fall_forward_labs/pull/N)) -->
