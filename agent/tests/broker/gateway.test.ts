@@ -3,13 +3,22 @@
 // calls for: happy path, tampered approval refused, expired refused, duplicate client_order_id
 // not resent, timeout -> status query -> no double order, reject -> report_execution rejected.
 import { generateKeyPairSync, sign as cryptoSign } from "node:crypto";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
+import type { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { BrokerGateway, GatewayRejection } from "../../src/broker/gateway.js";
 import { connectRobinhoodMcp } from "../../src/broker/mcp-client.js";
 import { ed25519PublicKeyFromRaw } from "../../src/broker/crypto.js";
 import type { Approval, ApprovalPayload, ApprovedOrder, BridgeReporter, ReportExecutionOp } from "../../src/broker/types.js";
 import { createMockRobinhoodServer, type MockScenario } from "../../src/testkit/mock-robinhood-mcp.js";
+
+function tempJournalPath(): string {
+  const dir = mkdtempSync(path.join(tmpdir(), "broker-gateway-journal-"));
+  return path.join(dir, "broker-journal.jsonl");
+}
 
 // --- a tiny, local fake bridge reporter for THIS lane's tests only. Not
 // agent/src/testkit/fake-bridge.ts (that fakes qc-bridge's v1 JSON-Lines process, and is a
@@ -89,9 +98,12 @@ describe("BrokerGateway", () => {
     await Promise.all(closers.map((c) => c()));
   });
 
-  async function makeGateway(scenarios: Record<string, MockScenario>): Promise<BrokerGateway> {
+  // Every test gets its own journal file (like ledger.test.ts's tempLedgerPath()) -- otherwise
+  // every gateway in this suite would replay every other test's client_order_ids from a shared
+  // default out/agent/broker-journal.jsonl on disk, and would also litter the real repo tree.
+  async function makeGateway(scenarios: Record<string, MockScenario>, onToolCall?: (name: string) => void): Promise<BrokerGateway> {
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    const server = createMockRobinhoodServer({ scenarios });
+    const server = createMockRobinhoodServer({ scenarios, onToolCall });
     await server.connect(serverTransport);
     const client = await connectRobinhoodMcp({ transport: clientTransport });
     closers.push(async () => {
@@ -104,6 +116,31 @@ describe("BrokerGateway", () => {
       approvalPublicKey: ed25519PublicKeyFromRaw(rawPublicKey),
       now: () => NOW_NS,
       requestTimeoutMs: 200,
+      journalPath: tempJournalPath(),
+    });
+  }
+
+  /** A second client connected to the SAME mock server instance, sharing `journalPath` with an
+   *  existing gateway -- simulates "a fresh process starts, journal on disk, same broker
+   *  connection" without the first gateway's in-memory state being reachable at all. */
+  async function reconnectGateway(server: Server, journalPath: string): Promise<BrokerGateway> {
+    // The MCP Server type only accepts one live transport at a time; closing it doesn't touch
+    // the mock's own `placed` order-state closure (createMockRobinhoodServer's Map lives outside
+    // the transport), which is exactly what makes this a "same broker, new connection" restart.
+    await server.close();
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    await server.connect(serverTransport);
+    const client = await connectRobinhoodMcp({ transport: clientTransport });
+    closers.push(async () => {
+      await client.close();
+    });
+    return new BrokerGateway({
+      mcp: client,
+      reporter,
+      approvalPublicKey: ed25519PublicKeyFromRaw(rawPublicKey),
+      now: () => NOW_NS,
+      requestTimeoutMs: 200,
+      journalPath,
     });
   }
 
@@ -172,6 +209,53 @@ describe("BrokerGateway", () => {
     // this must resolve via a status query, never a second place_equity_order call.
     const resolved = await gateway.submitOrder(orderFrom(fields), approve(fields), "equity");
     expect(resolved.status).toBe("filled");
+    expect(reporter.calls).toHaveLength(1);
+    expect(reporter.calls[0]!.execution.event).toBe("filled");
+  });
+
+  it("crash-after-send: a brand new BrokerGateway (simulated process restart) reconciles via the journal instead of blind-resubmitting", async () => {
+    const fields = baseFields(11);
+    const journalPath = tempJournalPath();
+    let placeCalls = 0;
+    const onToolCall = (name: string) => {
+      if (name === "place_equity_order") placeCalls += 1;
+    };
+
+    const [clientTransportA, serverTransportA] = InMemoryTransport.createLinkedPair();
+    const server = createMockRobinhoodServer({ scenarios: { "11": "timeout" }, onToolCall });
+    await server.connect(serverTransportA);
+    const clientA = await connectRobinhoodMcp({ transport: clientTransportA });
+    closers.push(async () => {
+      await clientA.close();
+      await server.close();
+    });
+    const gatewayA = new BrokerGateway({
+      mcp: clientA,
+      reporter,
+      approvalPublicKey: ed25519PublicKeyFromRaw(rawPublicKey),
+      now: () => NOW_NS,
+      requestTimeoutMs: 200,
+      journalPath,
+    });
+
+    // gatewayA sends the order; the mock server truly receives it (it records it as "placed"),
+    // but the response is lost (timeout) -- exactly the "outcome unknown after a real send"
+    // case. This process's own in-memory map now says "unknown" for client_order_id 11 -- but
+    // the point of this test is that the NEXT process must know that too, from disk alone.
+    await expect(gatewayA.submitOrder(orderFrom(fields), approve(fields), "equity")).rejects.toThrow(/outcome unknown/);
+    expect(placeCalls).toBe(1);
+    expect(reporter.calls).toHaveLength(0);
+
+    // Simulated restart: a brand new BrokerGateway, sharing nothing with gatewayA except the
+    // journal file on disk and a connection to the same broker. Its in-memory map starts empty;
+    // if the journal fix were missing, submitOrder would fall through to attemptSubmit and call
+    // place_equity_order a second time for the same client_order_id -- a real duplicate order.
+    const gatewayB = await reconnectGateway(server, journalPath);
+
+    const resolved = await gatewayB.submitOrder(orderFrom(fields), approve(fields), "equity");
+
+    expect(resolved.status).toBe("filled"); // reconciled via a status query, not a fresh place
+    expect(placeCalls).toBe(1); // still 1: place_equity_order was NEVER called a second time
     expect(reporter.calls).toHaveLength(1);
     expect(reporter.calls[0]!.execution.event).toBe("filled");
   });

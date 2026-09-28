@@ -7,7 +7,9 @@
 // client_order_id we've already resolved, and never blind-retry an outcome we don't know --
 // query status first.
 import type { KeyObject } from "node:crypto";
+import { brokerJournalPath as defaultBrokerJournalPath } from "../paths.js";
 import { verifyEd25519 } from "./crypto.js";
+import { openJournal, replayJournal, type Journal } from "./journal.js";
 import * as robinhood from "./robinhood.js";
 import type { McpClient } from "./mcp-client.js";
 import type {
@@ -46,9 +48,15 @@ export interface GatewayConfig {
   reporter: BridgeReporter;
   /** Raw 32-byte Ed25519 public key from the bridge's `hello` response. */
   approvalPublicKey: KeyObject;
-  /** Wall-clock nanoseconds "now", for expiry checks. Injectable for tests; defaults to
-   *  Date.now() converted to ns (millisecond-resolution is more than enough against a
-   *  multi-second TTL). */
+  /** Wall-clock nanoseconds "now", for expiry checks -- System.currentTimeMillis()-style clock,
+   *  not monotonic; injectable for tests; defaults to Date.now() converted to ns
+   *  (millisecond-resolution is more than enough against a multi-second TTL). Clock semantics:
+   *  this is compared directly against `expires_ts_ns` from the bridge's own wall clock, so the
+   *  expiry check is only as trustworthy as this host's system clock -- an operator (or an
+   *  attacker who already has enough access to change the host clock, at which point the
+   *  approval signature is the smaller problem) could set the clock backward to keep an expired
+   *  approval looking unexpired. Not defended against here; flagging so it isn't assumed to be a
+   *  monotonic or tamper-resistant clock. */
   now?: () => number;
   /** Best-effort preview logger (issue #43: every order gets previewed first, and the preview
    *  is logged, before the real order goes out). Defaults to a no-op no console spam in tests;
@@ -58,6 +66,12 @@ export interface GatewayConfig {
    *  enough that a stuck broker call surfaces as "outcome unknown" promptly instead of hanging
    *  the caller, long enough for a real network round trip. */
   requestTimeoutMs?: number;
+  /** Fsync'd append-only journal path (default out/agent/broker-journal.jsonl, gitignored).
+   *  The in-memory idempotency map alone does not survive a process restart; this is what does
+   *  -- replayed at construction so a client_order_id sent before a crash comes back as
+   *  "unknown" and is reconciled via a status query, never blind-resubmitted. Required before
+   *  this gateway ever holds a real broker credential. */
+  journalPath?: string;
 }
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 5_000;
@@ -81,10 +95,18 @@ export class BrokerGateway {
   private readonly orders = new Map<number, OrderState>();
   private readonly now: () => number;
   private readonly callOpts: { timeoutMs: number };
+  private readonly journal: Journal;
 
   constructor(private readonly config: GatewayConfig) {
     this.now = config.now ?? (() => Date.now() * 1_000_000);
     this.callOpts = { timeoutMs: config.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS };
+    const journalPath = config.journalPath ?? defaultBrokerJournalPath();
+    this.journal = openJournal(journalPath);
+    // Restart safety: seed the in-memory map from whatever the journal already knows, so a
+    // client_order_id sent before a crash is never treated as "never sent."
+    for (const [clientOrderId, snapshot] of replayJournal(journalPath)) {
+      this.orders.set(clientOrderId, snapshot);
+    }
   }
 
   /**
@@ -115,10 +137,9 @@ export class BrokerGateway {
     }
     const result = await robinhood.cancelOrder(this.config.mcp, assetClass, clientOrderId, instrument, this.callOpts);
     if (result.status === "canceled") {
-      this.orders.set(clientOrderId, {
-        state: "terminal",
-        result: { ...existing.result, status: "canceled", reason: result.reason, raw: result.raw },
-      });
+      const updated: PlaceOrderResult = { ...existing.result, status: "canceled", reason: result.reason, raw: result.raw };
+      this.orders.set(clientOrderId, { state: "terminal", result: updated });
+      this.journal.recordResolved(clientOrderId, updated);
     }
     await this.report(clientOrderId, result.status === "canceled" ? "canceled" : "cancel_rejected", {
       reason: result.reason,
@@ -183,11 +204,17 @@ export class BrokerGateway {
       raw: status.raw ?? {},
     };
     this.orders.set(order.client_order_id, { state: "terminal", result });
+    this.journal.recordResolved(order.client_order_id, result);
     await this.report(order.client_order_id, PLACE_EVENT[result.status], result);
     return result;
   }
 
   private async attemptSubmit(order: ApprovedOrder, assetClass: AssetClass): Promise<PlaceOrderResult> {
+    // Durable BEFORE the network call: if the process crashes between Robinhood receiving this
+    // order and us learning the outcome, the journal -- not the in-memory map -- is what
+    // remembers it was sent. replayJournal() reads this back as "unknown" on the next start.
+    this.journal.recordAttempt(order.client_order_id);
+
     // Best-effort preview: log it, but a preview failure never blocks the real order -- Robinhood
     // does not force a preview itself (robinhood-agentic-mcp.md §3), this is our own added check.
     try {
@@ -208,6 +235,7 @@ export class BrokerGateway {
     }
 
     this.orders.set(order.client_order_id, { state: "terminal", result });
+    this.journal.recordResolved(order.client_order_id, result);
     await this.report(order.client_order_id, PLACE_EVENT[result.status], result);
     return result;
   }

@@ -27,6 +27,10 @@ export interface MockRobinhoodOptions {
    *  entry defaults to "accepted" on place, then reports "filled" on a status query -- the
    *  ordinary happy path. */
   scenarios?: Record<string, MockScenario>;
+  /** Test hook: invoked with the tool name on every CallTool request, before any scenario logic
+   *  runs. This is how a test proves "the place tool was never called a second time" from the
+   *  outside, e.g. across a simulated process restart. */
+  onToolCall?: (name: string) => void;
 }
 
 const PLACE_TOOLS = new Set(["place_equity_order", "place_crypto_order"]);
@@ -86,6 +90,7 @@ export function createMockRobinhoodServer(opts: MockRobinhoodOptions = {}): Serv
 
   server.setRequestHandler(CallToolRequestSchema, async (request): Promise<CallToolResult> => {
     const { name, arguments: args = {} } = request.params;
+    opts.onToolCall?.(name);
     const clientOrderId = typeof args.client_order_id === "string" ? args.client_order_id : "";
     const scenario = scenarios[clientOrderId] ?? "accepted";
 
