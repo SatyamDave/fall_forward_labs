@@ -127,6 +127,19 @@ study-0001:
 eval:
     python3 scripts/eval/run.py
 
+# Issue #39: render out/agent/ledger.jsonl into a short, readable markdown/JSON report
+# (out/reports/ledger/report.{json,md}, both gitignored). Pass extra args, e.g.
+# `just report-ledger --ledger some/other/ledger.jsonl`.
+report-ledger *args:
+    python3 scripts/reports/ledger_report.py {{args}}
+
+# Issue #70: realized+unrealized P&L after fees vs no-trade and buy-and-hold, drawdown, AI cost,
+# and a stop-rule check (scripts/reports/pnl_policy.toml — placeholder thresholds pending
+# founders' decision #23). Writes one append-only file per day to fund/track-record/daily/
+# (fund/track-record/README.md documents the format). Nonzero exit means the stop rule tripped.
+report-pnl *args:
+    python3 scripts/reports/pnl_report.py {{args}}
+
 # ADR-0040 agent service (agent/): install pinned dependencies (npm ci, committed lockfile)
 agent-setup:
     cd {{agent}} && npm ci

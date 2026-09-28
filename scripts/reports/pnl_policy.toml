@@ -1,0 +1,21 @@
+# Placeholder fee assumption and stop-rule thresholds for `just report-pnl` (issue #70).
+# The stop-rule numbers are conservative placeholders pending founders' decision (issue #23:
+# "Agree how much money we're willing to lose"). They are NOT the real, approved stop rule —
+# issue #70's Done-when is explicit: "The stop rule is written down and approved by both founders
+# before the first trade happens." This file's job is only to make report-pnl's stop-rule check
+# real and testable today; do not treat a "not triggered" result as founders' sign-off.
+# Tightening these numbers needs no approval; loosening does, by the same logic as root
+# CLAUDE.md rule 4 (this file is outside config/limits/**, the actual protected zone, because no
+# funded account or venue exists yet to apply a risk limit to).
+
+[fees]
+# Placeholder execution-cost assumption (basis points of notional per fill), applied identically
+# to the agent and the buy-and-hold baseline so the comparison stays fair. No venue is chosen yet
+# (config/venues/ is empty; ADR-0003/ADR-0020 are still Proposed), so there is no real fee
+# schedule to read here yet — replace this once one exists.
+fee_bps = "10"
+
+[stop_rule]
+# Placeholder only, pending founders' decision #23.
+max_drawdown_usd = "50"
+max_consecutive_days_behind_buy_and_hold = 5
