@@ -22,7 +22,8 @@ deflated-Sharpe threshold and the first vertical are undecided (vertical PENDING
 
 New here? Start with the illustrated [project guide](docs/guide/quant-core-guide.html) (open the
 file in a browser; GitHub shows HTML as source). It explains every component, the safety model, and
-the gated path to trading through Robinhood.
+the gated path to trading through Robinhood. [docs/STATUS.md](docs/STATUS.md) is regenerated on every
+merge to `main` and every 30 minutes: open PRs, recent merges, ADR statuses, test and trial counts, CI on `main`.
 
 ## Contents
 
