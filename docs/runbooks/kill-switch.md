@@ -44,10 +44,20 @@ for tripping it:
 1. **File trigger (works even if the agent process is dead or hung).** Start `qc-bridge` with
    `--kill-file <path>`, then from an operator shell: `touch <path>` (contents are never read, only
    existence). The bridge polls this path on every record it processes and every op it dispatches —
-   whatever is still alive and sending the bridge *anything* (in practice the gateway's own periodic
-   `status`/`reconcile` heartbeat, not necessarily the agent's own decision loop) discovers it, so
-   this does not depend on the agent's cooperation. `tests/chaos.rs`
-   (`kill_file_halts_within_one_second_and_cancels_every_open_order`) proves the 1-second bound.
+   whatever is still alive and sending the bridge *anything* discovers it, so this does not depend
+   on the agent's cooperation. `tests/chaos.rs`
+   (`kill_file_halts_within_one_second_and_cancels_every_open_order`) proves the 1-second bound
+   **given that something keeps calling the bridge during the outage** — the test's own loop does
+   this by polling directly.
+   **Requirement this crate cannot satisfy by itself (wave-2 review finding):** nothing in the
+   stack today actually provides that "something," independent of the agent's own decision loop.
+   `agent/src/loop.ts`'s reconcile calls are decision-count-based (tied to the loop making
+   progress, not a wall-clock timer), and `ops/live/supervisor.py` only reacts to process *exit*,
+   not to a live-but-unresponsive loop. **A real deployment needs a process that calls `status`
+   (or any op) on a genuine wall-clock interval, independent of whether the decision loop is
+   making progress** — until one exists, `--kill-file` only reliably trips within one second while
+   the decision loop itself keeps calling the bridge; a fully stalled feed with a hung decision
+   loop delays observation until something else touches the bridge.
 2. **In-band trigger.** If something can still send the bridge a line on its stdin (the gateway, a
    manual `qc-bridge` session), send `{"v":1,"op":"kill","reason":"<why>","id":"<any>"}`. Same
    effect, immediate instead of polled.

@@ -10,6 +10,15 @@
 //! offset would be wrong roughly half the year. A third zone, or a
 //! non-US daylight-saving rule, needs a real tz database (`chrono-tz` or
 //! `time-tz`), not another hand-rolled arm here.
+//!
+//! LIMITATION (flagged in wave-2 review, not previously documented):
+//! `TradingHours::is_open` checks weekday and time-of-day only -- there is no market-holiday
+//! calendar and no early-close support. A `submit_order_intent` on a US market holiday that falls
+//! on a configured trading day (e.g. Thanksgiving, a Thursday) is accepted here and forwarded to
+//! the venue in `external` mode; only the broker itself would reject it. Acceptable for this
+//! build (external mode is never run against a real venue, per this repo's hard limits), but a
+//! real deployment needs a holiday/early-close calendar added here (or to the instrument config)
+//! before that stops being true.
 
 use std::path::PathBuf;
 use std::str::FromStr;
