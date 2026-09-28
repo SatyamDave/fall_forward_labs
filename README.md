@@ -81,8 +81,8 @@ Proposed pending the operators' jurisdiction.
 | Study 0001 favorite-longshot | #16, #17 | yes, from snapshot | INSUFFICIENT EVIDENCE; snapshot is off git |
 | ADRs 0001-0006, 0010, 0011, 0013, 0020; plans; data classes | #2-#5, #9 | n/a | All Proposed |
 | Contributor docs, templates, devcontainer (non-root) | #8, #17 | n/a | Devcontainer never built |
-| ADR-0040 + docs (ARCHITECTURE/ROADMAP/NOW/TEAM, guide §3/9/10/11) | in PR (`agentic/docs`, not yet opened; re-query `gh pr list`) | n/a | Accepted by Satyam only; **pending Rohit** |
-| `schemas/decision/v1/*`, `qc-bridge`, agent service skeleton (fake mode), `just eval` | in progress (`agentic/bridge` has one schema commit; `agent-service`/`evals` lanes not yet pushed as of this check) | not yet | A1/A2 exit tests not yet met |
+| ADR-0040 + docs (ARCHITECTURE/ROADMAP/NOW/TEAM, guide §3/9/10/11) | open PR [#60](https://github.com/SatyamDave/fall_forward_labs/pull/60) | n/a | Accepted by Satyam only; **pending Rohit** |
+| Handoff contract: `schemas/decision/v1/*` + `qc-bridge` ([#58](https://github.com/SatyamDave/fall_forward_labs/pull/58)); agent service, fake and gated live modes ([#61](https://github.com/SatyamDave/fall_forward_labs/pull/61)); `just eval` + `eval.yml` ([#56](https://github.com/SatyamDave/fall_forward_labs/pull/56)); CLAUDE.md + arch-check ([#59](https://github.com/SatyamDave/fall_forward_labs/pull/59)) | open PRs | `just agent-sim` on #61 (with #58 merged in): the TS agent in fake mode drove the real Rust bridge over the synthetic sample day, 85 decisions, 2 orders accepted by the risk engine and routed to SimVenue, identical ledger sha256 on two runs | Synthetic data only; live mode never called; no broker |
 
 Per-component detail with evidence: [docs/audits/0001-reality-audit.md](docs/audits/0001-reality-audit.md).
 
