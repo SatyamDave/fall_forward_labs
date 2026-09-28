@@ -4,12 +4,16 @@
 use std::thread;
 use std::time::{Duration, Instant};
 
-use qc_core::{ClientOrderId, Price, Qty, Side};
+use qc_core::{
+    ClientOrderId, Event, InstrumentId, OrderRequest, OrderType, Price, Qty, Side, StrategyId,
+    VenueId,
+};
 use qc_gateway::{Record, SimVenue, record};
 use qc_oms::OrderState;
-use qc_replay::{Engine, HaltReason, sample_engine};
-use qc_risk::{KillSwitch, Limits};
-use qc_strategy_runtime::InsideQuoter;
+use qc_orderbook::OrderBook;
+use qc_replay::{Engine, HaltReason, SAMPLE_INSTRUMENT, sample_engine};
+use qc_risk::{KillSwitch, Limits, RiskEngine};
+use qc_strategy_runtime::{Command, InsideQuoter, Strategy};
 
 type Sample = Engine<InsideQuoter, SimVenue>;
 
@@ -207,6 +211,52 @@ fn unknown_order_at_the_venue_halts_and_cancels_everything() {
     assert_eq!(engine.oms().open_orders().count(), 0);
 }
 
+/// On each market event, submits the orders `plan` derives from the book, with no
+/// self-protection, so the engine and risk are the only guards.
+struct Scripted {
+    plan: fn(&OrderBook) -> Vec<(Side, OrderType, Price)>,
+    next_id: u64,
+}
+
+impl Strategy for Scripted {
+    fn on_event(&mut self, event: &Event, book: &OrderBook, out: &mut Vec<Command>) {
+        if !matches!(event, Event::Market(_)) {
+            return;
+        }
+        for (side, order_type, price) in (self.plan)(book) {
+            self.next_id += 1;
+            out.push(Command::Submit(OrderRequest {
+                client_id: ClientOrderId(self.next_id),
+                strategy: StrategyId(2),
+                instrument: SAMPLE_INSTRUMENT,
+                side,
+                order_type,
+                price,
+                qty: "0.001".parse().unwrap(),
+            }));
+        }
+    }
+}
+
+fn scripted(
+    limits: Limits,
+    plan: fn(&OrderBook) -> Vec<(Side, OrderType, Price)>,
+) -> Engine<Scripted, SimVenue> {
+    Engine::new(
+        SAMPLE_INSTRUMENT,
+        Scripted { plan, next_id: 0 },
+        RiskEngine::new(limits, KillSwitch::new()),
+        SimVenue::new(VenueId(1), InstrumentId(1)),
+    )
+}
+
+fn feed_scripted(engine: &mut Engine<Scripted, SimVenue>, records: &[Record]) {
+    for r in records {
+        engine.venue_mut().on_record(r);
+        engine.on_record(r);
+    }
+}
+
 fn open_at_venue(venue: &SimVenue) -> usize {
     venue.orders().iter().filter(|o| o.open).count()
 }
@@ -237,4 +287,34 @@ fn kill_switch_during_a_disconnect_cancels_every_order_once_the_venue_is_back() 
     feed(&mut engine, &[flicker(3), flicker(4)]);
     assert_eq!(open_at_venue(engine.venue_mut()), 0, "{}", engine.log());
     assert_eq!(engine.oms().open_orders().count(), 0);
+}
+
+#[test]
+fn a_book_awaiting_resync_is_no_reference_price() {
+    let bid_at_mid = |book: &OrderBook| {
+        book.mid()
+            .map(|m| (Side::Buy, OrderType::Limit, m))
+            .into_iter()
+            .collect()
+    };
+    let mut engine = scripted(limits(), bid_at_mid);
+    feed_scripted(&mut engine, &open_book(0));
+    feed_scripted(
+        &mut engine,
+        &parse(&format!("D,1,11,B,99.9,2,{t},{t}", t = 50 * MS)),
+    );
+    assert_eq!(engine.submitted(), 1, "a synced book trades");
+
+    // Sequence 13 skips 12: the book keeps its levels but needs a snapshot.
+    feed_scripted(
+        &mut engine,
+        &parse(&format!(
+            "D,1,13,B,99.9,3,{a},{a}\nT,1,B,100.2,0.0001,{b},{b}",
+            a = 100 * MS,
+            b = 200 * MS
+        )),
+    );
+    assert!(engine.log().contains("SequenceGap"));
+    assert_eq!(engine.submitted(), 1, "{}", engine.log());
+    assert!(engine.log().contains("PriceBand"), "{}", engine.log());
 }

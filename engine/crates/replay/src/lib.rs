@@ -11,7 +11,7 @@ use qc_core::{
 };
 use qc_gateway::{Record, SimVenue, VenueAdapter};
 use qc_oms::{Oms, OrderState, reconcile};
-use qc_orderbook::OrderBook;
+use qc_orderbook::{BookStatus, OrderBook};
 use qc_risk::{KillSwitch, Limits, RiskCheck, RiskContext, RiskEngine, RiskReject};
 use qc_strategy_runtime::{Command, InsideQuoter, Strategy};
 
@@ -279,7 +279,11 @@ impl<S: Strategy, V: VenueAdapter> Engine<S, V> {
             position: self.position,
             open_buy_qty: Qty::from_raw(open_buy),
             open_sell_qty: Qty::from_raw(open_sell),
-            reference_price: self.book.mid(),
+            // A book awaiting resync keeps levels it knows may be wrong.
+            reference_price: self
+                .book
+                .mid()
+                .filter(|_| self.book.status() == BookStatus::Synced),
             daily_pnl: self.daily_pnl(),
         }
     }
