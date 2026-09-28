@@ -24,6 +24,15 @@ qc-inference.workspace = true
 serde.workspace = true
 serde_json = { version = "1.0.151", features = ["float_roundtrip"] }
 toml.workspace = true
+# Pinned exact per protocol v1.1 (issue #34): approval-token signing. Default
+# features only (BSD-3-Clause, `cargo deny` allows it); no `rand_core`
+# feature — the process keypair is seeded from `getrandom` directly (see
+# `src/approval.rs`), so no extra RNG trait dependency is needed.
+ed25519-dalek = "=3.0.0"
+# Already resolved transitively (rand's own dependency); depended on directly
+# here only to fill the signing key's 32 random bytes at process start.
+getrandom = "0.3"
+base64 = "0.23"
 
 [dev-dependencies]
 # Pinned exact: only used to validate emitted JSON against schemas/decision/v1

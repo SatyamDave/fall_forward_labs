@@ -4,8 +4,9 @@
 //! errors, model load failures) goes to stderr, so a caller reading stdout
 //! never has to distinguish a log line from a response.
 
+pub mod approval;
 pub mod engine;
 pub mod wire;
 
-pub use engine::{BridgeEngine, LoadedModel};
+pub use engine::{BridgeEngine, LoadedModel, VenueMode};
 pub use wire::handle_line;
