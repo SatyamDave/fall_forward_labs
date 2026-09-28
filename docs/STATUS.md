@@ -6,19 +6,18 @@ Regenerated automatically by `.github/workflows/docs-status.yml` on every merge 
 Narrative docs: [project guide](guide/quant-core-guide.html) ·
 [base status](reports/base-status.md) · [NOW](NOW.md).
 
-Generated from `main` at **a814831 2026-09-27**. Latest CI on `main`: **success on b95c2d9**.
+Generated from `main` at **8a4c782 2026-09-27**. Latest CI on `main`: **queued on 8a4c782**.
 Paid AI loops: **off**.
 
-## Open pull requests (1)
+## Open pull requests (0)
 
-| PR | Title | Author | Draft |
-|---|---|---|---|
-| [#19](https://github.com/SatyamDave/fall_forward_labs/pull/19) | Add an illustrated project guide and the Robinhood trading path | SatyamDave | no |
+None.
 
 ## Recently merged
 
 | PR | Title | Merged |
 |---|---|---|
+| [#19](https://github.com/SatyamDave/fall_forward_labs/pull/19) | Add an illustrated project guide and the Robinhood trading path | 2026-09-28 |
 | [#18](https://github.com/SatyamDave/fall_forward_labs/pull/18) | build(deps): Bump bridgecrewio/checkov-action from 12.1347.0 to 12.3125.0 in the actions group | 2026-09-28 |
 | [#8](https://github.com/SatyamDave/fall_forward_labs/pull/8) | Document the actual base state and consolidate the repo guide | 2026-09-28 |
 | [#17](https://github.com/SatyamDave/fall_forward_labs/pull/17) | Fix base integration failures and make checks cover every suite | 2026-09-28 |
@@ -33,12 +32,13 @@ Paid AI loops: **off**.
 | [#12](https://github.com/SatyamDave/fall_forward_labs/pull/12) | Add the ML stack with Python/Rust feature parity and hash-checked model loading | 2026-09-28 |
 | [#11](https://github.com/SatyamDave/fall_forward_labs/pull/11) | Add Claude Code settings, guard hooks, rules, agents and skills with hook tests | 2026-09-28 |
 | [#10](https://github.com/SatyamDave/fall_forward_labs/pull/10) | Add knowledge loop workflows that propose one scope-checked knowledge PR per merge, week and month | 2026-09-28 |
-| [#14](https://github.com/SatyamDave/fall_forward_labs/pull/14) | Audit repo against all prompts and consolidate shared instructions | 2026-09-28 |
 
 ## Recent commits on main
 
 | Commit | Date | Subject |
 |---|---|---|
+| `8a4c782` | 2026-09-27 | Merge pull request #19 from SatyamDave/docs/project-guide |
+| `8b906d1` | 2026-09-27 | docs: add a live status document regenerated on every merge |
 | `a814831` | 2026-09-27 | docs: add an illustrated project guide and the Robinhood trading path |
 | `b95c2d9` | 2026-09-27 | Merge pull request #18 from SatyamDave/dependabot/github_actions/actions-f1906c3da7 |
 | `e086fce` | 2026-09-27 | Merge pull request #8 from SatyamDave/bootstrap/phase-7-contributor |
@@ -49,8 +49,6 @@ Paid AI loops: **off**.
 | `c701e89` | 2026-09-27 | Merge main into fix/base-integration before merging #17 |
 | `f5b2e22` | 2026-09-27 | Merge pull request #6 from SatyamDave/team/phase-1-now |
 | `ccec770` | 2026-09-27 | Merge pull request #16 from SatyamDave/research/0001-favorite-longshot |
-| `90845a0` | 2026-09-27 | test(study-0001): build the synthetic fixture without random so no noqa is needed |
-| `9df7777` | 2026-09-27 | Merge main into research/0001-favorite-longshot to resolve conflicts before merge |
 
 ## Decisions (ADRs)
 
