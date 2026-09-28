@@ -96,7 +96,7 @@ def apply_fill(
     )
 
 
-def _load_entries(ledger: Path) -> list[dict[str, Any]]:
+def load_entries(ledger: Path) -> list[dict[str, Any]]:
     if not ledger.exists():
         return []
     entries = []
@@ -258,7 +258,7 @@ def load_policy(path: Path) -> dict[str, Any]:
 
 
 def build_report(ledger: Path, policy_path: Path) -> tuple[PnLResult, list[EquityPoint]]:
-    entries = _load_entries(ledger)
+    entries = load_entries(ledger)
     policy = load_policy(policy_path)
     fee_bps = Decimal(str(policy["fees"]["fee_bps"]))
     result, curve = compute(entries, fee_bps)
@@ -336,7 +336,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out", type=Path, default=DEFAULT_OUT)
     args = parser.parse_args(argv)
 
-    entries = _load_entries(args.ledger)
+    entries = load_entries(args.ledger)
     date = args.date
     if date is None:
         date = (

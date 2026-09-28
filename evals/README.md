@@ -27,8 +27,8 @@ contract (`exit_code()`).
 ## Tier 2 — merge to main / nightly / manual dispatch, paid, gated
 
 `scripts/eval/live_agent.py` runs the live agent over the frozen scenario set in
-`evals/scenarios/` (three synthetic worldlines sliced from `tests/replay/sample_day.csv`; see
-`evals/scenarios/README.md`) and appends one result per scenario to
+`evals/scenarios/` (four synthetic worldlines, one of them a deliberately adversarial price-shock
+case; see `evals/scenarios/README.md`) and appends one result per scenario to
 `evals/ledger/agent-evals.jsonl` (gitignored; a human decides whether to commit a run — see
 `evals/ledger/README.md`).
 
@@ -43,6 +43,24 @@ visible in the report, not silently swallowed. `loop-agent-eval` does not exist 
 `autonomy/POLICY.yaml` yet — `agentic/agent-service` adds it, disabled and zero-budget — so this
 tier is gated off everywhere today, matching `docs/reports/base-status.md` item 6 (no
 `ANTHROPIC_API_KEY` in this repo).
+
+**Baselines, next to every result, not the agent's score alone (issue #37).** Each scenario's
+result reports the live agent's P&L next to `no_trade` (always 0), `buy_and_hold` (a fixed-size
+position, sized to `config/limits/default.toml`'s `max_position`, entered at the scenario's first
+quoted mid and marked at its last — computed via a real `qc-bridge` session, not a
+reimplementation of order-book logic in Python), and `classifier_only` (this same scenario run in
+`QC_AGENT_MODE=fake`: free, deterministic, no API key — this *is* the pre-agent fixed rule
+ADR-0040 §5 describes, so it always runs regardless of the live gate). Per
+`llm-trading-eval-research.md` §5 (FORESIGHT-9): an equal-weight buy-and-hold baseline beat LLM
+agents in 31 of 36 frozen-scenario runs — the right prior is "the agent probably doesn't beat the
+dumb baseline," not the reverse, and this is the check that proves it one way or the other on
+every run rather than reporting the agent's own number in isolation.
+
+The live and classifier-only runs call the agent CLI once each, directly — not through `just
+agent-sim`, which unconditionally runs twice and demands identical ledger hashes. That
+determinism check is right for fake mode but is not one a genuinely nondeterministic live run can
+ever pass (ADR-0040 §5: "live mode cannot meet this bar"), so routing a live run through it would
+have reported FAIL on every run's determinism alone, never on anything about the decision itself.
 
 ## Why paid evals don't run on every PR push
 
