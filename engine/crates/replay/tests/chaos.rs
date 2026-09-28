@@ -108,7 +108,7 @@ fn disconnect_rejects_new_orders_locally_and_trading_resumes_after_reconnect() {
         before,
         "nothing reaches a disconnected venue"
     );
-    assert!(engine.log().contains("gateway Disconnected"));
+    assert!(engine.log().contains("cancel-failed"), "{}", engine.log());
     assert!(
         engine
             .oms()
@@ -204,5 +204,37 @@ fn unknown_order_at_the_venue_halts_and_cancels_everything() {
     let submitted = engine.submitted();
     feed(&mut engine, &[flicker(1), flicker(2)]);
     assert_eq!(engine.submitted(), submitted);
+    assert_eq!(engine.oms().open_orders().count(), 0);
+}
+
+fn open_at_venue(venue: &SimVenue) -> usize {
+    venue.orders().iter().filter(|o| o.open).count()
+}
+
+#[test]
+fn kill_switch_during_a_disconnect_cancels_every_order_once_the_venue_is_back() {
+    let kill = KillSwitch::new();
+    let mut engine = sample_engine(limits(), kill.clone());
+    feed(&mut engine, &open_book(0));
+    feed(&mut engine, &[flicker(0)]);
+    assert!(open_at_venue(engine.venue_mut()) > 0, "quotes rest");
+
+    engine.venue_mut().set_connected(false);
+    kill.engage();
+    feed(&mut engine, &[flicker(1), flicker(2)]);
+    assert_eq!(engine.halted(), Some(HaltReason::KillSwitch));
+    let log = engine.log().to_owned();
+    assert!(log.contains("cancel-failed"), "{log}");
+    let after_halt = log.split_once(" halt KillSwitch").unwrap().1;
+    assert!(
+        !after_halt
+            .lines()
+            .any(|l| l.split(' ').nth(1) == Some("cancel")),
+        "a cancel the venue never received is logged as sent:\n{after_halt}"
+    );
+
+    engine.venue_mut().set_connected(true);
+    feed(&mut engine, &[flicker(3), flicker(4)]);
+    assert_eq!(open_at_venue(engine.venue_mut()), 0, "{}", engine.log());
     assert_eq!(engine.oms().open_orders().count(), 0);
 }

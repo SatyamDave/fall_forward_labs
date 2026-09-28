@@ -6,8 +6,8 @@ use std::collections::VecDeque;
 use std::fmt::Write as _;
 
 use qc_core::{
-    Clock, Event, InstrumentId, MarketEvent, OrderEvent, OrderRequest, Price, Qty, SCALE, Side,
-    SimClock, StrategyId, Timestamp, VenueId,
+    ClientOrderId, Clock, Event, InstrumentId, MarketEvent, OrderEvent, OrderRequest, Price, Qty,
+    SCALE, Side, SimClock, StrategyId, Timestamp, VenueId,
 };
 use qc_gateway::{Record, SimVenue, VenueAdapter};
 use qc_oms::{Oms, OrderState, reconcile};
@@ -118,6 +118,9 @@ impl<S: Strategy, V: VenueAdapter> Engine<S, V> {
     /// Processes one recorded record at its local timestamp.
     pub fn on_record(&mut self, record: &Record) {
         self.clock.advance_to(record.ts_local());
+        if self.halted.is_some() {
+            self.cancel_all_open();
+        }
         self.check_kill_switch();
         let result = match record {
             Record::Snapshot(s) => self.book.apply_snapshot(s),
@@ -161,13 +164,18 @@ impl<S: Strategy, V: VenueAdapter> Engine<S, V> {
         }
     }
 
-    /// Stops all order entry for good and cancels every working order.
+    /// Stops all order entry for good and cancels every working order. Cancels
+    /// the venue could not take are sent again on every record until none is open.
     fn halt(&mut self, reason: HaltReason) {
         if self.halted.is_some() {
             return;
         }
         self.halted = Some(reason);
         self.line(format_args!("halt {reason:?}"));
+        self.cancel_all_open();
+    }
+
+    fn cancel_all_open(&mut self) {
         let open: Vec<_> = self
             .oms
             .open_orders()
@@ -175,9 +183,25 @@ impl<S: Strategy, V: VenueAdapter> Engine<S, V> {
             .map(|o| o.request.client_id)
             .collect();
         for id in open {
-            if self.oms.request_cancel(id).is_ok() {
-                let _ = self.venue.cancel(id);
-                self.line(format_args!("cancel {}", id.0));
+            self.cancel(id);
+        }
+    }
+
+    fn cancel(&mut self, id: ClientOrderId) {
+        if let Err(e) = self.oms.request_cancel(id) {
+            self.line(format_args!("cancel-skip {} {e:?}", id.0));
+            return;
+        }
+        match self.venue.cancel(id) {
+            Ok(()) => self.line(format_args!("cancel {}", id.0)),
+            Err(e) => {
+                self.line(format_args!("cancel-failed {} {e:?}", id.0));
+                let refused = OrderEvent::CancelRejected {
+                    client_id: id,
+                    ts: self.clock.now(),
+                };
+                let _ = self.oms.apply(&refused);
+                self.feedback.push_back(refused);
             }
         }
     }
@@ -270,22 +294,7 @@ impl<S: Strategy, V: VenueAdapter> Engine<S, V> {
     fn execute(&mut self, cmd: Command) {
         match cmd {
             Command::Submit(order) => self.submit(&order),
-            Command::Cancel(id) => {
-                if let Err(e) = self.oms.request_cancel(id) {
-                    self.line(format_args!("cancel-skip {} {e:?}", id.0));
-                    return;
-                }
-                self.line(format_args!("cancel {}", id.0));
-                if let Err(e) = self.venue.cancel(id) {
-                    self.line(format_args!("gateway {e:?}"));
-                    let refused = OrderEvent::CancelRejected {
-                        client_id: id,
-                        ts: self.clock.now(),
-                    };
-                    let _ = self.oms.apply(&refused);
-                    self.feedback.push_back(refused);
-                }
-            }
+            Command::Cancel(id) => self.cancel(id),
         }
     }
 
