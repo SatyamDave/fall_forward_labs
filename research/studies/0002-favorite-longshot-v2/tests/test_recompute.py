@@ -113,11 +113,16 @@ def test_recompute_matches_on_synthetic_fixture(tmp_path: Path) -> None:
 
 
 def real_snapshot_has_sample() -> bool:
+    # The raw snapshot is gitignored (data/catalog/study-0002.json holds its hashes), so a clean
+    # checkout or CI has results.json but not the data to recompute it from.
     results = HERE / "results.json"
-    return results.exists() and "blocked" not in json.loads(results.read_text())
+    return results.exists() and RAW.is_dir() and "blocked" not in json.loads(results.read_text())
 
 
-@pytest.mark.skipif(not real_snapshot_has_sample(), reason="no analysable real snapshot")
+@pytest.mark.skipif(
+    not real_snapshot_has_sample(),
+    reason="no analysable real snapshot here (raw data is gitignored; see the study README)",
+)
 def test_primary_metric_matches_independent_recompute() -> None:
     results = json.loads((HERE / "results.json").read_text())
     assert independent_G(RAW) == pytest.approx(results["primary"]["G"], abs=1e-12)
