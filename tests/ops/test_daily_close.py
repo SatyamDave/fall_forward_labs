@@ -18,6 +18,10 @@ sys.path.insert(0, str(REPO / "scripts/reports"))
 sys.path.insert(0, str(REPO / "scripts/ops"))
 
 
+OK_CMD = f'{sys.executable} -c "import sys; sys.exit(0)"'
+FAIL_CMD = f'{sys.executable} -c "import sys; sys.exit(1)"'
+
+
 def _load(name: str, rel_path: str):
     spec = importlib.util.spec_from_file_location(name, REPO / rel_path)
     assert spec and spec.loader
@@ -187,13 +191,15 @@ def test_reconciliation_status_unknown_for_empty_log(workspace: dict[str, Path])
 
 
 def test_run_reconcile_cmd_ok_on_zero_exit() -> None:
-    ok, detail = daily_close.run_reconcile_cmd("exit 0")
+    ok, detail = daily_close.run_reconcile_cmd(f'{sys.executable} -c "import sys; sys.exit(0)"')
     assert ok is True
     assert detail == ""
 
 
 def test_run_reconcile_cmd_not_ok_on_nonzero_exit() -> None:
-    ok, detail = daily_close.run_reconcile_cmd("echo boom >&2; exit 3")
+    ok, detail = daily_close.run_reconcile_cmd(
+        f"{sys.executable} -c \"import sys; sys.stderr.write('boom'); sys.exit(3)\""
+    )
     assert ok is False
     assert "exited 3" in detail
     assert "boom" in detail
@@ -203,14 +209,14 @@ def test_determine_reconciliation_log_mismatch_outranks_a_successful_cmd(
     workspace: dict[str, Path],
 ) -> None:
     workspace["bridge_log"].write_text(_bridge_halt_reconciliation(TS0) + "\n")
-    result = daily_close.determine_reconciliation(workspace["bridge_log"], DATE0, "exit 0")
+    result = daily_close.determine_reconciliation(workspace["bridge_log"], DATE0, OK_CMD)
     assert result["status"] == "mismatch"
 
 
 def test_determine_reconciliation_ok_when_cmd_succeeds_and_log_is_clean(
     workspace: dict[str, Path],
 ) -> None:
-    result = daily_close.determine_reconciliation(workspace["bridge_log"], DATE0, "exit 0")
+    result = daily_close.determine_reconciliation(workspace["bridge_log"], DATE0, OK_CMD)
     assert result == {"status": "ok", "detail": None}
 
 
@@ -232,7 +238,7 @@ def test_determine_reconciliation_unknown_when_no_cmd_and_clean_log(
 def test_close_writes_broker_sourced_record_and_exits_clean(
     workspace: dict[str, Path], capsys: pytest.CaptureFixture[str]
 ) -> None:
-    code = daily_close.main(_argv(workspace, reconcile_cmd="exit 0"))
+    code = daily_close.main(_argv(workspace, reconcile_cmd=OK_CMD))
     assert code == 0
     written = json.loads((workspace["out"] / f"{DATE0}.json").read_text())
     assert written["source"] == "reconciled"
@@ -253,7 +259,7 @@ def test_close_exits_nonzero_and_alerts_on_reconcile_mismatch(
 
 
 def test_close_exits_nonzero_when_reconcile_cmd_fails(workspace: dict[str, Path]) -> None:
-    code = daily_close.main(_argv(workspace, reconcile_cmd="exit 1"))
+    code = daily_close.main(_argv(workspace, reconcile_cmd=FAIL_CMD))
     assert code == 1
     written = json.loads((workspace["out"] / f"{DATE0}.json").read_text())
     assert written["reconciliation"]["status"] == "mismatch"
@@ -276,14 +282,14 @@ def test_close_exits_nonzero_on_stop_rule_trip(
     workspace["journal"].write_text(
         _journal_resolved(1, "filled", filled_qty="1", avg_price="150") + "\n"
     )
-    code = daily_close.main(_argv(workspace, reconcile_cmd="exit 0", policy=str(tight_policy)))
+    code = daily_close.main(_argv(workspace, reconcile_cmd=OK_CMD, policy=str(tight_policy)))
     out = capsys.readouterr().out
     assert code == 1
     assert "stop_rule:" in out
 
 
 def test_close_is_idempotent_for_an_unchanged_day(workspace: dict[str, Path]) -> None:
-    argv = _argv(workspace, reconcile_cmd="exit 0")
+    argv = _argv(workspace, reconcile_cmd=OK_CMD)
     first = daily_close.main(argv)
     second = daily_close.main(argv)
     assert first == 0
@@ -297,3 +303,9 @@ def test_close_never_reports_ok_by_default_with_no_reconcile_cmd(
     assert code == 1  # "unknown" is not "ok" -- fails closed, never silently trusted clean
     written = json.loads((workspace["out"] / f"{DATE0}.json").read_text())
     assert written["reconciliation"]["status"] == "unknown"
+
+
+def test_run_reconcile_cmd_never_runs_a_shell(tmp_path: Path) -> None:
+    marker = tmp_path / "injected"
+    daily_close.run_reconcile_cmd(f"{OK_CMD} ; touch {marker}")
+    assert not marker.exists(), "shell metacharacters must not be interpreted"

@@ -46,6 +46,7 @@ from __future__ import annotations
 import argparse
 import datetime as dt
 import json
+import shlex
 import subprocess
 import sys
 import time
@@ -86,9 +87,11 @@ def run_reconcile_cmd(cmd: str) -> tuple[bool, str]:
     docstring). A failing exit code, a timeout, or the command failing to start at all is a hard
     "not ok" -- never assumed clean."""
     try:
-        proc = subprocess.run(  # noqa: S602 - operator-configured command, same convention as
-            cmd,
-            shell=True,
+        # Split into argv and run without a shell: the command comes from config, but a shell
+        # would turn any stray metacharacter in it into code.
+        argv = shlex.split(cmd)
+        proc = subprocess.run(  # noqa: S603 - argv from operator config, no shell
+            argv,
             capture_output=True,
             text=True,
             timeout=300,  # supervisor.py's --health-check
