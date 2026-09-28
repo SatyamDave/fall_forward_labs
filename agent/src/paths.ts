@@ -1,0 +1,33 @@
+// Locates repo-root-relative paths regardless of whether this runs from src/ (tsx) or
+// dist/ (tsc build), and regardless of the caller's cwd.
+import { existsSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+function findUp(startDir: string, isRoot: (dir: string) => boolean, maxLevels = 8): string {
+  let dir = startDir;
+  for (let i = 0; i < maxLevels; i++) {
+    if (isRoot(dir)) return dir;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  throw new Error(`could not locate the fall-forward-labs repo root walking up from ${startDir}`);
+}
+
+let cachedRoot: string | undefined;
+
+export function repoRoot(): string {
+  if (cachedRoot) return cachedRoot;
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  cachedRoot = findUp(here, (dir) => existsSync(path.join(dir, "schemas", "decision", "v1", "README.md")));
+  return cachedRoot;
+}
+
+export function schemaDir(): string {
+  return path.join(repoRoot(), "schemas", "decision", "v1");
+}
+
+export function ledgerPath(): string {
+  return process.env.QC_AGENT_LEDGER_PATH ?? path.join(repoRoot(), "out", "agent", "ledger.jsonl");
+}

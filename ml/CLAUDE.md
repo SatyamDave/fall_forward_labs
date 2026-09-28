@@ -29,6 +29,7 @@
 - Online adaptation (intraday spread or skew) never leaves the bounds in config/limits/ and never changes a risk limit.
 - Never export a model without its registry hash.
 - No lookahead: no feature reads data stamped after its decision time.
+- Never train or label a model from agent (ADR-0040) decisions or outputs as ground truth; Anthropic's Commercial Terms and Usage Policy bar training on Claude outputs. Labels are realized market outcomes only — the classifier and the agent stay on separate evidence.
 
 ## Gotchas
 _None yet. Each entry links to the PR or postmortem where it bit us._
@@ -38,3 +39,4 @@ _None yet. Each entry links to the PR or postmortem where it bit us._
 
 ## See also
 - Skills: ml/.claude/skills/ (train-challenger, promotion-dossier); research/CLAUDE.md; engine/crates/inference/CLAUDE.md
+- ADR-0040 (agent handoff, forward-only agent evals): docs/adr/0040-agentic-decision.md

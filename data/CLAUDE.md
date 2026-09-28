@@ -1,7 +1,7 @@
 # data/ — schemas, recorders, catalog, and data-quality checks (never the data itself)
 
 ## Owns / does not own
-- Owns: schemas/ (versioned schemas for market data and engine logs), recorders/ (write Parquet with exchange and local timestamps), catalog/ (what exists, where it lives in object storage, schema version), quality/ (checks on ingest).
+- Owns: schemas/ (versioned schemas for market data and engine logs — `data/schemas/`, distinct from the top-level `schemas/` decision handoff contract, ADR-0040), recorders/ (write Parquet with exchange and local timestamps), catalog/ (what exists, where it lives in object storage, schema version), quality/ (checks on ingest).
 - Does not own: raw data (object storage, per ADR-0005), datasets for training (ml/datasets), venue connections for trading (engine/crates/gateway).
 
 ## Commands
@@ -28,3 +28,4 @@ _None yet. Each entry links to the PR or postmortem where it bit us._
 
 ## See also
 - ADR-0005 (data storage); ml/datasets/README.md; docs/ARCHITECTURE.md
+- ADR-0040 (agent handoff, top-level schemas/): docs/adr/0040-agentic-decision.md

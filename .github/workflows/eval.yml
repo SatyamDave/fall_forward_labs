@@ -43,7 +43,13 @@ jobs:
       - uses: taiki-e/install-action@4cef1412cce204788f482e778a0b9187f9626a29 # v2.87.21
         with:
           tool: just
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: agent/package-lock.json
       - run: just setup
+      - run: just agent-setup
       - run: just eval
       - if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
@@ -77,7 +83,13 @@ jobs:
       - uses: taiki-e/install-action@4cef1412cce204788f482e778a0b9187f9626a29 # v2.87.21
         with:
           tool: just
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: agent/package-lock.json
       - run: just setup
+      - run: just agent-setup
       # scripts/eval/live_agent.py reads autonomy/POLICY.yaml through scripts/ci/ai_gate.py itself
       # and exits 0 with "skipped: gated off" unless both the policy allows loop-agent-eval and
       # ANTHROPIC_API_KEY is set — true everywhere today (docs/reports/base-status.md item 6).

@@ -4,6 +4,7 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 
 engine := "engine"
 research := "research"
+agent := "agent"
 # Python outside research/ and ml/ that ruff also checks, relative to research/. Not listed:
 # autonomy/ and tests/autonomy/ (protected paths that fail ruff today; fixing them needs a T3 PR),
 # and tests/replay/generate_sample_day.py (S311, PTH123; the fixture it wrote must stay identical).
@@ -83,6 +84,10 @@ replay:
     if [ "$first" != "$expected" ]; then echo "FAIL: order log does not match tests/replay/expected_order_log.sha256 ($expected)"; exit 1; fi
     echo "replay deterministic and matches the committed order log"
 
+# Build the qc-bridge release binary (protocol v1 stdio bridge, schemas/decision/v1)
+bridge:
+    cd {{engine}} && cargo build --release --locked -p qc-bridge
+
 # Run a backtest from backtest/configs/<cfg>.yaml (not implemented: exits 2 so nothing mistakes it for a pass)
 backtest cfg:
     @echo "not implemented: no execution backtest exists yet ({{cfg}}); 'just walkforward <name>' is the label-level evaluation" >&2
@@ -121,3 +126,46 @@ study-0001:
 # See evals/README.md for the tier design (this is Tier 1 of 3).
 eval:
     python3 scripts/eval/run.py
+
+# ADR-0040 agent service (agent/): install pinned dependencies (npm ci, committed lockfile)
+agent-setup:
+    cd {{agent}} && npm ci
+
+# ADR-0040 agent service: offline unit tests only (bridge client, schema validation, fake
+# decider, live-decider config/hook, ledger, full fake loop against a fake bridge) — no
+# network, no API key, no real qc-bridge binary required
+agent-test:
+    cd {{agent}} && npm test
+
+# End-to-end fake-mode demo: builds the real qc-bridge and drives it over
+# tests/replay/sample_day.csv (set QC_BRIDGE_BIN to use another bridge, e.g. the TS stand-in
+# src/testkit/fake-bridge.ts). Runs the loop twice and fails unless both ledger hashes match.
+agent-sim:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd {{agent}}
+    export QC_AGENT_MODE=fake
+    if [ -z "${QC_BRIDGE_BIN:-}" ]; then
+      # The real Rust qc-bridge over the synthetic sample day, with the parity-fixture model.
+      # A build failure fails the recipe: a silent fallback to the fake bridge would hide it.
+      (cd ../engine && cargo build --release --locked -p qc-bridge -q)
+      model=../ml/tests/fixtures/model.json
+      export QC_BRIDGE_BIN=../engine/target/release/qc-bridge
+      export QC_BRIDGE_ARGS="../tests/replay/sample_day.csv --limits ../config/limits/default.toml --model $model --model-sha256 $(tr -d '[:space:]' < ../ml/tests/fixtures/model.sha256)"
+      # Smoke threshold: low enough that the order path (risk, OMS, SimVenue) actually runs.
+      export QC_FAKE_PROB_THRESHOLD="${QC_FAKE_PROB_THRESHOLD:-0.5}"
+    fi
+    sha() { if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -d' ' -f1; }
+    run() {
+      local out; out=$(mktemp -d)
+      QC_AGENT_LEDGER_PATH="$out/ledger.jsonl" node_modules/.bin/tsx src/cli.ts >&2
+      # Keep the latest ledger where evals and CI artifacts look for it.
+      mkdir -p ../out/agent && cp "$out/ledger.jsonl" ../out/agent/ledger.jsonl
+      sha "$out/ledger.jsonl"
+    }
+    hash1=$(run)
+    hash2=$(run)
+    echo "run 1 ledger sha256: $hash1"
+    echo "run 2 ledger sha256: $hash2"
+    if [ "$hash1" != "$hash2" ]; then echo "FAIL: agent-sim ledger is not deterministic"; exit 1; fi
+    echo "agent-sim deterministic across two runs"

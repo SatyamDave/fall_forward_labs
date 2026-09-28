@@ -119,11 +119,11 @@ svg .ah{fill:var(--muted)} svg .ah-acc{fill:var(--accent)} svg .ah-bad{fill:var(
 <p class="small">This block rewrites itself from the repository on every merge to <code>main</code> and every 30 minutes for pull-request changes. The rest of the guide is written by hand and dated.</p>
 <!-- AUTO-STATUS:START -->
 <div class="card"><p class="small">Updated automatically on every merge to main and every 30 minutes by <code>.github/workflows/docs-status.yml</code>. Full table: <code>docs/STATUS.md</code>.</p>
-<p><b>main</b> at <code>8a4c782 2026-09-27</code> · latest CI: <b>queued on 8a4c782</b> · paid AI loops: <b>off</b></p>
-<p><b>Open PRs (0)</b></p><ul><li>none</li></ul>
-<p><b>Recently merged</b></p><ul><li>#19 Add an illustrated project guide and the Robinhood trading path (2026-09-28)</li><li>#18 build(deps): Bump bridgecrewio/checkov-action from 12.1347.0 to 12.3125.0 in the actions group (2026-09-28)</li><li>#8 Document the actual base state and consolidate the repo guide (2026-09-28)</li><li>#17 Fix base integration failures and make checks cover every suite (2026-09-28)</li><li>#6 Draft team plan and docs/NOW.md for both founders (Phase 1) (2026-09-28)</li><li>#16 Test favorite-longshot bias on settled Kalshi markets: insufficient evidence, listing cap dropped every day (2026-09-28)</li><li>#9 Propose first vertical in ADR-0020 and plan base completion (Phase 0) (2026-09-28)</li><li>#4 Record decision-layer ADRs and TypeSafe vendor review (Phase 1) (2026-09-28)</li></ul>
-<p><b>Decisions</b></p><ul><li>ADR-0001: Engine foundation: Proposed</li><li>ADR-0002: Dependencies and licenses: Proposed</li><li>ADR-0003: Venue selection: Proposed</li><li>ADR-0004: Languages and toolchain: Proposed</li><li>ADR-0005: Data storage: Proposed</li><li>ADR-0006: Run autonomy loops on GitHub Actions schedules with claude-code-action: unknown</li><li>ADR-0010: Decision layer (hosted decision models in the control plane only): Proposed</li><li>ADR-0011: TypeSafe AI (Jev) vendor review and access rules: Proposed</li><li>ADR-0013: Learning speeds (L0-L3) and their authority: Proposed (2026-09-27)</li><li>ADR-0020: First vertical: Proposed</li></ul>
-<p class="small">Rust #[test] functions: 47, Python test functions: 108 · trials: demo 4, study-0001-favorite-longshot 1</p></div>
+<p><b>main</b> at <code>4d26c8e 2026-09-27</code> · latest CI: <b>pending on 4d26c8e</b> · paid AI loops: <b>off</b></p>
+<p><b>Open PRs (2)</b></p><ul><li>#61 Build the agent service against qc-bridge protocol v1</li><li>#56 Add the three-tier eval harness (just eval, Tier 1)</li></ul>
+<p><b>Recently merged</b></p><ul><li>#58 Add qc-bridge: protocol v1 stdio bridge between the engine and the agent (2026-09-28)</li><li>#59 Record ADR-0040 in every CLAUDE.md and add the arch-check gate (2026-09-28)</li><li>#60 Record ADR-0040, the agentic decision, across the docs (2026-09-28)</li><li>#19 Add an illustrated project guide and the Robinhood trading path (2026-09-28)</li><li>#18 build(deps): Bump bridgecrewio/checkov-action from 12.1347.0 to 12.3125.0 in the actions group (2026-09-28)</li><li>#8 Document the actual base state and consolidate the repo guide (2026-09-28)</li><li>#17 Fix base integration failures and make checks cover every suite (2026-09-28)</li><li>#6 Draft team plan and docs/NOW.md for both founders (Phase 1) (2026-09-28)</li></ul>
+<p><b>Decisions</b></p><ul><li>ADR-0001: Engine foundation: Proposed</li><li>ADR-0002: Dependencies and licenses: Proposed</li><li>ADR-0003: Venue selection: Proposed</li><li>ADR-0004: Languages and toolchain: Proposed</li><li>ADR-0005: Data storage: Proposed</li><li>ADR-0006: Run autonomy loops on GitHub Actions schedules with claude-code-action: unknown</li><li>ADR-0010: Decision layer (hosted decision models in the control plane only): Proposed</li><li>ADR-0011: TypeSafe AI (Jev) vendor review and access rules: Proposed</li><li>ADR-0013: Learning speeds (L0-L3) and their authority: Proposed (2026-09-27)</li><li>ADR-0020: First vertical: Proposed</li><li>ADR-0040: Agentic trading decision (final trade call moves to an AI agent): Accepted by Satyam 2026-09-28</li></ul>
+<p class="small">Rust #[test] functions: 70, Python test functions: 123 · trials: demo 4, study-0001-favorite-longshot 1</p></div>
 <!-- AUTO-STATUS:END -->
 
 <nav class="toc" aria-label="Contents">
@@ -185,9 +185,9 @@ svg .ah{fill:var(--muted)} svg .ah-acc{fill:var(--accent)} svg .ah-bad{fill:var(
 
 <!-- 3 -->
 <h2 id="map">3. The system map</h2>
-<div class="plain"><b class="lbl">How to read this</b>Left to right is the journey from raw market data to a real order. The red dashed wall is the most important line in the project: nothing on the left (research, AI, experiments) can send an order. Only a model or strategy that passes every gate and a human approval crosses the wall, and only as a hash-checked file. Solid boxes exist today; dashed grey boxes are planned.</div>
-<div class="diagram" role="img" aria-label="System map from market data through research, promotion gates, the trading engine and the broker, with humans and automation around it">
-<svg viewBox="0 0 1200 900" xmlns="http://www.w3.org/2000/svg">
+<div class="plain"><b class="lbl">How to read this</b>Left to right is the journey from raw market data to a real order. The red dashed wall is the most important line in the project: nothing on the left (research, AI, experiments) can send an order. Only a model or strategy that passes every gate and a human approval crosses the wall, and only as a hash-checked file. Solid boxes exist today; dashed grey boxes are planned. New in this batch: <code>qc-bridge</code> and the agent service sit between the classifier and the risk checks — the agent decides, but its only callable action is <code>submit_order_intent</code>; it never holds a broker tool, so the wall still holds (<a href="#agents">section 9</a>, ADR-0040).</div>
+<div class="diagram" role="img" aria-label="System map from market data through research, promotion gates, the agent decision service, the trading engine and the broker, with humans and automation around it">
+<svg viewBox="0 0 1200 1000" xmlns="http://www.w3.org/2000/svg">
 <defs>
   <marker id="m1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker>
   <marker id="m2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" class="ah-acc"/></marker>
@@ -201,21 +201,21 @@ svg .ah{fill:var(--muted)} svg .ah-acc{fill:var(--accent)} svg .ah-bad{fill:var(
 <text x="30" y="76" class="t-s">Hold broker credentials · press the kill switch · approve changes to protected code · review every pull request</text>
 
 <!-- zones -->
-<rect x="10" y="104" width="470" height="560" rx="10" class="zone"/>
+<rect x="10" y="104" width="470" height="660" rx="10" class="zone"/>
 <text x="26" y="128" class="t-h">OFFLINE: the lab (Python)</text>
 <text x="26" y="146" class="t-s t-m">No money, no broker keys. AI assistants may help here.</text>
 
-<rect x="500" y="104" width="190" height="560" rx="10" class="zone"/>
+<rect x="500" y="104" width="190" height="660" rx="10" class="zone"/>
 <text x="514" y="128" class="t-h">THE EXAM</text>
 <text x="514" y="146" class="t-s t-m">Gates + human sign-off</text>
 
-<rect x="710" y="104" width="480" height="560" rx="10" class="zone"/>
-<text x="726" y="128" class="t-h">LIVE: the trading floor (Rust engine)</text>
-<text x="726" y="146" class="t-s t-m">Deterministic. No AI, no web lookups, no guessing.</text>
+<rect x="710" y="104" width="480" height="660" rx="10" class="zone"/>
+<text x="726" y="128" class="t-h">LIVE: the trading floor (Rust engine + agent decision)</text>
+<text x="726" y="146" class="t-s t-m">Deterministic except the boxed-off agent step below. No AI elsewhere, no web lookups.</text>
 
 <!-- the wall -->
-<line x1="700" y1="100" x2="700" y2="670" class="wall"/>
-<text x="706" y="690" class="t-s" style="fill:var(--bad)">The wall: no AI call and no research code crosses into the engine</text>
+<line x1="700" y1="100" x2="700" y2="770" class="wall"/>
+<text x="706" y="790" class="t-s" style="fill:var(--bad)">The wall: no AI call and no research code crosses into the engine, except through submit_order_intent (section 9)</text>
 
 <!-- offline boxes -->
 <rect x="30" y="165" width="200" height="58" rx="8" class="b-plan"/>
@@ -280,53 +280,69 @@ svg .ah{fill:var(--muted)} svg .ah-acc{fill:var(--accent)} svg .ah-bad{fill:var(
 <text x="742" y="340" class="t-h t-s">Strategy</text><text x="742" y="358" class="t-s t-m">decides: submit / cancel</text><text x="742" y="372" class="t-s t-m">(only a test quoter today)</text>
 <rect x="960" y="317" width="210" height="62" rx="8" class="b-ok"/>
 <text x="972" y="340" class="t-h t-s">Model inference</text><text x="972" y="358" class="t-s t-m">loads only a fingerprinted</text><text x="972" y="372" class="t-s t-m">model; NaN → no signal</text>
-<rect x="730" y="399" width="440" height="72" rx="8" class="b-bad"/>
-<text x="742" y="422" class="t-h t-s">Risk checks (every single order)</text>
-<text x="742" y="440" class="t-s t-m">1 kill switch · 2 valid order · 3 stale data · 4 daily loss · 5 price band</text>
-<text x="742" y="456" class="t-s t-m">6 order size (notional) · 7 position incl. open orders · 8 order rate</text>
-<rect x="730" y="491" width="210" height="62" rx="8" class="b-ok"/>
-<text x="742" y="514" class="t-h t-s">Order manager</text><text x="742" y="532" class="t-s t-m">7-state life cycle;</text><text x="742" y="546" class="t-s t-m">halts on any surprise</text>
-<rect x="960" y="491" width="210" height="62" rx="8" class="b-ok"/>
-<text x="972" y="514" class="t-h t-s">Reconciliation</text><text x="972" y="532" class="t-s t-m">compare with broker before</text><text x="972" y="546" class="t-s t-m">first order and every 60 s</text>
-<rect x="730" y="573" width="210" height="72" rx="8" class="b-plan"/>
-<text x="742" y="596" class="t-h t-s">Robinhood adapter</text><text x="742" y="614" class="t-s t-m">signing, rate limits,</text><text x="742" y="630" class="t-s t-m">retries (planned)</text>
-<rect x="960" y="573" width="210" height="72" rx="8" class="b-warn"/>
-<text x="972" y="596" class="t-h t-s">Simulated venue</text><text x="972" y="614" class="t-s t-m">fake exchange for tests;</text><text x="972" y="630" class="t-s t-m">fills not realistic</text>
+
+<!-- new: agent decision path (built this batch, A1) -->
+<text x="754" y="415" class="t-s" style="fill:var(--bad)">Agent decides (Claude Agent</text>
+<text x="754" y="431" class="t-s" style="fill:var(--bad)">SDK). No broker tool in its</text>
+<text x="754" y="447" class="t-s" style="fill:var(--bad)">process — only submit_order_</text>
+<text x="754" y="463" class="t-s" style="fill:var(--bad)">intent reaches risk + OMS</text>
+<text x="754" y="479" class="t-s" style="fill:var(--bad)">(enforced in code, section 9)</text>
+<rect x="960" y="397" width="210" height="34" rx="8" class="b-ok"/>
+<text x="972" y="418" class="t-h t-s">qc-bridge (Rust bridge)</text>
+<rect x="960" y="439" width="210" height="44" rx="8" class="b-ok"/>
+<text x="972" y="459" class="t-h t-s">Agent service (Agent SDK)</text><text x="972" y="475" class="t-s t-m">fake mode built; live gated</text>
+
+<rect x="730" y="499" width="440" height="72" rx="8" class="b-bad"/>
+<text x="742" y="522" class="t-h t-s">Risk checks (every single order)</text>
+<text x="742" y="540" class="t-s t-m">1 kill switch · 2 valid order · 3 stale data · 4 daily loss · 5 price band</text>
+<text x="742" y="556" class="t-s t-m">6 order size (notional) · 7 position incl. open orders · 8 order rate</text>
+<rect x="730" y="591" width="210" height="62" rx="8" class="b-ok"/>
+<text x="742" y="614" class="t-h t-s">Order manager</text><text x="742" y="632" class="t-s t-m">7-state life cycle;</text><text x="742" y="646" class="t-s t-m">halts on any surprise</text>
+<rect x="960" y="591" width="210" height="62" rx="8" class="b-ok"/>
+<text x="972" y="614" class="t-h t-s">Reconciliation</text><text x="972" y="632" class="t-s t-m">compare with broker before</text><text x="972" y="646" class="t-s t-m">first order and every 60 s</text>
+<rect x="730" y="673" width="210" height="72" rx="8" class="b-plan"/>
+<text x="742" y="696" class="t-h t-s">Robinhood adapter</text><text x="742" y="714" class="t-s t-m">Agentic MCP gateway,</text><text x="742" y="730" class="t-s t-m">approval-token (planned)</text>
+<rect x="960" y="673" width="210" height="72" rx="8" class="b-warn"/>
+<text x="972" y="696" class="t-h t-s">Simulated venue</text><text x="972" y="714" class="t-s t-m">only venue in bridge v1;</text><text x="972" y="730" class="t-s t-m">fills not realistic</text>
 
 <path d="M830,223 L830,243" class="ar-plan" marker-end="url(#m4)"/>
 <path d="M1070,223 L1070,243" class="ar" marker-end="url(#m1)"/>
 <path d="M835,297 L835,315" class="ar" marker-end="url(#m1)"/>
 <path d="M1065,297 L1065,315" class="ar" marker-end="url(#m1)"/>
 <path d="M958,348 L942,348" class="ar" marker-end="url(#m1)"/>
-<path d="M835,379 L835,397" class="ar" marker-end="url(#m1)"/>
-<path d="M835,471 L835,489" class="ar" marker-end="url(#m1)"/>
-<path d="M940,522 L958,522" class="ar" marker-end="url(#m1)"/>
-<path d="M835,553 L835,571" class="ar-plan" marker-end="url(#m4)"/>
-<path d="M900,553 C940,560 1000,560 1030,571" class="ar" marker-end="url(#m1)"/>
+<path d="M1065,379 L1065,395" class="ar" marker-end="url(#m1)"/>
+<path d="M1065,431 L1065,437" class="ar" marker-end="url(#m1)"/>
+<path d="M1065,483 L1065,497" class="ar-acc" marker-end="url(#m2)"/>
+<text x="1000" y="493" class="t-s" style="fill:var(--accent)">submit_order_intent</text>
+<path d="M835,379 L835,388 L738,388 L738,488 L835,488 L835,497" class="ar" marker-end="url(#m1)"/>
+<path d="M835,571 L835,589" class="ar" marker-end="url(#m1)"/>
+<path d="M940,622 L958,622" class="ar" marker-end="url(#m1)"/>
+<path d="M835,653 L835,671" class="ar-plan" marker-end="url(#m4)"/>
+<path d="M900,653 C940,660 1000,660 1030,671" class="ar" marker-end="url(#m1)"/>
 <path d="M678,370 C700,370 700,348 958,348" class="ar-acc" marker-end="url(#m2)"/>
 <text x="706" y="392" class="t-s" style="fill:var(--accent)">approved model file only</text>
 
 <!-- broker -->
-<rect x="730" y="710" width="460" height="70" rx="10" class="b-plan"/>
-<text x="746" y="736" class="t-h">Robinhood account(s)</text>
-<text x="746" y="756" class="t-s t-m">each founder's own account · trade-only keys · no withdrawals · see section 10</text>
-<path d="M835,645 L835,708" class="ar-plan" marker-end="url(#m4)"/>
+<rect x="730" y="810" width="460" height="70" rx="10" class="b-plan"/>
+<text x="746" y="836" class="t-h">Robinhood account(s)</text>
+<text x="746" y="856" class="t-s t-m">each founder's own account · trade-only keys · no withdrawals · see section 10</text>
+<path d="M835,745 L835,808" class="ar-plan" marker-end="url(#m4)"/>
 
 <!-- control plane -->
-<rect x="10" y="710" width="700" height="180" rx="10" class="zone"/>
-<text x="26" y="734" class="t-h">AROUND EVERYTHING: automation that never touches money</text>
-<rect x="26" y="748" width="215" height="62" rx="8" class="b-ok"/>
-<text x="38" y="771" class="t-h t-s">CI + security scans</text><text x="38" y="789" class="t-s t-m">tests, lint, vuln + secret</text><text x="38" y="803" class="t-s t-m">scans on every change</text>
-<rect x="253" y="748" width="215" height="62" rx="8" class="b-ok"/>
-<text x="265" y="771" class="t-h t-s">Claude guardrails</text><text x="265" y="789" class="t-s t-m">block secrets and protected</text><text x="265" y="803" class="t-s t-m">files for AI sessions</text>
-<rect x="480" y="748" width="215" height="62" rx="8" class="b-ok"/>
-<text x="492" y="771" class="t-h t-s">Paid-AI gate</text><text x="492" y="789" class="t-s t-m">AI workflows skip unless</text><text x="492" y="803" class="t-s t-m">policy + budget allow (off)</text>
-<rect x="26" y="820" width="215" height="58" rx="8" class="b-plan"/>
-<text x="38" y="843" class="t-h t-s">Knowledge loop</text><text x="38" y="861" class="t-s t-m">lessons → docs PRs (dormant)</text>
-<rect x="253" y="820" width="215" height="58" rx="8" class="b-plan"/>
-<text x="265" y="843" class="t-h t-s">Autonomy loops</text><text x="265" y="861" class="t-s t-m">scheduled agents (all off)</text>
-<rect x="480" y="820" width="215" height="58" rx="8" class="b-plan"/>
-<text x="492" y="843" class="t-h t-s">Decision layer (Jev)</text><text x="492" y="861" class="t-s t-m">triage only (deferred)</text>
+<rect x="10" y="810" width="700" height="180" rx="10" class="zone"/>
+<text x="26" y="834" class="t-h">AROUND EVERYTHING: automation that never touches money</text>
+<rect x="26" y="848" width="215" height="62" rx="8" class="b-ok"/>
+<text x="38" y="871" class="t-h t-s">CI + security scans</text><text x="38" y="889" class="t-s t-m">tests, lint, vuln + secret</text><text x="38" y="903" class="t-s t-m">scans on every change</text>
+<rect x="253" y="848" width="215" height="62" rx="8" class="b-ok"/>
+<text x="265" y="871" class="t-h t-s">Claude guardrails</text><text x="265" y="889" class="t-s t-m">block secrets and protected</text><text x="265" y="903" class="t-s t-m">files for AI sessions</text>
+<rect x="480" y="848" width="215" height="62" rx="8" class="b-ok"/>
+<text x="492" y="871" class="t-h t-s">Paid-AI gate</text><text x="492" y="889" class="t-s t-m">AI workflows skip unless</text><text x="492" y="903" class="t-s t-m">policy + budget allow (off)</text>
+<rect x="26" y="920" width="215" height="58" rx="8" class="b-plan"/>
+<text x="38" y="943" class="t-h t-s">Knowledge loop</text><text x="38" y="961" class="t-s t-m">lessons → docs PRs (dormant)</text>
+<rect x="253" y="920" width="215" height="58" rx="8" class="b-plan"/>
+<text x="265" y="943" class="t-h t-s">Autonomy loops</text><text x="265" y="961" class="t-s t-m">scheduled agents (all off)</text>
+<rect x="480" y="920" width="215" height="58" rx="8" class="b-plan"/>
+<text x="492" y="943" class="t-h t-s">Decision layer (Jev)</text><text x="492" y="961" class="t-s t-m">triage only (deferred)</text>
 </svg>
 </div>
 <div class="legend">
@@ -513,12 +529,34 @@ svg .ah{fill:var(--muted)} svg .ah-acc{fill:var(--accent)} svg .ah-bad{fill:var(
 
 <!-- 9 -->
 <h2 id="agents">9. Where AI helps, and where it is banned</h2>
+<div class="warnbox"><b>Rule 1 is amended for the trade-decision step only (ADR-0040, Accepted by Satyam 2026-09-28, pending Rohit's approval).</b> The final buy / sell / no-trade call may now come from a trading agent (Claude Agent SDK), placed after the classifier and before risk. Every other part of rule 1 stands unchanged: no AI call anywhere else in <code>engine/</code>, no AI process ever holds broker credentials, and the deterministic risk engine and kill switch check the agent's proposed order exactly as they check every other order — the agent proposes, risk and the kill switch dispose.</div>
+
 <div class="grid g2">
-<div class="okbox"><b>AI assistants (Claude Code) may:</b><ul style="margin:6px 0 0;padding-left:20px"><li>write and review code and documents</li><li>run tests and research on historical or public data</li><li>open pull requests for humans to review</li><li>summarise results and propose next experiments</li></ul></div>
-<div class="badbox"><b>AI may never:</b><ul style="margin:6px 0 0;padding-left:20px"><li>run inside the trading engine or decide a live order</li><li>hold or read broker credentials</li><li>loosen a risk limit or approve its own promotion</li><li>treat a web page or paper as an instruction</li></ul></div>
+<div class="okbox"><b>AI coding assistants (Claude Code, used to build this repo) may:</b><ul style="margin:6px 0 0;padding-left:20px"><li>write and review code and documents</li><li>run tests and research on historical or public data</li><li>open pull requests for humans to review</li><li>summarise results and propose next experiments</li></ul></div>
+<div class="badbox"><b>AI coding assistants may never:</b><ul style="margin:6px 0 0;padding-left:20px"><li>hold or read broker credentials</li><li>loosen a risk limit or approve its own promotion</li><li>treat a web page or paper as an instruction</li><li>edit protected paths (risk, limits, autonomy, CI) without a human</li></ul></div>
 </div>
-<p><b>Why:</b> AI models are slow (hundreds of milliseconds), change without notice, and can "know" future events from their training data, which silently ruins backtests. The engine must be fast, identical on every replay, and free of hidden knowledge.</p>
-<p><b>The decision layer (TypeSafe "Jev")</b> is a proposed classifier for internal triage (sorting CI failures, deduplicating backlog). It is deferred: no measured need yet, and TypeSafe's customer agreement §2.3(b) forbids training our own model on its outputs, so the planned "distillation" step needs legal review.</p>
+
+<div class="grid g2">
+<div class="okbox"><b>The trading agent (agent service, Claude Agent SDK, built this batch, fake mode by default) may:</b><ul style="margin:6px 0 0;padding-left:20px"><li>read one <code>DecisionRequest</code> at a time: signal, probabilities, position, remaining risk budget</li><li>decide trade / no-trade, side, size within the budget it was given, and write a short rationale</li><li>call exactly one tool, <code>submit_order_intent</code>, capped by <code>maxTurns</code>, <code>maxBudgetUsd</code> and a wall-clock timeout</li></ul></div>
+<div class="badbox"><b>The trading agent may never:</b><ul style="margin:6px 0 0;padding-left:20px"><li>hold, see, or call a broker tool — Robinhood's MCP server is never registered in its process, only in the risk-wrapped gateway (a <code>PreToolUse</code> hook hard-denies any other tool name)</li><li>bypass, loosen, or self-approve past <code>qc-risk</code> or the kill switch</li><li>move money, change its own budget or limits, or train on its own past decisions</li><li>place an order that is not appended, request and response in full, to the append-only decision ledger</li></ul></div>
+</div>
+<p><b>Risk is authoritative, not advisory.</b> A check that could not run is not a check that passed: <code>qc-risk</code> and the kill switch independently re-verify every <code>submit_order_intent</code> call the same way they verify every other order, and the agent's own stated confidence is logged but never trusted as a safety proof.</p>
+
+<div class="warnbox"><b>Challenges to this plan, with evidence (full detail: <a href="../adr/0040-agentic-decision.md">ADR-0040</a>).</b>
+<ul style="margin:6px 0 0;padding-left:20px">
+<li><b>"High-frequency agentic trade" is not achievable as stated.</b> Measured/documented figures put one structured LLM decision at roughly 1-5 s, and a multi-turn exchange at 5-15 s+ — the real cadence is seconds to minutes, not microseconds. We define the milestone as the first agentic trade, and measure the real p50/p99 latency instead of assuming "HF".</li>
+<li><b>The agent cannot be honestly backtested on history</b> — its pretraining already contains the outcomes. We backtest the classifier on history; the agent is evaluated forward-only (recorded shadow, then canary), never scored on a historical "prediction" it could have memorized.</li>
+<li><b>Live-LLM evals are the expensive, noisy tier.</b> Deterministic recorded-response replay runs on every PR; a frozen scenario suite runs on merge to main; paid live-LLM shadow evaluation is budget-capped and runs on a schedule, not on every push.</li>
+<li><b>Parallel agents are not a free win.</b> Instances of the same base model make correlated errors (research: two models agree roughly 60% of the time when both are wrong), so more agents only ship if they beat one agent at equal token budget on the forward eval.</li>
+<li><b>Robinhood's Agentic account has no configurable spending cap, and revocation is not retroactive</b> — an instruction already received stays binding even after you disconnect the agent. Our own gateway enforces the per-order and per-day dollar caps, the order-rate cap, and a kill switch that stops at the gateway before Robinhood ever sees the order.</li>
+<li><b>An autonomous agent can trip wash-trade or spoofing rules "regardless of whether such conduct was intended"</b> (Robinhood's terms put that risk entirely on us) — the gateway includes self-cross prevention.</li>
+<li><b>Anthropic's usage policy names financial decisions a high-risk use case</b> requiring qualified human review before dissemination, and separately forbids training our own model on Claude's outputs. Both require counsel before real money moves, and the ADR tracks them as open items, not resolved ones.</li>
+<li><b>Robinhood's terms require express written consent for a custom client and restrict use to personal, non-commercial purposes</b> — the same open legal question section 10 already flags, now sharper because the agent is what places the order.</li>
+</ul>
+</div>
+
+<p><b>Why an agent, why now:</b> the classifier stays the fast, deterministic, backtestable part; the agent adds judgment the classifier's fixed rule can't (context, abstention, rationale) at a cadence (seconds to minutes) the research shows is realistic for this kind of decision, not for order-book-speed execution.</p>
+<p><b>The decision layer (TypeSafe "Jev")</b> is a separate, still-deferred idea for internal triage (sorting CI failures, deduplicating backlog) — a different call site with no trading authority, unaffected by ADR-0040. No measured need yet, and TypeSafe's customer agreement §2.3(b) forbids training our own model on its outputs, so the planned "distillation" step needs legal review.</p>
 
 <!-- 10 -->
 <h2 id="robinhood">10. Trading through Robinhood: what it takes</h2>
@@ -527,7 +565,7 @@ svg .ah{fill:var(--muted)} svg .ah-acc{fill:var(--accent)} svg .ah-bad{fill:var(
 <div class="okbox"><b>Verified from Robinhood's own documents, accessed 2026-09-27.</b> Every claim below cites a primary source (listed at the end of this section). Items still marked <span class="pill p-warn">unverified</span> or <span class="pill p-human">requires counsel</span> are open.</div>
 
 <h3>The short answer</h3>
-<div class="plain"><b class="lbl">Plain terms</b>Robinhood has exactly one official, documented way for our own trading engine to place orders: the <b>Robinhood Crypto Trading API</b> (spot crypto only). Stocks, options, futures and prediction markets have <b>no</b> order API a custom program can use. A second official route, <b>Agentic Trading</b>, lets AI assistants trade stocks, options and crypto in a separate funded account, but it is built for AI agents, and AI in the order path breaks our rule 1. So the realistic first Robinhood path is: <b>spot crypto, through the Crypto Trading API, each founder in their own account, after a lawyer reviews the terms.</b></div>
+<div class="plain"><b class="lbl">Plain terms</b>Robinhood has two official, documented ways for orders to reach it: the <b>Robinhood Crypto Trading API</b> (spot crypto only, no agent involved), and <b>Agentic Trading</b>, an MCP server built specifically for an AI agent to place equities, options and crypto orders in a separate, dedicated account. Since ADR-0040 amends rule 1 for the trade-decision step, Agentic Trading is now the planned path: our agent decides, and only our risk-wrapped gateway — never the agent's own process — holds the MCP client that talks to Robinhood. The Crypto Trading API stays documented as a fallback adapter that needs no agent. Either way: <b>each founder in their own account, after a lawyer reviews the terms — nothing routes real money until that review and both founders' sign-off.</b></div>
 
 <h3>Three conditions that must all be true</h3>
 <div class="grid g3">
@@ -539,13 +577,31 @@ svg .ah{fill:var(--muted)} svg .ah-acc{fill:var(--accent)} svg .ah-bad{fill:var(
 <h3>What Robinhood offers, by product</h3>
 <div class="tblwrap"><table class="tbl"><thead><tr><th>Product</th><th>Official API for our engine?</th><th>Details</th><th>Fit for us</th></tr></thead><tbody>
 <tr><td><b>Spot crypto</b></td><td><span class="pill p-ok">Yes</span> Crypto Trading API v2 (live since 2024-05-30)</td><td>REST at <code>trading.robinhood.com</code>; every request signed with an Ed25519 key, signature valid 30 s. Orders: market, limit, stop-loss, stop-limit. Rate limit 100 requests/min per account (300 burst), "may change". Market data: best bid/ask and an estimated price for a size only; no order-book depth or streaming feed documented. v2 orders use exchange routing with tiered fees (0.95% taker at the lowest tier).</td><td><span class="pill p-acc">First path</span> Low-frequency strategies only; the costs are high relative to small edges</td></tr>
-<tr><td>Stocks, ETFs, options, crypto via AI agents</td><td><span class="pill p-warn">Only for AI agents</span> Agentic Trading (beta, 2026-05-27), an MCP server</td><td>Trades only inside a separate "Agentic" account funded by transfer; no margin; equities long-only; offers Level 2 and historical data. Rate limits not published. Whether a custom non-AI client may use it is <span class="pill p-warn">unverified</span>.</td><td><span class="pill p-bad">Not for the engine</span> AI in the order path violates rule 1</td></tr>
+<tr><td>Stocks, ETFs, options, crypto via AI agents</td><td><span class="pill p-ok">Yes</span> Agentic Trading (beta, 2026-05-27), an MCP server, 26+ named tools</td><td>Trades only inside a separate "Agentic" account funded by transfer; no margin; equities long-only; offers Level 2 (up to 4 stocks) and historical data. No spending-cap setting — confirmation is instruction-based; disconnect is a human app action and is <b>not retroactive</b> for instructions already received. Rate limits not published.</td><td><span class="pill p-acc">Now the planned path</span> under ADR-0040: the agent decides, only our gateway's approval-token client (<code>agent/src/broker/</code>) ever calls Robinhood's MCP server</td></tr>
 <tr><td>Stocks, ETFs, options (regular account)</td><td><span class="pill p-bad">No</span></td><td>No official order API. Equities and options orders earn Robinhood payment for order flow.</td><td>Not possible without Robinhood's written consent</td></tr>
 <tr><td>Futures (CME, in app and Legend)</td><td><span class="pill p-bad">No</span></td><td>The derivatives agreement requires Robinhood's written advance approval for any "third-party agent" placing trades.</td><td>Not possible today</td></tr>
 <tr><td>Event contracts / prediction markets</td><td><span class="pill p-bad">No</span></td><td>In-app only; routed to Kalshi, ForecastEx, or Rothera (Robinhood's joint venture with Susquehanna).</td><td>Use <b>Kalshi directly</b> instead: official REST, WebSocket and FIX APIs, published rate tiers, and a demo environment with mock funds</td></tr>
 <tr><td>US perpetual futures</td><td><span class="pill p-bad">No</span></td><td>Only through Robinhood Wallet on the Lighter decentralized exchange.</td><td>Not possible</td></tr>
 <tr><td>Sandbox / paper trading</td><td><span class="pill p-bad">None found</span></td><td>No Robinhood test environment was found.</td><td>We build our own paper mode on real quotes</td></tr>
 </tbody></table></div>
+
+<h3>Agentic Trading: what the agent can and cannot do</h3>
+<div class="grid g2">
+<div class="card"><b>What it gives the agent</b><ul style="margin:6px 0 0;padding-left:20px"><li>26+ named tools: account/portfolio, watchlists, market data incl. Level 2 (<code>get_equity_price_book</code>, up to 4 stocks), equities, options, crypto, a scanner — <code>place_equity_order</code>, <code>place_option_order</code>, <code>place_crypto_order</code>, plus a <code>review_*</code>/<code>preview_*</code> pre-trade check for each</li><li>Trades isolated to the dedicated Agentic account; other accounts stay read-only to it</li><li>Cannot transfer, stake or lend crypto; no funding/withdrawal tool exists for equities either (inferred from the published tool list, not an explicit Robinhood guarantee)</li></ul></div>
+<div class="card"><b>What it does not give us, so our gateway adds it</b><ul style="margin:6px 0 0;padding-left:20px"><li><b>No configurable spending cap.</b> Confirmation is instruction-based, not a platform toggle — our gateway enforces a hard per-order and per-day dollar cap before anything reaches Robinhood</li><li><b>Revocation is not retroactive</b> (§29.8): an instruction Robinhood already received stays binding even after you disconnect. Our kill switch must stop new intents at the gateway, not rely on disconnecting after the fact</li><li><b>No rate limits or full tool parameter schemas published.</b> Discover them only by connecting a client (an A0/A3 task) and treat them as unstable until then</li><li><b>No sandbox.</b> Only single-order <code>review_*</code>/<code>preview_*</code> previews exist — our SimVenue on recorded/live quotes is the paper-trading environment</li><li><b>Full liability for manipulation-adjacent patterns is ours</b>, "regardless of whether such conduct was intended" — the gateway adds self-cross / wash-trade prevention on top of the per-order caps</li></ul></div>
+</div>
+<div class="plain"><b class="lbl">Gateway placement (ADR-0040)</b>The broker gateway (Robinhood's MCP client) lives in <code>agent/src/broker/</code> — TypeScript, <code>@modelcontextprotocol/sdk</code> — but is <b>never</b> registered as a tool the trading agent can call. It only executes orders the Rust bridge already approved: the bridge returns an approval token bound to the intent's hash, and the gateway reports acks/fills back to the bridge's OMS. This keeps "the agent never sees broker tools" true even though the gateway and the agent are both TypeScript in the same package.</div>
+
+<h3>First asset: liquid ETF vs. crypto (cost comparison)</h3>
+<div class="plain"><b class="lbl">Why this matters</b>The plan is minimal money, many round trips, forward-only shadow evidence. Round-trip cost decides how many cycles the learning loop can afford, so it is a founders' decision the ADR surfaces rather than hides in a spreadsheet.</div>
+<div class="tblwrap"><table class="tbl"><thead><tr><th></th><th>Liquid ETF (e.g. a large-cap ETF)</th><th>Crypto (Agentic default routing)</th></tr></thead><tbody>
+<tr><td>Commission</td><td>$0</td><td>$0 line-item (cost is embedded in the spread)</td></tr>
+<tr><td>Round-trip cost on $500 notional</td><td>Near-zero in explicit fees; the real cost is bid/ask spread plus PFOF-influenced execution, small on a liquid ETF</td><td>~$0.95 per $100 notional each way ⇒ <b>~$4.75 round trip</b> under default spread-based routing (0.95% × 2, June 2026 rate)</td></tr>
+<tr><td>Regulatory fees</td><td>Sub-cent (Reg Fee + TAF + CAT on the sell leg)</td><td>None documented</td></tr>
+<tr><td>Market hours</td><td>Exchange hours only</td><td>24/7 — more cycles per calendar day</td></tr>
+<tr><td>Which fee regime applies to an Agentic-account order</td><td>Standard equities schedule (inferred: Agentic is "a type of self-directed individual account", no separate pricing page found)</td><td><span class="pill p-warn">unverified</span> whether <code>place_crypto_order</code> gets default-spread or tiered exchange routing</td></tr>
+</tbody></table></div>
+<p class="small">Bottom line from the research: for a minimal-money, high-cycle-count learning loop, a liquid ETF is structurally far cheaper per round trip than crypto under Robinhood's default crypto routing (roughly basis points vs. roughly 1% each way) — at the cost of market hours only. Founders decide the first asset in A0; default to whichever the research shows cheaper for small, frequent trades unless the first vertical (ADR-0003/ADR-0020) or 24/7 cycle count outweighs it.</p>
 
 <h3>Rules for a personal account</h3>
 <div class="tblwrap"><table class="tbl"><thead><tr><th>Rule</th><th>Current state</th><th>What we do</th></tr></thead><tbody>
@@ -600,69 +656,81 @@ svg .ah{fill:var(--muted)} svg .ah-acc{fill:var(--accent)} svg .ah-bad{fill:var(
 
 <!-- 11 -->
 <h2 id="roadmap">11. Roadmap to live trading</h2>
-<div class="plain"><b class="lbl">Plain terms</b>Each milestone has an exit test. We do not move to the next one until the current one passes and, where money is involved, both founders say yes. Dates are deliberately not promised; each stage takes as long as the evidence takes.</div>
+<div class="plain"><b class="lbl">Plain terms</b>ADR-0040 replaced the old Robinhood-only R0–R6 plan with A0–A7: the same idea (an exit test per stage, nobody moves on until it passes, both founders sign off where money is involved) now built around the agent pipeline. Owners: Satyam and Rohit, split as in <a href="../TEAM.md">TEAM.md</a>. Dates are deliberately not promised.</div>
 <div id="rh-roadmap">
-<div class="diagram" role="img" aria-label="Roadmap from the offline foundation to scaled live trading through Robinhood, with an exit test and owner at each stage">
-<svg viewBox="0 0 1160 470" xmlns="http://www.w3.org/2000/svg">
+<div class="diagram" role="img" aria-label="Roadmap A0 through A7 from deciding ADR-0040 to a live learning loop, with an exit test and owner at each stage">
+<svg viewBox="0 0 1200 480" xmlns="http://www.w3.org/2000/svg">
 <defs><marker id="q1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker></defs>
-<line x1="30" y1="60" x2="1130" y2="60" class="ar"/>
+<line x1="30" y1="60" x2="1170" y2="60" class="ar"/>
 <g>
-<circle cx="70" cy="60" r="12" class="b-ok"/><text x="30" y="36" class="t-h t-s">M0 · done</text>
-<circle cx="225" cy="60" r="12" class="b-human"/><text x="185" y="36" class="t-h t-s">R0</text>
-<circle cx="380" cy="60" r="12" class="b-plan"/><text x="340" y="36" class="t-h t-s">R1</text>
-<circle cx="535" cy="60" r="12" class="b-plan"/><text x="495" y="36" class="t-h t-s">R2</text>
-<circle cx="690" cy="60" r="12" class="b-plan"/><text x="650" y="36" class="t-h t-s">R3</text>
-<circle cx="845" cy="60" r="12" class="b-plan"/><text x="805" y="36" class="t-h t-s">R4</text>
-<circle cx="1000" cy="60" r="12" class="b-human"/><text x="960" y="36" class="t-h t-s">R5 → R6</text>
+<circle cx="80" cy="60" r="10" class="b-ok"/><text x="46" y="36" class="t-h t-s">M0 · done</text>
+<circle cx="219" cy="60" r="10" class="b-human"/><text x="205" y="36" class="t-h t-s">A0</text>
+<circle cx="347" cy="60" r="10" class="b-plan"/><text x="333" y="36" class="t-h t-s">A1</text>
+<circle cx="475" cy="60" r="10" class="b-plan"/><text x="461" y="36" class="t-h t-s">A2</text>
+<circle cx="603" cy="60" r="10" class="b-plan"/><text x="589" y="36" class="t-h t-s">A3</text>
+<circle cx="731" cy="60" r="10" class="b-plan"/><text x="717" y="36" class="t-h t-s">A4</text>
+<circle cx="859" cy="60" r="10" class="b-plan"/><text x="845" y="36" class="t-h t-s">A5</text>
+<circle cx="987" cy="60" r="10" class="b-human"/><text x="973" y="36" class="t-h t-s">A6</text>
+<circle cx="1115" cy="60" r="10" class="b-plan"/><text x="1101" y="36" class="t-h t-s">A7</text>
 </g>
-<rect x="10" y="90" width="140" height="360" rx="10" class="b-ok"/>
+<rect x="10" y="90" width="140" height="370" rx="10" class="b-ok"/>
 <text x="20" y="114" class="t-h t-s">Offline foundation</text>
 <text x="20" y="136" class="t-s">engine, risk, replay,</text><text x="20" y="152" class="t-s">research stack, CI</text>
-<text x="20" y="182" class="t-s t-h">Exit test</text><text x="20" y="200" class="t-s t-m">just check green on</text><text x="20" y="216" class="t-s t-m">main; replay hash</text><text x="20" y="232" class="t-s t-m">matches</text>
-<text x="20" y="262" class="t-s t-h">Status</text><text x="20" y="280" class="t-s t-m">met 2026-09-28</text>
-<rect x="160" y="90" width="140" height="360" rx="10" class="b-human"/>
-<text x="170" y="114" class="t-h t-s">Decide</text>
-<text x="170" y="136" class="t-s">jurisdiction, entity,</text><text x="170" y="152" class="t-s">product (Robinhood spot crypto),</text><text x="170" y="168" class="t-s">founders' agreement,</text><text x="170" y="184" class="t-s">counsel review</text>
-<text x="170" y="214" class="t-s t-h">Exit test</text><text x="170" y="232" class="t-s t-m">ADR accepted by both;</text><text x="170" y="248" class="t-s t-m">API terms read and</text><text x="170" y="264" class="t-s t-m">quoted in the ADR</text>
-<text x="170" y="294" class="t-s t-h">Owner</text><text x="170" y="312" class="t-s t-m">both founders</text>
-<rect x="310" y="90" width="140" height="360" rx="10" class="b-plan"/>
-<text x="320" y="114" class="t-h t-s">Read-only data</text>
-<text x="320" y="136" class="t-s">recorder for prices,</text><text x="320" y="152" class="t-s">quality checks, catalog;</text><text x="320" y="168" class="t-s">read-only API key</text><text x="320" y="184" class="t-s">(quotes only)</text>
-<text x="320" y="214" class="t-s t-h">Exit test</text><text x="320" y="232" class="t-s t-m">weeks of gap-free,</text><text x="320" y="248" class="t-s t-m">hashed data; no order</text><text x="320" y="264" class="t-s t-m">permission anywhere</text>
-<text x="320" y="294" class="t-s t-h">Owner</text><text x="320" y="312" class="t-s t-m">data owner</text>
-<rect x="460" y="90" width="140" height="360" rx="10" class="b-plan"/>
-<text x="470" y="114" class="t-h t-s">Adapter offline</text>
-<text x="470" y="136" class="t-s">Robinhood adapter</text><text x="470" y="152" class="t-s">tested on recorded</text><text x="470" y="168" class="t-s">responses; retries never</text><text x="470" y="184" class="t-s">double-send; kill switch</text><text x="470" y="200" class="t-s">external trigger</text>
-<text x="470" y="230" class="t-s t-h">Exit test</text><text x="470" y="248" class="t-s t-m">fixture + chaos tests</text><text x="470" y="264" class="t-s t-m">pass; replay of real</text><text x="470" y="280" class="t-s t-m">days deterministic</text>
-<text x="470" y="310" class="t-s t-h">Owner</text><text x="470" y="328" class="t-s t-m">engine owner</text>
-<rect x="610" y="90" width="140" height="360" rx="10" class="b-plan"/>
-<text x="620" y="114" class="t-h t-s">Research on real data</text>
-<text x="620" y="136" class="t-s">registered studies on</text><text x="620" y="152" class="t-s">captured data, after</text><text x="620" y="168" class="t-s">Robinhood's real costs</text>
-<text x="620" y="198" class="t-s t-h">Exit test</text><text x="620" y="216" class="t-s t-m">a strategy passes every</text><text x="620" y="232" class="t-s t-m">walk-forward gate (DSR</text><text x="620" y="248" class="t-s t-m">threshold decided) — or</text><text x="620" y="264" class="t-s t-m">we stop here honestly</text>
-<text x="620" y="294" class="t-s t-h">Owner</text><text x="620" y="312" class="t-s t-m">research owner</text>
-<rect x="760" y="90" width="140" height="360" rx="10" class="b-plan"/>
-<text x="770" y="114" class="t-h t-s">Shadow</text>
-<text x="770" y="136" class="t-s">engine runs on live</text><text x="770" y="152" class="t-s">data, logs every</text><text x="770" y="168" class="t-s">decision, places no</text><text x="770" y="184" class="t-s">orders</text>
-<text x="770" y="214" class="t-s t-h">Exit test</text><text x="770" y="232" class="t-s t-m">≥ 14 days; realized</text><text x="770" y="248" class="t-s t-m">edge ≥ 50% of expected;</text><text x="770" y="264" class="t-s t-m">every day replays</text><text x="770" y="280" class="t-s t-m">identically</text>
-<text x="770" y="310" class="t-s t-h">Owner</text><text x="770" y="328" class="t-s t-m">both founders review</text>
-<rect x="910" y="90" width="240" height="360" rx="10" class="b-human"/>
-<text x="920" y="114" class="t-h t-s">R5 Canary → R6 Scaled</text>
-<text x="920" y="136" class="t-s">Canary: one founder's own account,</text><text x="920" y="152" class="t-s">trade-only key, tiny budget, auto-</text><text x="920" y="168" class="t-s">rollback, daily reconciliation.</text>
-<text x="920" y="192" class="t-s">Scaled: larger limits only after the</text><text x="920" y="208" class="t-s">canary record, set by both founders.</text>
-<text x="920" y="238" class="t-s t-h">Exit tests</text><text x="920" y="256" class="t-s t-m">canary ≥ 30 days; 100% of days</text><text x="920" y="272" class="t-s t-m">reconciled with statements; zero</text><text x="920" y="288" class="t-s t-m">limit breaches; edge ≥ 70% of shadow</text>
-<text x="920" y="318" class="t-s t-h">Owner</text><text x="920" y="336" class="t-s t-m">both founders sign each step;</text><text x="920" y="352" class="t-s t-m">demotion is automatic at any time</text>
+<text x="20" y="182" class="t-s t-h">Exit test</text><text x="20" y="200" class="t-s t-m">just check green;</text><text x="20" y="216" class="t-s t-m">replay hash matches</text>
+<text x="20" y="246" class="t-s t-h">Status</text><text x="20" y="264" class="t-s t-m">met 2026-09-28</text>
+<rect x="160" y="90" width="118" height="370" rx="10" class="b-human"/>
+<text x="168" y="114" class="t-h t-s">A0 Decide</text>
+<text x="168" y="134" class="t-s">ADR-0040 both;</text><text x="168" y="150" class="t-s">first asset; counsel;</text><text x="168" y="166" class="t-s">agentic beta access</text>
+<text x="168" y="196" class="t-s t-h">Exit test</text><text x="168" y="214" class="t-s t-m">ADR accepted by</text><text x="168" y="230" class="t-s t-m">both founders</text>
+<text x="168" y="260" class="t-s t-h">Owner</text><text x="168" y="278" class="t-s t-m">both</text>
+<rect x="288" y="90" width="118" height="370" rx="10" class="b-plan"/>
+<text x="296" y="114" class="t-h t-s">A1 Handoff</text>
+<text x="296" y="134" class="t-s">DecisionRequest /</text><text x="296" y="150" class="t-s">Decision schemas,</text><text x="296" y="166" class="t-s">qc-bridge, agent</text><text x="296" y="182" class="t-s">skeleton, fake LLM</text>
+<text x="296" y="212" class="t-s t-h">Exit test</text><text x="296" y="230" class="t-s t-m">just agent-sim green;</text><text x="296" y="246" class="t-s t-m">permission test proves</text><text x="296" y="262" class="t-s t-m">no other tool callable</text>
+<text x="296" y="292" class="t-s t-h">Owner</text><text x="296" y="310" class="t-s t-m">Rohit (bridge),</text><text x="296" y="326" class="t-s t-m">Satyam (agent)</text>
+<rect x="416" y="90" width="118" height="370" rx="10" class="b-plan"/>
+<text x="424" y="114" class="t-h t-s">A2 Evals</text>
+<text x="424" y="134" class="t-s">deterministic suite</text><text x="424" y="150" class="t-s">every PR; paid agent</text><text x="424" y="166" class="t-s">eval on merge/nightly</text>
+<text x="424" y="196" class="t-s t-h">Exit test</text><text x="424" y="214" class="t-s t-m">just eval green on</text><text x="424" y="230" class="t-s t-m">every PR; ai_gate.py</text><text x="424" y="246" class="t-s t-m">caps the paid tier</text>
+<text x="424" y="276" class="t-s t-h">Owner</text><text x="424" y="294" class="t-s t-m">Satyam</text>
+<rect x="544" y="90" width="118" height="370" rx="10" class="b-plan"/>
+<text x="552" y="114" class="t-h t-s">A3 Broker</text>
+<text x="552" y="134" class="t-s">Agentic MCP gateway</text><text x="552" y="150" class="t-s">behind the risk wrap;</text><text x="552" y="166" class="t-s">external kill switch;</text><text x="552" y="182" class="t-s">reconciliation</text>
+<text x="552" y="212" class="t-s t-h">Exit test</text><text x="552" y="230" class="t-s t-m">recorded-response tests</text><text x="552" y="246" class="t-s t-m">pass; approval-token</text><text x="552" y="262" class="t-s t-m">path proven end to end</text>
+<text x="552" y="292" class="t-s t-h">Owner</text><text x="552" y="310" class="t-s t-m">Rohit</text>
+<rect x="672" y="90" width="118" height="370" rx="10" class="b-plan"/>
+<text x="680" y="114" class="t-h t-s">A4 Data</text>
+<text x="680" y="134" class="t-s">record quotes for the</text><text x="680" y="150" class="t-s">chosen asset; retrain</text><text x="680" y="166" class="t-s">classifier; walk-</text><text x="680" y="182" class="t-s">forward gates</text>
+<text x="680" y="212" class="t-s t-h">Exit test</text><text x="680" y="230" class="t-s t-m">DSR threshold decided;</text><text x="680" y="246" class="t-s t-m">a classifier passes it,</text><text x="680" y="262" class="t-s t-m">or we stop honestly</text>
+<text x="680" y="292" class="t-s t-h">Owner</text><text x="680" y="310" class="t-s t-m">shared</text>
+<rect x="800" y="90" width="118" height="370" rx="10" class="b-plan"/>
+<text x="808" y="114" class="t-h t-s">A5 Shadow</text>
+<text x="808" y="134" class="t-s">agent decides on live</text><text x="808" y="150" class="t-s">data; orders only to</text><text x="808" y="166" class="t-s">SimVenue/paper</text>
+<text x="808" y="196" class="t-s t-h">Exit test</text><text x="808" y="214" class="t-s t-m">≥ 14 days; beats</text><text x="808" y="230" class="t-s t-m">classifier-only and</text><text x="808" y="246" class="t-s t-m">no-trade baselines</text>
+<text x="808" y="276" class="t-s t-h">Owner</text><text x="808" y="294" class="t-s t-m">both review</text>
+<rect x="928" y="90" width="118" height="370" rx="10" class="b-human"/>
+<text x="936" y="114" class="t-h t-s">A6 First trade</text>
+<text x="936" y="134" class="t-s">funded agent account,</text><text x="936" y="150" class="t-s">limit orders only,</text><text x="936" y="166" class="t-s">tiny caps</text>
+<text x="936" y="196" class="t-s t-h">Exit test</text><text x="936" y="214" class="t-s t-m">both approve; daily</text><text x="936" y="230" class="t-s t-m">reconciliation; zero</text><text x="936" y="246" class="t-s t-m">cap or wash-trade hits</text>
+<text x="936" y="276" class="t-s t-h">Owner</text><text x="936" y="294" class="t-s t-m">both sign</text>
+<rect x="1056" y="90" width="120" height="370" rx="10" class="b-plan"/>
+<text x="1064" y="114" class="t-h t-s">A7 Learning</text>
+<text x="1064" y="134" class="t-s">ledger → scenarios →</text><text x="1064" y="150" class="t-s">prompt/tool challenger</text><text x="1064" y="166" class="t-s">→ eval → promotion;</text><text x="1064" y="182" class="t-s">parallel-agent trial</text>
+<text x="1064" y="212" class="t-s t-h">Exit test</text><text x="1064" y="230" class="t-s t-m">challenger beats champion</text><text x="1064" y="246" class="t-s t-m">on frozen suite + forward</text><text x="1064" y="262" class="t-s t-m">shadow before promotion</text>
+<text x="1064" y="292" class="t-s t-h">Owner</text><text x="1064" y="310" class="t-s t-m">Satyam (eval),</text><text x="1064" y="326" class="t-s t-m">Rohit (infra)</text>
 </svg>
 </div>
 <ol class="steps">
-<li><b>R0 · Decide (humans).</b> Confirm residence and whether to trade as individuals or an entity; confirm the first product (Robinhood spot crypto is the only officially supported API path); sign a lawyer-reviewed founders' agreement; read and quote Robinhood's API terms in a new ADR. <i>Nothing technical starts until this is done.</i></li>
-<li><b>R1 · Read-only market data.</b> Record Robinhood crypto quotes with a read-only key, with quality checks and hashes; no key that can trade exists yet.</li>
-<li><b>R2 · Adapter, offline.</b> Implement the Robinhood adapter behind the existing <code>VenueAdapter</code> trait; test on recorded responses and chaos cases (disconnects, timeouts, ambiguous responses reconciled before any retry); add position reconciliation, an external kill-switch trigger, and fault injection (clock drift past the 30 s signature window, repeated rate-limit errors, API disabled).</li>
-<li><b>R3 · Research on real data.</b> Registered studies, real costs, walk-forward gates. Most likely outcome: several REJECTs. Only a strategy that passes moves on.</li>
-<li><b>R4 · Shadow.</b> Live data, real decisions logged, no orders, for at least 14 days.</li>
-<li><b>R5 · Canary.</b> One founder's own account, an order-only key, limit orders only, a hard dollar cap per order, a budget small enough to lose entirely, automatic rollback, daily reconciliation. Both founders approve before it starts.</li>
-<li><b>R6 · Scaled.</b> Larger limits only after 30+ reconciled canary days with zero breaches; each increase is a new founder decision.</li>
+<li><b>A0 · Decide.</b> ADR-0040 accepted by both founders; first asset chosen (section 10); counsel review requested; Agentic beta account access confirmed. <i>Nothing past this point routes real money.</i></li>
+<li><b>A1 · Handoff contract.</b> <code>DecisionRequest</code>/<code>Decision</code> JSON schemas; the <code>qc-bridge</code> crate; the agent service skeleton running against SimVenue in fake mode; a test proving no tool but <code>submit_order_intent</code> is callable.</li>
+<li><b>A2 · Evals.</b> The deterministic recorded-response suite runs on every PR; a paid live-LLM agent eval runs on merge to main and nightly, budget-capped by <code>scripts/ci/ai_gate.py</code> — never on every PR push.</li>
+<li><b>A3 · Broker.</b> The Robinhood Agentic MCP gateway adapter, behind the risk wrapper, tested only on recorded responses; an external kill switch; position and cash reconciliation.</li>
+<li><b>A4 · Data + classifier.</b> Record quotes for the chosen asset; retrain the classifier on real data through the existing lab; the deflated-Sharpe threshold is decided, not left at an impossible default.</li>
+<li><b>A5 · Shadow.</b> The agent decides on live data; orders go only to SimVenue/paper, for at least 14 days; forward metrics compared against a classifier-only baseline and a no-trade baseline (research shows a dumb baseline often wins — see section 9).</li>
+<li><b>A6 · First agentic trade.</b> A funded agent account, limit orders only, tiny per-order and per-day caps, both founders approve before it starts, daily reconciliation.</li>
+<li><b>A7 · Learning loop on.</b> Decision-ledger outcomes become new frozen scenarios; prompt/tool changes are challengers evaluated against the champion before promotion; a parallel-agent experiment only ships if it beats one agent at equal token budget.</li>
 </ol>
-<div class="badbox"><b>Hard stops at every stage.</b> Any reconciliation mismatch, limit breach, drift in model behaviour, or broker anomaly demotes the strategy to "no signal" automatically. Promotion back up needs the founders again.</div>
+<div class="badbox"><b>Hard stops at every stage.</b> Any reconciliation mismatch, limit breach, drift in model behaviour, or broker anomaly demotes to "no signal"/no-trade automatically. Promotion back up needs the founders again, and A6 needs both, every time, not just once.</div>
 </div>
 
 <!-- 12 -->

@@ -25,3 +25,8 @@ out/
 # Tier 2 live-agent-eval ledger (scripts/eval/live_agent.py): CI artifact only,
 # never committed unless a human deliberately records a result (evals/README.md).
 evals/ledger/*.jsonl
+# agent/ (TypeScript agent service, ADR-0040): installed deps, build output, decision ledger.
+# out/agent is already covered by out/ above; listed for clarity since it's this package's output.
+agent/node_modules/
+agent/dist/
+out/agent/

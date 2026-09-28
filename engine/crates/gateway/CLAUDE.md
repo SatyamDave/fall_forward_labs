@@ -2,7 +2,7 @@
 
 ## Owns / does not own
 - Owns: `VenueAdapter` trait (`submit`, `cancel`, non-blocking `poll`), `GatewayError`, one module per venue, rate limiting, reconnect with backoff, snapshot plus delta sync, venue message parsing.
-- Does not own: order state (qc-oms), pre-trade checks (qc-risk), credentials storage (secret manager, ops/), venue choice (ADR-0003).
+- Does not own: order state (qc-oms), pre-trade checks (qc-risk), credentials storage (secret manager, ops/), venue choice (ADR-0003), the trade decision (`agent/`, ADR-0040) — an order reaches this crate only after qc-risk and qc-oms have accepted it, agent-submitted or not.
 
 ## Commands
 - `cargo test -p qc-gateway --locked`
@@ -32,3 +32,4 @@ _None yet. Each entry links to the PR or postmortem where it bit us._
 
 ## See also
 - Skill: add-venue-adapter (engine/.claude/skills/), ADR-0003 (venue selection), ../../CLAUDE.md
+- ADR-0040 (agent handoff): docs/adr/0040-agentic-decision.md

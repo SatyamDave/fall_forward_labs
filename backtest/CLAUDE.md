@@ -20,6 +20,7 @@
 - Never commit raw outputs. Check: `git ls-files reports/raw` prints nothing.
 - Never change a fill or latency model in the same PR that reports a strategy's results with it.
 - Never report net results without fees and funding.
+- Never backtest the ADR-0040 agent on history as if it were a strategy: an LLM's pretraining may already contain the outcome. The agent is evaluated forward-only (evals/, docs/adr/0040-agentic-decision.md); this crate's backtests stay classifier- and strategy-only.
 
 ## Gotchas
 _None yet. Each entry links to the PR or postmortem where it bit us._
@@ -29,3 +30,4 @@ _None yet. Each entry links to the PR or postmortem where it bit us._
 
 ## See also
 - Skills: run-walkforward, overfitting-report (research/.claude/skills/); strategies/_template/GATES.md
+- ADR-0040 (agent handoff, forward-only agent evals): docs/adr/0040-agentic-decision.md

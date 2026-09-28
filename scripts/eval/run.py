@@ -36,9 +36,14 @@ ROOT = Path(__file__).resolve().parents[2]
 
 PASS, FAIL, SKIP = "pass", "fail", "skip"
 
-# decision_ledger_entry (schemas/decision/v1/, agentic-spec.md protocol v1). Structural check
-# only until that schema file exists on this branch; see _ledger_schema_violations.
-REQUIRED_LEDGER_KEYS = ("decision_request", "decision", "intent_result")
+# The agent service validates every ledger row against the full schema with ajv before writing;
+# this eval re-checks the schema's required top-level fields independently, read from the
+# committed schema so the two can never drift.
+LEDGER_SCHEMA = Path("schemas/decision/v1/decision_ledger_entry.schema.json")
+
+
+def required_ledger_keys(root: Path) -> list[str]:
+    return list(json.loads((root / LEDGER_SCHEMA).read_text())["required"])
 
 
 @dataclass
@@ -227,10 +232,7 @@ def case_study_0001_guard(root: Path) -> CaseResult:
     )
 
 
-def _ledger_schema_violations(ledger: Path) -> list[str]:
-    # ponytail: structural check (valid JSON, required top-level keys present) rather than real
-    # JSON Schema validation — swap for schemas/decision/v1/decision_ledger_entry.schema.json
-    # plus the jsonschema package once agentic/bridge lands that schema on this branch.
+def _ledger_schema_violations(ledger: Path, required: list[str]) -> list[str]:
     problems = []
     for i, line in enumerate(ledger.read_text().splitlines(), start=1):
         if not line.strip():
@@ -240,7 +242,7 @@ def _ledger_schema_violations(ledger: Path) -> list[str]:
         except json.JSONDecodeError as e:
             problems.append(f"line {i}: invalid JSON ({e})")
             continue
-        missing = [k for k in REQUIRED_LEDGER_KEYS if k not in row]
+        missing = [k for k in required if k not in row]
         if missing:
             problems.append(f"line {i}: missing {missing}")
     return problems
@@ -287,7 +289,7 @@ def case_agent_sim(root: Path) -> CaseResult:
             f"ledger hash differs between two fake-mode runs: {hashes[0]} != {hashes[1]}",
             duration,
         )
-    violations = _ledger_schema_violations(ledger)
+    violations = _ledger_schema_violations(ledger, required_ledger_keys(root))
     if violations:
         duration = time.monotonic() - start
         return CaseResult(

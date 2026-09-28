@@ -81,9 +81,10 @@ def test_recipe_exists_true_and_false(tmp_path: Path) -> None:
 
 def test_ledger_schema_violations_flags_invalid_json_and_missing_keys(tmp_path: Path) -> None:
     ledger = tmp_path / "ledger.jsonl"
-    good = {"decision_request": {}, "decision": {}, "intent_result": {}}
+    required = ["request", "decision", "mode", "prompt_version", "model"]
+    good = {k: {} for k in required}
     ledger.write_text("\n".join([json.dumps(good), "not json", json.dumps({"decision": {}})]))
-    violations = run._ledger_schema_violations(ledger)
+    violations = run._ledger_schema_violations(ledger, required)
     assert len(violations) == 2
     assert any("invalid JSON" in v for v in violations)
     assert any("missing" in v for v in violations)
@@ -91,6 +92,18 @@ def test_ledger_schema_violations_flags_invalid_json_and_missing_keys(tmp_path: 
 
 def test_ledger_schema_violations_clean_ledger_has_none(tmp_path: Path) -> None:
     ledger = tmp_path / "ledger.jsonl"
-    row = {"decision_request": {}, "decision": {}, "intent_result": {}}
+    required = ["request", "decision", "mode", "prompt_version", "model"]
+    row = {k: {} for k in required}
     ledger.write_text(json.dumps(row) + "\n" + json.dumps(row) + "\n")
-    assert run._ledger_schema_violations(ledger) == []
+    assert run._ledger_schema_violations(ledger, required) == []
+
+
+def test_required_ledger_keys_come_from_the_committed_schema() -> None:
+    root = Path(__file__).resolve().parents[2]
+    assert run.required_ledger_keys(root) == [
+        "request",
+        "decision",
+        "mode",
+        "prompt_version",
+        "model",
+    ]
