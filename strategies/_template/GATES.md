@@ -11,7 +11,7 @@ These are starting defaults to be reviewed by a human before the first strategy 
 | backtest → walk-forward | Net Sharpe after fees, funding, latency and slippage | ≥ 1.5 |
 | | Trades in the sample | ≥ 500 |
 | | Report has an Assumptions section and a registry link | required |
-| walk-forward → paper | Deflated Sharpe, using the true trial count from the registry | ≥ 1.0 |
+| walk-forward → paper | Deflated Sharpe (a probability in [0, 1]), using the true trial count from the registry | ≥ 1.0, unreachable in practice; threshold pending a human decision |
 | | Probability of backtest overfitting (PBO) | ≤ 0.20 |
 | | Out-of-sample folds with positive net PnL | ≥ 70% |
 | | Max drawdown relative to backtest max drawdown | ≤ 1.5× |

@@ -34,6 +34,9 @@ class ModelRecord:
     lineage: dict[str, str] = field(default_factory=dict)  # git commit, parent model, trial ids
     reason: str = ""  # why the status changed: drift report, approval reference
     approval: dict[str, str] = field(default_factory=dict)  # set only on promotion
+    # Walk-forward verdict, PASS or FAIL. Records written before this field have "", which
+    # promote() refuses like FAIL.
+    verdict: str = ""
 
 
 def latest(artifact_sha256: str, path: Path = MODELS) -> ModelRecord | None:
