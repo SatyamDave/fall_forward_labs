@@ -3,7 +3,8 @@
 Reads backtest/configs/<name>.yaml, builds the point-in-time dataset, evaluates every config
 in the grid on identical folds, records each as a trial (failures included), computes deflated
 Sharpe with the cumulative registry trial count and PBO, registers the best config's exported
-artifact as a challenger, and writes backtest/reports/<name>/<date>.md, Assumptions first.
+artifact (a challenger only on PASS, otherwise no_signal), and writes
+backtest/reports/<name>/<date>.md, Assumptions first.
 
 This is a label-level evaluation (enter at the touch, exit after the label horizon), not an
 execution backtest: latency and queue position are not simulated yet. The report says so.
@@ -25,14 +26,16 @@ from data.recorders.synthetic import TICK, write_day
 from ml.datasets import DOWN, UP, Dataset, build, replay_top_of_book
 from ml.export import export
 from ml.features import FEATURE_NAMES, FEATURE_VERSION
-from ml.registry import TRIALS, ModelRecord, append
+from ml.registry import TRIALS, ModelRecord, Status, append
 from ml.training import TrainConfig, train
 from ml.validation import deflated_sharpe, pbo, purged_walk_forward, sharpe
 from registry import Trial, read, record, trial_count
 
 ROOT = Path(__file__).resolve().parents[2]
 REQUIRED = ("costs", "latency", "fill_model")
-# Walk-forward -> paper thresholds from strategies/_template/GATES.md.
+# Walk-forward -> paper thresholds from strategies/_template/GATES.md. deflated_sharpe returns a
+# probability, so GATE_DSR = 1.0 is met only when the normal CDF saturates (z above about 8.3):
+# it fails closed until a human sets the threshold as a probability.
 GATE_DSR, GATE_PBO, GATE_POSITIVE_FOLDS = 1.0, 0.20, 0.70
 
 
@@ -69,6 +72,16 @@ def trade_returns(ds: Dataset, samples: np.ndarray, pred: np.ndarray, taker_bps:
 def max_drawdown(returns: np.ndarray) -> float:
     equity = np.cumsum(returns)
     return float(np.max(np.maximum.accumulate(np.concatenate([[0.0], equity]))[1:] - equity))
+
+
+def verdict_of(gates: dict[str, bool | None]) -> str:
+    """PASS only when every gate was evaluated and met; None means not evaluated."""
+    return "PASS" if all(ok is True for ok in gates.values()) else "FAIL"
+
+
+def registration(verdict: str) -> tuple[Status, str]:
+    """A failed walk-forward is registered as no_signal, which promote() refuses."""
+    return ("challenger", "") if verdict == "PASS" else ("no_signal", "walk-forward FAIL")
 
 
 def git_rev() -> str:
@@ -132,13 +145,16 @@ def run(name: str) -> Path:
     dsr = deflated_sharpe(
         best.metrics["sharpe"], len(rets), n_trials, float(np.var(all_sr, ddof=1)), skew, kurt
     )
-    gates = {
+    gates: dict[str, bool | None] = {
         f"deflated Sharpe >= {GATE_DSR}": dsr >= GATE_DSR,
         f"PBO <= {GATE_PBO}": perf_pbo <= GATE_PBO,
         f"positive OOS folds >= {GATE_POSITIVE_FOLDS:.0%}": best.metrics["positive_folds"]
         >= GATE_POSITIVE_FOLDS,
+        # Needs a backtest max drawdown to compare against, which this run does not produce.
+        "max drawdown <= 1.5x backtest max drawdown": None,
     }
-    verdict = "PASS" if all(gates.values()) else "FAIL"
+    verdict = verdict_of(gates)
+    status, reason = registration(verdict)
     for r in results:
         passed = r is best and verdict == "PASS"
         record(TRIALS, Trial(name, r.config_hash, passed, r.metrics, notes="walkforward"))
@@ -153,12 +169,14 @@ def run(name: str) -> Path:
         ModelRecord(
             experiment=name,
             artifact_sha256=sha,
-            status="challenger",
+            status=status,
             dataset_hash=ds.hash,
             feature_version=FEATURE_VERSION,
             config={**best.tc.as_dict(), "horizon": h, "trained_on": "all samples"},
             metrics=metrics,
             lineage={"git": git_rev(), "trial": best.config_hash, "parent": ""},
+            reason=reason,
+            verdict=verdict,
         )
     )
 
@@ -171,7 +189,10 @@ def run(name: str) -> Path:
         f"| {r.metrics['turnover']:.3f} | {r.metrics['positive_folds']:.0%} |"
         for r in results
     )
-    gate_rows = "\n".join(f"| {g} | {'met' if ok else 'not met'} |" for g, ok in gates.items())
+    gate_rows = "\n".join(
+        f"| {g} | {'not evaluated' if ok is None else 'met' if ok else 'not met'} |"
+        for g, ok in gates.items()
+    )
     report.write_text(f"""# Walk-forward: {name} ({today})
 
 ## Assumptions
@@ -217,8 +238,8 @@ Verdict: **{verdict}**.
 ## Registry
 
 - Trials: {len(results)} appended to `research/registry/log/trials.jsonl` (experiment `{name}`).
-- Challenger: artifact sha256 `{sha}` in `research/registry/log/models.jsonl`, \
-status `challenger`, lineage git `{git_rev()}`. Artifact file (gitignored): \
+- Model: artifact sha256 `{sha}` in `research/registry/log/models.jsonl`, \
+status `{status}`, verdict `{verdict}`, lineage git `{git_rev()}`. Artifact file (gitignored): \
 `{art_path.relative_to(ROOT)}`.
 """)
     return report

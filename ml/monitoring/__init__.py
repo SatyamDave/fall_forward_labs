@@ -56,7 +56,7 @@ class HumanApproval:
 
 
 def promote(artifact_sha256: str, approval: HumanApproval | None, path: Path = MODELS) -> None:
-    """Promotes a registered challenger. Refuses without a matching human-approval record."""
+    """Promotes a registered challenger that passed walk-forward, given a matching approval."""
     if approval is None:
         raise PermissionError("promotion requires a human-approval record")
     if not (approval.approver.strip() and approval.dossier.strip() and approval.approved_at):
@@ -66,6 +66,8 @@ def promote(artifact_sha256: str, approval: HumanApproval | None, path: Path = M
     current = latest(artifact_sha256, path)
     if current is None or current.status != "challenger":
         raise PermissionError(f"only a registered challenger can be promoted, got {current}")
+    if current.verdict != "PASS":
+        raise PermissionError(f"promotion requires a walk-forward PASS, got {current.verdict!r}")
     append(
         dataclasses.replace(
             current,
