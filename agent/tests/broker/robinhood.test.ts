@@ -5,7 +5,7 @@
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterEach, describe, expect, it } from "vitest";
 import { connectRobinhoodMcp } from "../../src/broker/mcp-client.js";
-import { RobinhoodToolError, cancelOrder, getOrderStatus, placeOrder, previewOrder } from "../../src/broker/robinhood.js";
+import { BookUnsupportedError, RobinhoodToolError, cancelOrder, getBook, getOrderStatus, placeOrder, previewOrder } from "../../src/broker/robinhood.js";
 import type { ApprovedOrder } from "../../src/broker/types.js";
 import { createMockRobinhoodServer, type MockScenario } from "../../src/testkit/mock-robinhood-mcp.js";
 
@@ -136,5 +136,27 @@ describe("robinhood.ts against the mock MCP server", () => {
     };
     const result = await cancelOrder(client, "equity", 1, "SPY");
     expect(result.status).toBe("canceled");
+  });
+
+  it("gets a Level 2 book for an equity instrument through get_equity_price_book", async () => {
+    const { client, server } = await connected({});
+    cleanup = async () => {
+      await client.close();
+      await server.close();
+    };
+    const book = await getBook(client, "equity", "SPY");
+    expect(book.bids[0]).toEqual({ price: "99.99", qty: "500" });
+    expect(book.bids.length).toBeGreaterThan(1);
+    expect(book.asks[0]).toEqual({ price: "100.05", qty: "400" });
+    expect(book.asks.length).toBeGreaterThan(1);
+  });
+
+  it("throws BookUnsupportedError for crypto -- no L2 tool is mapped for that asset class", async () => {
+    const { client, server } = await connected({});
+    cleanup = async () => {
+      await client.close();
+      await server.close();
+    };
+    await expect(getBook(client, "crypto", "BTC-USD")).rejects.toThrow(BookUnsupportedError);
   });
 });

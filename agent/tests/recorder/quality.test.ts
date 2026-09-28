@@ -12,10 +12,8 @@ function records(seq: number[], exchange: number[], local: number[]): SnapshotRe
     seq: s,
     tsExchangeNs: BigInt(exchange[i]!),
     tsLocalNs: BigInt(local[i]!),
-    bidPrice: "100.00",
-    bidQty: "1",
-    askPrice: "100.05",
-    askQty: "1",
+    bids: [{ price: "100.00", qty: "1" }],
+    asks: [{ price: "100.05", qty: "1" }],
   }));
 }
 

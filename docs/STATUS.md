@@ -6,17 +6,24 @@ Regenerated automatically by `.github/workflows/docs-status.yml` on every merge 
 Narrative docs: [project guide](guide/quant-core-guide.html) ·
 [base status](reports/base-status.md) · [NOW](NOW.md).
 
-Generated from `main` at **c0958a5 2026-09-28**. Latest CI on `main`: **in_progress on c0958a5**.
+Generated from `main` at **ebb8db5 2026-09-28**. Latest CI on `main`: **in_progress on ebb8db5**.
 Paid AI loops: **off**.
 
-## Open pull requests (0)
+## Open pull requests (2)
 
-None.
+| PR | Title | Author | Draft |
+|---|---|---|---|
+| [#92](https://github.com/SatyamDave/fall_forward_labs/pull/92) | Profit is measured from what the broker actually filled, checked every day | SatyamDave | no |
+| [#91](https://github.com/SatyamDave/fall_forward_labs/pull/91) | Live trading refuses to start until every go-live check passes | SatyamDave | no |
 
 ## Recently merged
 
 | PR | Title | Merged |
 |---|---|---|
+| [#93](https://github.com/SatyamDave/fall_forward_labs/pull/93) | Keep the sample SPY limits inside the canary caps | 2026-09-28 |
+| [#90](https://github.com/SatyamDave/fall_forward_labs/pull/90) | Never send an order when the market is closed | 2026-09-28 |
+| [#89](https://github.com/SatyamDave/fall_forward_labs/pull/89) | Record the full order book, not just the best price | 2026-09-28 |
+| [#88](https://github.com/SatyamDave/fall_forward_labs/pull/88) | Bring the docs and roadmap up to date with what's built | 2026-09-28 |
 | [#87](https://github.com/SatyamDave/fall_forward_labs/pull/87) | The kill switch cancels everything at the broker, even if the agent is stuck | 2026-09-28 |
 | [#86](https://github.com/SatyamDave/fall_forward_labs/pull/86) | The PR checklist check accepts sections written as headings | 2026-09-28 |
 | [#84](https://github.com/SatyamDave/fall_forward_labs/pull/84) | Wire the gateway to protocol v1.2: reconciliation, cancel, market clock | 2026-09-28 |
@@ -28,27 +35,23 @@ None.
 | [#77](https://github.com/SatyamDave/fall_forward_labs/pull/77) | ops: give live trading a safe home and alert on it breaking | 2026-09-28 |
 | [#79](https://github.com/SatyamDave/fall_forward_labs/pull/79) | Baseline-checked evals, decision/PnL reports, and a stop rule | 2026-09-28 |
 | [#72](https://github.com/SatyamDave/fall_forward_labs/pull/72) | Make SimVenue consume liquidity and respect queue position | 2026-09-28 |
-| [#75](https://github.com/SatyamDave/fall_forward_labs/pull/75) | Add self-cross, wash-trade and daily-notional dollar caps to qc-risk | 2026-09-28 |
-| [#80](https://github.com/SatyamDave/fall_forward_labs/pull/80) | Replaying a recorded decision gives the same ledger every time | 2026-09-28 |
-| [#74](https://github.com/SatyamDave/fall_forward_labs/pull/74) | Prove the agent can only place orders one way, replay decisions for free, write the live prompt | 2026-09-28 |
-| [#73](https://github.com/SatyamDave/fall_forward_labs/pull/73) | Build the broker gateway door and a mock Robinhood connection | 2026-09-28 |
 
 ## Recent commits on main
 
 | Commit | Date | Subject |
 |---|---|---|
-| `c0958a5` | 2026-09-28 | Merge pull request #87 from SatyamDave/safety/halt-path |
-| `49d66dd` | 2026-09-28 | Merge main into safety/halt-path before merging #87 |
-| `30d58ad` | 2026-09-28 | test(agent): run test files one at a time |
-| `a75ef5d` | 2026-09-28 | The kill switch cancels everything at the broker, even if the agent is stuck |
-| `9b0e697` | 2026-09-28 | docs(status): regenerate live status from aa603d1 [skip ci] |
-| `aa603d1` | 2026-09-28 | Merge pull request #86 from SatyamDave/fix/arch-check-headings |
-| `fa306e1` | 2026-09-28 | fix(ci): accept PR-template sections written as headings without a colon |
-| `e743334` | 2026-09-28 | docs(status): regenerate live status from 13866c8 [skip ci] |
-| `13866c8` | 2026-09-28 | Merge pull request #84 from SatyamDave/wave2/gateway-integration |
-| `249fc10` | 2026-09-28 | Merge main into wave2/gateway-integration before merging #84 |
-| `69ea482` | 2026-09-28 | test(recorder): give the replay-integration test realistic poll timing |
-| `b720f0f` | 2026-09-28 | docs(status): regenerate live status from 525399d [skip ci] |
+| `ebb8db5` | 2026-09-28 | Merge pull request #93 from SatyamDave/fix/spy-limits-within-canary |
+| `7d46c30` | 2026-09-28 | Merge main into fix/spy-limits-within-canary before merging #93 |
+| `b0b8df7` | 2026-09-28 | fix(limits): keep the sample SPY limits inside the canary caps |
+| `44bdf96` | 2026-09-28 | docs(status): regenerate live status from b44607a [skip ci] |
+| `b44607a` | 2026-09-28 | Merge pull request #90 from SatyamDave/wave3/calendar |
+| `130a5f5` | 2026-09-28 | Merge main into wave3/calendar before merging #90 |
+| `0cb401b` | 2026-09-28 | docs(status): regenerate live status from d7d8254 [skip ci] |
+| `d7d8254` | 2026-09-28 | Merge pull request #89 from SatyamDave/wave3/level2 |
+| `40ecd57` | 2026-09-28 | docs(status): regenerate live status from e564b3d [skip ci] |
+| `4390f58` | 2026-09-28 | Merge main into wave3/level2 before merging #89 |
+| `b40f7fe` | 2026-09-28 | feat(engine/bridge): add NYSE holiday and early-close calendar to the trading-hours gate |
+| `25e0a71` | 2026-09-28 | Record the full order book, not just the best price |
 
 ## Decisions (ADRs)
 
@@ -69,6 +72,6 @@ None.
 ## Code and research
 
 - Engine crates: `bridge`, `core`, `gateway`, `inference`, `oms`, `orderbook`, `replay`, `risk`, `strategy-runtime`, `telemetry`
-- Rust #[test] functions: 133
+- Rust #[test] functions: 144
 - Python test functions: 253
 - Registry trials: `demo` 4, `study-0001-favorite-longshot` 1, `study-0002-favorite-longshot-v2` 1

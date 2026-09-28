@@ -156,6 +156,12 @@ report-pnl *args:
 daily-close *args:
     python3 scripts/ops/daily_close.py {{args}}
 
+# Issue #50/#51: refuse to start live trading unless every go-live gate passes (ADR-0040 status,
+# founder sign-offs, canary caps, the autonomy policy, the kill switch, reconciliation, secrets,
+# latency). Exit 1 and every failing gate printed in plain language if any gate fails.
+preflight-live *args:
+    python3 scripts/ops/preflight.py {{args}}
+
 # Issue #52: turn decision-ledger entries with known outcomes into new frozen scenarios under
 # evals/scenarios/from_ledger/ (provenance sidecar, synthetic/real label; never leaks the
 # outcome into the generated scenario's decision inputs). No-op, exit 0, if no ledger exists yet.
