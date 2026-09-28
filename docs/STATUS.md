@@ -6,12 +6,16 @@ Regenerated automatically by `.github/workflows/docs-status.yml` on every merge 
 Narrative docs: [project guide](guide/quant-core-guide.html) ·
 [base status](reports/base-status.md) · [NOW](NOW.md).
 
-Generated from `main` at **3f66f6b 2026-09-28**. Latest CI on `main`: **queued on 3f66f6b**.
+Generated from `main` at **e564b3d 2026-09-28**. Latest CI on `main`: **success on 3f66f6b**.
 Paid AI loops: **off**.
 
-## Open pull requests (0)
+## Open pull requests (3)
 
-None.
+| PR | Title | Author | Draft |
+|---|---|---|---|
+| [#91](https://github.com/SatyamDave/fall_forward_labs/pull/91) | Live trading refuses to start until every go-live check passes | SatyamDave | no |
+| [#90](https://github.com/SatyamDave/fall_forward_labs/pull/90) | Never send an order when the market is closed | SatyamDave | no |
+| [#89](https://github.com/SatyamDave/fall_forward_labs/pull/89) | Record the full order book, not just the best price | SatyamDave | no |
 
 ## Recently merged
 
@@ -37,6 +41,7 @@ None.
 
 | Commit | Date | Subject |
 |---|---|---|
+| `e564b3d` | 2026-09-28 | docs(status): regenerate live status from 3f66f6b [skip ci] |
 | `3f66f6b` | 2026-09-28 | Merge pull request #88 from SatyamDave/docs/sync-after-waves |
 | `44b30a8` | 2026-09-28 | docs: bring README, ARCHITECTURE, ROADMAP, NOW, TEAM and the guide up to main |
 | `013f3b1` | 2026-09-28 | docs(status): regenerate live status from c0958a5 [skip ci] |
@@ -48,7 +53,6 @@ None.
 | `aa603d1` | 2026-09-28 | Merge pull request #86 from SatyamDave/fix/arch-check-headings |
 | `fa306e1` | 2026-09-28 | fix(ci): accept PR-template sections written as headings without a colon |
 | `e743334` | 2026-09-28 | docs(status): regenerate live status from 13866c8 [skip ci] |
-| `13866c8` | 2026-09-28 | Merge pull request #84 from SatyamDave/wave2/gateway-integration |
 
 ## Decisions (ADRs)
 
