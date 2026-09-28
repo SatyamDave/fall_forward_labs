@@ -6,10 +6,19 @@
 use qc_bridge::BridgeEngine;
 use qc_risk::{KillSwitch, Limits};
 
-/// The workspace's default limits, same file `qc_risk`'s own tests load.
+/// The workspace's default limits, same file `qc_risk`'s own tests load. Deliberately tiny
+/// (root CLAUDE.md rule 4) — not sized for the committed sample day's exercised volume.
 #[must_use]
 pub fn limits() -> Limits {
     toml::from_str(include_str!("../../../../../config/limits/default.toml")).unwrap()
+}
+
+/// Fixture-only limits for tests that replay the committed sample day
+/// (`sample_day_csv`, ~$92k of accepted-order notional in one simulated day, by design). Not
+/// the production default: see `tests/replay/limits.toml`.
+#[must_use]
+pub fn sample_day_limits() -> Limits {
+    toml::from_str(include_str!("../../../../../tests/replay/limits.toml")).unwrap()
 }
 
 /// A tiny synced book (bid 100.0 / ask 100.2, tick 0.1) plus one more delta so
@@ -36,10 +45,15 @@ pub fn sample_day_csv() -> String {
 
 #[must_use]
 pub fn engine_from(csv: &str, decide_every: u32) -> BridgeEngine {
+    engine_from_with_limits(csv, decide_every, limits())
+}
+
+#[must_use]
+pub fn engine_from_with_limits(csv: &str, decide_every: u32, limits: Limits) -> BridgeEngine {
     let records = BridgeEngine::load_recording(csv).expect("fixture csv parses");
     BridgeEngine::new(
         records,
-        limits(),
+        limits,
         KillSwitch::new(),
         "0.1".parse().unwrap(),
         decide_every,

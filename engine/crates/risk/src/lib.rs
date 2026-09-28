@@ -400,6 +400,27 @@ mod tests {
         assert!(toml::from_str::<Limits>(&format!("{text}\nmax_leverage = 100\n")).is_err());
     }
 
+    /// #41 / root CLAUDE.md rule 4: every default in `config/limits/default.toml` is
+    /// deliberately tiny (the file's own header says so), and a brand-new limit key gets a
+    /// conservative placeholder pending #23 rather than a value sized to fit a test fixture.
+    /// `max_daily_notional` must not be an outlier next to `max_notional` on the same file:
+    /// a cumulative daily cap that is hundreds of times a single order's cap gives a real
+    /// agentic account no practical protection at all. `tests/replay/sample_day.csv`'s
+    /// higher-volume replay gets its own fixture-only limits file instead of inflating this
+    /// one (see `tests/replay/limits.toml`).
+    #[test]
+    fn default_daily_notional_cap_is_conservative_not_sized_to_a_test_fixture() {
+        let limits: Limits =
+            toml::from_str(include_str!("../../../../config/limits/default.toml")).unwrap();
+        assert!(
+            limits.max_daily_notional.raw() <= limits.max_notional.raw() * 10,
+            "max_daily_notional ({}) must be at most a small multiple of max_notional ({}), \
+             not a value picked to avoid tripping a replay fixture",
+            limits.max_daily_notional,
+            limits.max_notional
+        );
+    }
+
     #[test]
     fn crate_has_no_features_that_could_switch_checks_off() {
         assert!(!include_str!("../Cargo.toml").contains("[features]"));
@@ -705,16 +726,16 @@ mod tests {
         // Notional 50000 * 0.01 = 500 exactly: at the per-order cap, not over it.
         let o = order(Side::Buy, "50000", "0.01");
         let day_start = c.now.0;
-        // Default max_daily_notional is 150000: three hundred of these reach it exactly.
-        // Time advances 1 s per order, well inside the same exchange day, so the rate
-        // limit (5/s) never interferes.
-        for i in 0..300 {
+        // Default max_daily_notional is 2000: four of these reach it exactly. Time advances
+        // 1 s per order, well inside the same exchange day, so the rate limit (5/s) never
+        // interferes.
+        for i in 0..4 {
             c.now = Timestamp(day_start + i * SEC);
             c.last_market_data = c.now;
             assert_eq!(
                 risk.check(&o, &c),
                 Ok(()),
-                "order {i} of 300 reaches the cap exactly"
+                "order {i} of 4 reaches the cap exactly"
             );
         }
         // One more, of any size, would push the cumulative total past the cap.
