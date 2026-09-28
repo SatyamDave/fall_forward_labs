@@ -75,7 +75,11 @@ fn decision_request_conforms_to_its_schema() {
     ));
     let validator = validator_for(&registry, &decision_request_schema);
 
-    let mut engine = support::engine_from(&support::sample_day_csv(), 5);
+    let mut engine = support::engine_from_with_limits(
+        &support::sample_day_csv(),
+        5,
+        support::sample_day_limits(),
+    );
     let mut checked = 0;
     while let Some(dr) = engine.next_decision_request() {
         assert!(

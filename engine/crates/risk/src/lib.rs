@@ -8,19 +8,35 @@
 //! 3. stale data: age `now - last_market_data` equal to `stale_data_ms` passes, one ns more fails.
 //! 4. daily loss: `daily_pnl <= -max_daily_loss` fails, so reaching the limit halts; one unit less loss passes.
 //! 5. price band: `|price - reference| * 10_000 <= price_band_bps * reference` passes; no reference fails.
-//! 6. notional: `price * qty <= max_notional` passes; overflow fails.
-//! 7. position: worst-case position if every open order on the order's side and
+//! 6. self-cross (#40): a buy at or above our own resting ask, or a sell at or below our
+//!    own resting bid, would fill against our own order; rejected regardless of what the
+//!    caller claims its intent was. One tick less aggressive than the resting price passes.
+//! 7. notional: `price * qty <= max_notional` passes; overflow fails.
+//! 8. daily notional (#41): cumulative notional of orders accepted so far this exchange day,
+//!    plus this order's notional, `<= max_daily_notional` passes. The counter resets when
+//!    `now` falls in a later UTC day than the last accepted order (a placeholder for the
+//!    real exchange-calendar decision, pending #23).
+//! 9. position: worst-case position if every open order on the order's side and
 //!    this order fill, `|position + open same-side + qty| <= max_position` passes.
-//! 8. order rate: at most `max_order_rate_per_sec` passed orders in any window
-//!    `(now - 1 s, now]`; the order that would be one more fails.
+//! 10. wash-trade pattern (#40): a completed fill of ours, of the opposite side, same
+//!     price and same quantity (so net position change is zero), within
+//!     `wash_trade_window_ms` of `now` is a wash-trade pattern; rejected regardless of
+//!     stated intent. Evaluated against fills the caller reports through
+//!     [`RiskEngine::record_fill`], not merely-accepted orders: an order that never
+//!     filled never traded, so a two-sided market-making quote (a resting bid and ask,
+//!     one later canceled unfilled) is not by itself a wash trade.
+//! 11. order rate: at most `max_order_rate_per_sec` passed orders in any window
+//!     `(now - 1 s, now]`; the order that would be one more fails.
 //!
-//! Only an order that passes every check counts toward the rate window.
+//! Only an order that passes every check counts toward the rate window and the daily
+//! notional counter; the wash-trade history is populated separately, only by
+//! [`RiskEngine::record_fill`].
 
 use std::collections::VecDeque;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-use qc_core::{OrderRequest, Price, Qty, Side, Timestamp};
+use qc_core::{InstrumentId, OrderRequest, Price, Qty, Side, Timestamp};
 use serde::Deserialize;
 
 /// Per-strategy limits, loaded from `config/limits/*.toml`. Unknown keys are an
@@ -39,6 +55,13 @@ pub struct Limits {
     pub price_band_bps: u32,
     /// Market data older than this halts order entry.
     pub stale_data_ms: u64,
+    /// Cumulative notional of accepted orders per exchange day, in quote currency (#41).
+    /// Robinhood's agentic accounts carry no platform-side spending cap, so this is the
+    /// only enforcement; placeholder value, pending #23 (the founders' agreed number).
+    pub max_daily_notional: Price,
+    /// Window in which an accepted, opposite-side, same-price, same-quantity order is a
+    /// wash-trade pattern (#40).
+    pub wash_trade_window_ms: u64,
 }
 
 /// What a check needs to know about the world when an order is proposed.
@@ -56,6 +79,12 @@ pub struct RiskContext {
     /// Reference price for the fat-finger band, usually the mid. `None` rejects.
     pub reference_price: Option<Price>,
     pub daily_pnl: Price,
+    /// Highest price among our own open buy orders in this instrument, for self-cross
+    /// detection (#40). `None` when we have no resting buy.
+    pub own_best_bid: Option<Price>,
+    /// Lowest price among our own open sell orders in this instrument, for self-cross
+    /// detection (#40). `None` when we have no resting sell.
+    pub own_best_ask: Option<Price>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -65,8 +94,15 @@ pub enum RiskReject {
     StaleData,
     MaxDailyLoss,
     PriceBand,
+    /// Would fill against our own resting order in this instrument (#40).
+    SelfCross,
     MaxNotional,
+    /// Cumulative notional accepted so far this exchange day would exceed the cap (#41).
+    MaxDailyNotional,
     MaxPosition,
+    /// An accepted, opposite-side, same-price, same-quantity order landed inside the
+    /// wash-trade detection window (#40).
+    WashTrade,
     MaxOrderRate,
 }
 
@@ -103,6 +139,10 @@ pub trait RiskCheck {
 
 const NANOS_PER_MS: u64 = 1_000_000;
 const NANOS_PER_SEC: u64 = 1_000_000_000;
+/// A day, used only to bucket [`Limits::max_daily_notional`] (#41). A placeholder for the
+/// real exchange-calendar decision (pending #23): deterministic and replay-safe, but not
+/// necessarily the trading venue's own session boundary.
+const NANOS_PER_DAY: u64 = 24 * 60 * 60 * NANOS_PER_SEC;
 
 #[derive(Debug)]
 pub struct RiskEngine {
@@ -111,6 +151,14 @@ pub struct RiskEngine {
     /// Times of passed orders inside the current one-second window, oldest first.
     /// Capacity is the rate limit, reserved up front so a check never allocates.
     recent: VecDeque<Timestamp>,
+    /// Cumulative notional of accepted orders in `daily_notional_day` (#41).
+    daily_notional: i128,
+    /// The day (`now.0 / NANOS_PER_DAY`) `daily_notional` accumulates for. `None` before
+    /// the first accepted order.
+    daily_notional_day: Option<u64>,
+    /// Accepted orders inside the wash-trade window, oldest first, for the pattern check
+    /// (#40). Evicted as they age out, same shape as `recent`.
+    wash_history: VecDeque<(Timestamp, InstrumentId, Side, Price, Qty)>,
 }
 
 impl RiskEngine {
@@ -121,6 +169,9 @@ impl RiskEngine {
             limits,
             kill_switch,
             recent,
+            daily_notional: 0,
+            daily_notional_day: None,
+            wash_history: VecDeque::new(),
         }
     }
 
@@ -139,6 +190,17 @@ impl RiskEngine {
     #[must_use]
     pub fn daily_loss_reached(&self, daily_pnl: Price) -> bool {
         i128::from(daily_pnl.raw()) <= -i128::from(self.limits.max_daily_loss.raw())
+    }
+
+    /// `daily_notional` if `now` is still in `daily_notional_day`, else zero: the day rolled
+    /// over. Read-only so [`Self::check_static`] can use it; [`RiskCheck::check`] is what
+    /// actually advances the counter once an order is accepted.
+    fn daily_notional_so_far(&self, now: Timestamp) -> i128 {
+        if self.daily_notional_day == Some(now.0 / NANOS_PER_DAY) {
+            self.daily_notional
+        } else {
+            0
+        }
     }
 
     fn check_static(&self, order: &OrderRequest, ctx: &RiskContext) -> Result<(), RiskReject> {
@@ -161,9 +223,22 @@ impl RiskEngine {
         if distance * 10_000 > i128::from(l.price_band_bps) * i128::from(reference.raw()) {
             return Err(RiskReject::PriceBand);
         }
-        match order.price.notional(order.qty) {
-            Some(n) if n <= l.max_notional => {}
+        // Self-cross (#40): never trade against our own still-resting order, independent
+        // of anything the caller claims its intent was.
+        let self_crosses = match order.side {
+            Side::Buy => ctx.own_best_ask.is_some_and(|ask| order.price >= ask),
+            Side::Sell => ctx.own_best_bid.is_some_and(|bid| order.price <= bid),
+        };
+        if self_crosses {
+            return Err(RiskReject::SelfCross);
+        }
+        let notional = match order.price.notional(order.qty) {
+            Some(n) if n <= l.max_notional => n,
             Some(_) | None => return Err(RiskReject::MaxNotional),
+        };
+        let daily_after = self.daily_notional_so_far(ctx.now) + i128::from(notional.raw());
+        if daily_after > i128::from(l.max_daily_notional.raw()) {
+            return Err(RiskReject::MaxDailyNotional);
         }
         let pos = i128::from(ctx.position.raw());
         let qty = i128::from(order.qty.raw());
@@ -176,6 +251,58 @@ impl RiskEngine {
         }
         Ok(())
     }
+
+    /// Whether a fill in `wash_history` is the other side of a wash-trade pattern with
+    /// `order` (#40): same instrument, opposite side, same price, same quantity (so net
+    /// position change is zero) within `wash_trade_window_ms` of `now`. Evaluated against
+    /// completed fills, not merely-resting orders: a quote that was canceled unfilled
+    /// never traded, so it cannot be the other side of a wash trade. This is what makes a
+    /// two-sided market-making quote (bid and ask resting at once, one later canceled) safe
+    /// on its own; a real wash-trade pattern must have actually executed on both sides.
+    fn wash_trade_detected(&self, order: &OrderRequest, now: Timestamp) -> bool {
+        let window = self
+            .limits
+            .wash_trade_window_ms
+            .saturating_mul(NANOS_PER_MS);
+        let window_start = now.0.saturating_sub(window);
+        self.wash_history
+            .iter()
+            .any(|&(t, instrument, side, price, qty)| {
+                t.0 > window_start
+                    && instrument == order.instrument
+                    && side != order.side
+                    && price == order.price
+                    && qty == order.qty
+            })
+    }
+
+    /// Records a completed fill for wash-trade pattern detection (#40). Callers (the
+    /// bridge engine, the replay engine) call this once a venue confirms a fill, using the
+    /// filled quantity and price, not the order's original size — a partial fill is what
+    /// actually changed position, and that is what a reversal must match.
+    pub fn record_fill(
+        &mut self,
+        instrument: InstrumentId,
+        side: Side,
+        price: Price,
+        qty: Qty,
+        ts: Timestamp,
+    ) {
+        let window_start = ts.0.saturating_sub(
+            self.limits
+                .wash_trade_window_ms
+                .saturating_mul(NANOS_PER_MS),
+        );
+        while self
+            .wash_history
+            .front()
+            .is_some_and(|(t, ..)| t.0 <= window_start)
+        {
+            self.wash_history.pop_front();
+        }
+        self.wash_history
+            .push_back((ts, instrument, side, price, qty));
+    }
 }
 
 impl RiskCheck for RiskEngine {
@@ -184,6 +311,9 @@ impl RiskCheck for RiskEngine {
             return Err(RiskReject::KillSwitch);
         }
         self.check_static(order, ctx)?;
+        if self.wash_trade_detected(order, ctx.now) {
+            return Err(RiskReject::WashTrade);
+        }
         let window_start = ctx.now.0.saturating_sub(NANOS_PER_SEC);
         while self.recent.front().is_some_and(|t| t.0 <= window_start) {
             self.recent.pop_front();
@@ -192,6 +322,15 @@ impl RiskCheck for RiskEngine {
             return Err(RiskReject::MaxOrderRate);
         }
         self.recent.push_back(ctx.now);
+
+        // Only an order that passed every check above counts toward the daily notional
+        // cap, same principle as the rate window just above.
+        let notional = order
+            .price
+            .notional(order.qty)
+            .expect("check_static already proved this fits in a Price");
+        self.daily_notional = self.daily_notional_so_far(ctx.now) + i128::from(notional.raw());
+        self.daily_notional_day = Some(ctx.now.0 / NANOS_PER_DAY);
         Ok(())
     }
 }
@@ -216,7 +355,8 @@ mod tests {
     const SEC: u64 = 1_000_000_000;
 
     /// Defaults: `max_position` 0.01, `max_notional` 500, 5 orders/s, `max_daily_loss` 100,
-    /// band 50 bps, stale 1000 ms. The base order is well inside every limit.
+    /// band 50 bps, stale 1000 ms, `max_daily_notional` 2000, wash window 2000 ms. The base
+    /// order is well inside every limit.
     fn order(side: Side, price: &str, qty: &str) -> OrderRequest {
         OrderRequest {
             client_id: ClientOrderId(1),
@@ -238,6 +378,8 @@ mod tests {
             open_sell_qty: Qty::ZERO,
             reference_price: Some(p("10000")),
             daily_pnl: Price::ZERO,
+            own_best_bid: None,
+            own_best_ask: None,
         }
     }
 
@@ -256,6 +398,27 @@ mod tests {
         assert!(limits.max_position > Qty::ZERO);
         assert!(limits.max_notional > Price::ZERO);
         assert!(toml::from_str::<Limits>(&format!("{text}\nmax_leverage = 100\n")).is_err());
+    }
+
+    /// #41 / root CLAUDE.md rule 4: every default in `config/limits/default.toml` is
+    /// deliberately tiny (the file's own header says so), and a brand-new limit key gets a
+    /// conservative placeholder pending #23 rather than a value sized to fit a test fixture.
+    /// `max_daily_notional` must not be an outlier next to `max_notional` on the same file:
+    /// a cumulative daily cap that is hundreds of times a single order's cap gives a real
+    /// agentic account no practical protection at all. `tests/replay/sample_day.csv`'s
+    /// higher-volume replay gets its own fixture-only limits file instead of inflating this
+    /// one (see `tests/replay/limits.toml`).
+    #[test]
+    fn default_daily_notional_cap_is_conservative_not_sized_to_a_test_fixture() {
+        let limits: Limits =
+            toml::from_str(include_str!("../../../../config/limits/default.toml")).unwrap();
+        assert!(
+            limits.max_daily_notional.raw() <= limits.max_notional.raw() * 10,
+            "max_daily_notional ({}) must be at most a small multiple of max_notional ({}), \
+             not a value picked to avoid tripping a replay fixture",
+            limits.max_daily_notional,
+            limits.max_notional
+        );
     }
 
     #[test]
@@ -430,5 +593,162 @@ mod tests {
                 Ok(())
             );
         }
+    }
+
+    /// #40: never trade against our own still-resting order, regardless of what the
+    /// caller says its intent was.
+    #[test]
+    fn self_cross_rejects_an_order_that_would_fill_against_our_own_resting_order() {
+        let mut c = ctx();
+        c.own_best_ask = Some(p("10000"));
+        // Buying at or above our own resting ask would fill against ourselves.
+        assert_eq!(
+            check(&order(Side::Buy, "10000", "0.001"), &c),
+            Err(RiskReject::SelfCross),
+            "at our own ask crosses"
+        );
+        assert_eq!(
+            check(&order(Side::Buy, "10000.00000001", "0.001"), &c),
+            Err(RiskReject::SelfCross),
+            "more aggressive than our own ask crosses"
+        );
+        assert_eq!(
+            check(&order(Side::Buy, "9999.99999999", "0.001"), &c),
+            Ok(()),
+            "one tick less aggressive than our own ask does not cross"
+        );
+
+        let mut c = ctx();
+        c.own_best_bid = Some(p("10000"));
+        assert_eq!(
+            check(&order(Side::Sell, "10000", "0.001"), &c),
+            Err(RiskReject::SelfCross),
+            "at our own bid crosses"
+        );
+        assert_eq!(
+            check(&order(Side::Sell, "9999.99999999", "0.001"), &c),
+            Err(RiskReject::SelfCross),
+            "more aggressive than our own bid crosses"
+        );
+        assert_eq!(
+            check(&order(Side::Sell, "10000.00000001", "0.001"), &c),
+            Ok(()),
+            "one tick less aggressive than our own bid does not cross"
+        );
+    }
+
+    /// #40: a buy then a same-price, same-qty sell (or the reverse) within the
+    /// configured window is a wash-trade pattern, flagged/rejected with the reason
+    /// recorded, independent of the rate limit and of stated intent.
+    #[test]
+    fn wash_trade_pattern_rejects_a_same_price_same_qty_reversal_inside_the_window() {
+        let mut risk = engine();
+        let sell = order(Side::Sell, "10000", "0.001");
+        let mut c = ctx();
+        // A fill, not merely an accepted order, is what the wash-trade check reacts to.
+        risk.record_fill(InstrumentId(1), Side::Buy, p("10000"), q("0.001"), c.now);
+
+        // Immediately after: rejected.
+        assert_eq!(risk.check(&sell, &c), Err(RiskReject::WashTrade));
+
+        let window_ns = limits().wash_trade_window_ms * 1_000_000;
+        // One ns inside the window: still rejected.
+        c.now = Timestamp(c.now.0 + window_ns - 1);
+        c.last_market_data = c.now;
+        assert_eq!(risk.check(&sell, &c), Err(RiskReject::WashTrade));
+
+        // Exactly at the window: the pattern has aged out, same boundary the rate
+        // limiter uses.
+        c.now = Timestamp(c.now.0 + 1);
+        c.last_market_data = c.now;
+        assert_eq!(risk.check(&sell, &c), Ok(()));
+
+        // A same-side fill is never a wash trade, no matter how fast.
+        let mut risk = engine();
+        risk.record_fill(
+            InstrumentId(1),
+            Side::Buy,
+            p("10000"),
+            q("0.001"),
+            ctx().now,
+        );
+        assert_eq!(
+            risk.check(&order(Side::Buy, "10000", "0.001"), &ctx()),
+            Ok(())
+        );
+
+        // Opposite side but a different price or qty is not the pattern either.
+        let mut risk = engine();
+        risk.record_fill(
+            InstrumentId(1),
+            Side::Buy,
+            p("10000"),
+            q("0.001"),
+            ctx().now,
+        );
+        assert_eq!(
+            risk.check(&order(Side::Sell, "10000.00000001", "0.001"), &ctx()),
+            Ok(()),
+            "different price is not a wash trade"
+        );
+        assert_eq!(
+            risk.check(&order(Side::Sell, "10000", "0.0009999"), &ctx()),
+            Ok(()),
+            "different qty is not a wash trade"
+        );
+    }
+
+    /// #40: a two-sided market-making quote (a resting bid and a resting ask at once,
+    /// with one later canceled before it ever fills) is not a wash trade. A wash trade is
+    /// about completed round-trip trades, not merely about quoting both sides; a canceled,
+    /// unfilled order never traded, so a later order that happens to match its price and
+    /// qty is not a reversal of anything real.
+    #[test]
+    fn an_accepted_but_never_filled_order_is_not_wash_trade_history() {
+        let mut risk = engine();
+        let c = ctx();
+        // A resting sell accepted (not filled) ...
+        assert_eq!(risk.check(&order(Side::Sell, "10000", "0.001"), &c), Ok(()));
+        // ... then canceled unfilled: no record_fill call ever happens for it.
+        // A same-price, same-qty buy right after is ordinary two-sided quoting, not wash
+        // trading, since nothing on the sell side ever executed.
+        assert_eq!(risk.check(&order(Side::Buy, "10000", "0.001"), &c), Ok(()));
+    }
+
+    /// #41: the per-order cap (`max_notional`) and the cumulative daily cap
+    /// (`max_daily_notional`) are independent; a sequence of orders each within the
+    /// per-order cap can still cross the daily cap.
+    #[test]
+    fn daily_notional_cap_rejects_once_cumulative_total_crosses_it() {
+        let mut risk = engine();
+        let mut c = ctx();
+        c.reference_price = Some(p("50000"));
+        // Notional 50000 * 0.01 = 500 exactly: at the per-order cap, not over it.
+        let o = order(Side::Buy, "50000", "0.01");
+        let day_start = c.now.0;
+        // Default max_daily_notional is 2000: four of these reach it exactly. Time advances
+        // 1 s per order, well inside the same exchange day, so the rate limit (5/s) never
+        // interferes.
+        for i in 0..4 {
+            c.now = Timestamp(day_start + i * SEC);
+            c.last_market_data = c.now;
+            assert_eq!(
+                risk.check(&o, &c),
+                Ok(()),
+                "order {i} of 4 reaches the cap exactly"
+            );
+        }
+        // One more, of any size, would push the cumulative total past the cap.
+        let tiny = order(Side::Buy, "50000", "0.00000001");
+        assert_eq!(risk.check(&tiny, &c), Err(RiskReject::MaxDailyNotional));
+
+        // A new exchange day resets the counter (placeholder bucketing pending #23).
+        c.now = Timestamp((c.now.0 / NANOS_PER_DAY + 1) * NANOS_PER_DAY);
+        c.last_market_data = c.now;
+        assert_eq!(
+            risk.check(&o, &c),
+            Ok(()),
+            "the daily counter reset on the new day"
+        );
     }
 }

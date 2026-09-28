@@ -236,3 +236,35 @@ fn report_execution_rejects_a_negative_fill_price_instead_of_corrupting_cash() {
         "a refused report must not move cash or position"
     );
 }
+
+#[test]
+fn a_gateway_reported_fill_feeds_the_wash_trade_check() {
+    // #40 in external mode: the fill arrives through report_execution, not
+    // SimVenue, and must still count, or the live path would have no
+    // wash-trade protection at all.
+    let mut engine = support::engine_external(&support::small_book_csv(), 1);
+    assert!(engine.next_decision_request().is_some());
+    let buy = r#"{"v":1,"id":"1","op":"submit_order_intent","intent":
+        {"request_id":"dr-1","instrument":"1","side":"buy","qty":"0.001",
+         "limit_price":"99.8","time_in_force":"gtc","reason":"test"}}"#;
+    assert_eq!(call(&mut engine, buy)["result"]["accepted"], true);
+    let accepted = call(
+        &mut engine,
+        r#"{"v":1,"id":"2","op":"report_execution","execution":
+            {"client_order_id":1,"event":"accepted","venue_order_id":"555","ts_ns":10}}"#,
+    );
+    assert_eq!(accepted["ok"], true);
+    let filled = call(
+        &mut engine,
+        r#"{"v":1,"id":"3","op":"report_execution","execution":
+            {"client_order_id":1,"event":"filled","qty":"0.001","price":"99.8","ts_ns":20}}"#,
+    );
+    assert_eq!(filled["ok"], true);
+
+    let sell = r#"{"v":1,"id":"4","op":"submit_order_intent","intent":
+        {"request_id":"dr-1","instrument":"1","side":"sell","qty":"0.001",
+         "limit_price":"99.8","time_in_force":"gtc","reason":"test"}}"#;
+    let resp = call(&mut engine, sell);
+    assert_eq!(resp["result"]["accepted"], false, "{resp:#}");
+    assert_eq!(resp["result"]["risk_reject"], "wash_trade", "{resp:#}");
+}
