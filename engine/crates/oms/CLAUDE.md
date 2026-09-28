@@ -13,7 +13,7 @@
 - Every `match` on `OrderState` lists every variant. Check: `grep -nE '^\s*_ *=>' src/*.rs` prints nothing.
 - Every transition, legal and illegal, has a test; an illegal transition is an error, not a silent no-op.
 - Terminal states (`Filled`, `Canceled`, `Rejected`) never change again (tested).
-- Reconcile open orders and positions with the venue on startup before the first new order, and on a fixed interval after.
+- Reconcile open orders with the venue on startup before the first new order, and on a fixed interval after. No order goes out until a reconcile has succeeded, and none after a failed one until the next succeeds. Positions are not reconciled yet: the adapter has no position endpoint, so only each order's fills are compared.
 - An order the venue reports that the OMS does not know raises an alert and halts the strategy.
 - A new variant or transition change needs risk-auditor review (see .claude/agents/risk-auditor.md).
 

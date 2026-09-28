@@ -59,8 +59,31 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 2
           persist-credentials: false
-      # The auditor prompt is read from the base branch so a PR cannot rewrite
-      # the instructions that review it.
+      # The action runs `claude` in this checkout, so the PR's own .claude/,
+      # CLAUDE.md and .mcp.json would load (hooks run with the API key in the
+      # environment). Replace them with the base branch's copies before the
+      # action starts. The diff under review comes from the API, not this tree.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: base-claude-config
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: |
+            .claude/
+            CLAUDE.md
+            CLAUDE.local.md
+            .mcp.json
+      - name: Restore Claude config from base
+        run: |
+          set -euo pipefail
+          rm -rf base-claude-config/.git
+          find . -path ./.git -prune -o -path ./base-claude-config -prune -o \
+            \( -name .claude -o -name CLAUDE.md -o -name CLAUDE.local.md -o -name .mcp.json \) \
+            -print0 | xargs -0 rm -rf
+          cp -R base-claude-config/. .
+          rm -rf base-claude-config
+      # The auditor prompt is also read from the base branch.
       - name: Load security-auditor instructions from base
         id: prompt
         env:

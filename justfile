@@ -65,7 +65,7 @@ precommit:
 bench:
     cd {{engine}} && cargo bench --workspace --locked
 
-# Replay the synthetic fixture day (tests/replay/sample_day.csv) twice and check both order logs match
+# Replay the synthetic fixture day (tests/replay/sample_day.csv) twice and check both order logs match the committed sha256
 replay:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -78,7 +78,9 @@ replay:
     echo "run 1 order-log sha256: $first"
     echo "run 2 order-log sha256: $second"
     if [ "$first" != "$second" ]; then echo "FAIL: replay is not deterministic"; exit 1; fi
-    echo "replay deterministic"
+    expected=$(tr -d '[:space:]' < ../tests/replay/expected_order_log.sha256)
+    if [ "$first" != "$expected" ]; then echo "FAIL: order log does not match tests/replay/expected_order_log.sha256 ($expected)"; exit 1; fi
+    echo "replay deterministic and matches the committed order log"
 
 # Run a backtest from backtest/configs/<cfg>.yaml (not implemented: exits 2 so nothing mistakes it for a pass)
 backtest cfg:

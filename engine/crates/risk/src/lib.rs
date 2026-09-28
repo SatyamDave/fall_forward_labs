@@ -134,6 +134,13 @@ impl RiskEngine {
         &self.kill_switch
     }
 
+    /// Whether `daily_pnl` is at or past the loss limit, the boundary of check 4.
+    /// The engine also asks this after fills, so resting orders cannot run past it.
+    #[must_use]
+    pub fn daily_loss_reached(&self, daily_pnl: Price) -> bool {
+        i128::from(daily_pnl.raw()) <= -i128::from(self.limits.max_daily_loss.raw())
+    }
+
     fn check_static(&self, order: &OrderRequest, ctx: &RiskContext) -> Result<(), RiskReject> {
         let l = &self.limits;
         if order.price <= Price::ZERO || order.qty <= Qty::ZERO {
@@ -143,7 +150,7 @@ impl RiskEngine {
         if age > l.stale_data_ms.saturating_mul(NANOS_PER_MS) {
             return Err(RiskReject::StaleData);
         }
-        if i128::from(ctx.daily_pnl.raw()) <= -i128::from(l.max_daily_loss.raw()) {
+        if self.daily_loss_reached(ctx.daily_pnl) {
             return Err(RiskReject::MaxDailyLoss);
         }
         let reference = ctx

@@ -5,9 +5,12 @@ Standard library only, Python 3.12+ (the ubuntu-24.04 runner's python3).
 
   classify.py classify [--label L ...] PATH ...
       Print the tier, required approvals and auto-merge eligibility as JSON.
-  classify.py gate --pr pr.json --files files.jsonl --reviews reviews.jsonl
+  classify.py gate --pr pr.json --files files.jsonl --reviews reviews.jsonl \
+                   --permissions permissions.jsonl
       Classify a PR from GitHub API responses and exit 1 unless it has the
-      approvals its tier requires.
+      approvals its tier requires. permissions.jsonl has one
+      {"login": ..., "permission": ...} line per approver, from
+      repos/{repo}/collaborators/{user}/permission.
 """
 
 import argparse
@@ -20,7 +23,10 @@ from pathlib import Path
 POLICY_PATH = Path(__file__).with_name("POLICY.yaml")
 TIER_ORDER = ["T0", "T1", "T2", "T3"]
 # Only reviewers who can merge count, mirroring branch protection.
+# author_association is COLLABORATOR at any permission level, read included, so
+# the repository permission of each approver is checked as well.
 COUNTED_ASSOCIATIONS = {"OWNER", "MEMBER", "COLLABORATOR"}
+COUNTED_PERMISSIONS = {"write", "maintain", "admin"}
 
 
 def strip_comments(text):
@@ -119,8 +125,11 @@ def classify(paths, labels=(), policy=None):
     }
 
 
-def count_approvals(reviews, head_sha, author):
-    """Humans whose latest review approves the current head commit."""
+def count_approvals(reviews, head_sha, author, permissions):
+    """Humans with write access or more whose latest review approves the head commit.
+
+    permissions maps login to repository permission; a login missing from it does not count.
+    """
     latest = {}
     for r in reviews:  # the API returns reviews oldest first
         if r.get("state") in ("APPROVED", "CHANGES_REQUESTED", "DISMISSED"):
@@ -134,6 +143,7 @@ def count_approvals(reviews, head_sha, author):
             and r["user"].get("type") == "User"
             and login != author
             and r.get("author_association") in COUNTED_ASSOCIATIONS
+            and permissions.get(login) in COUNTED_PERMISSIONS
             # An approval of an older commit does not cover later pushes.
             and r.get("commit_id") == head_sha
         ):
@@ -180,7 +190,10 @@ def run_gate(args):
             paths.append(f["previous_filename"])
     labels = [l["name"] for l in pr["labels"]]
     result = classify(paths, labels, policy)
-    approvers, blockers = count_approvals(read_jsonl(args.reviews), pr["head"]["sha"], pr["user"]["login"])
+    permissions = {p["login"]: p["permission"] for p in read_jsonl(args.permissions)}
+    approvers, blockers = count_approvals(
+        read_jsonl(args.reviews), pr["head"]["sha"], pr["user"]["login"], permissions
+    )
     ok, problems = gate(result, approvers, labels, blockers, policy)
 
     lines = [
@@ -217,6 +230,7 @@ def main(argv=None):
     g.add_argument("--pr", required=True)
     g.add_argument("--files", required=True)
     g.add_argument("--reviews", required=True)
+    g.add_argument("--permissions", required=True)
     args = parser.parse_args(argv)
     if args.cmd == "classify":
         print(json.dumps(classify(args.paths, args.label, load_policy(args.policy)), indent=2))

@@ -6,12 +6,12 @@ use std::collections::VecDeque;
 use std::fmt::Write as _;
 
 use qc_core::{
-    Clock, Event, InstrumentId, MarketEvent, OrderEvent, OrderRequest, Price, Qty, SCALE, Side,
-    SimClock, StrategyId, Timestamp, VenueId,
+    ClientOrderId, Clock, Event, InstrumentId, MarketEvent, OrderEvent, OrderRequest, Price, Qty,
+    SCALE, Side, SimClock, StrategyId, Timestamp, VenueId,
 };
 use qc_gateway::{Record, SimVenue, VenueAdapter};
 use qc_oms::{Oms, OrderState, reconcile};
-use qc_orderbook::OrderBook;
+use qc_orderbook::{BookStatus, OrderBook};
 use qc_risk::{KillSwitch, Limits, RiskCheck, RiskContext, RiskEngine, RiskReject};
 use qc_strategy_runtime::{Command, InsideQuoter, Strategy};
 
@@ -21,6 +21,8 @@ pub const RECONCILE_EVERY_NS: u64 = 60 * 1_000_000_000;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum HaltReason {
     KillSwitch,
+    /// Realized plus unrealized loss reached `max_daily_loss`.
+    MaxDailyLoss,
     /// The venue sent an event the order state machine does not allow.
     IllegalOrderEvent,
     /// Reconciliation found an unknown venue order or a mismatch.
@@ -44,6 +46,8 @@ pub struct Engine<S, V> {
     /// Quote-currency cash from fills, in raw [`Price`] units, wide so it cannot overflow.
     cash: i128,
     halted: Option<HaltReason>,
+    /// False until a reconcile succeeds and again after any fails; no order is sent meanwhile.
+    reconciled: bool,
     next_reconcile: Option<Timestamp>,
     submitted: u64,
     commands: Vec<Command>,
@@ -65,6 +69,7 @@ impl<S: Strategy, V: VenueAdapter> Engine<S, V> {
             position: Qty::ZERO,
             cash: 0,
             halted: None,
+            reconciled: false,
             next_reconcile: None,
             submitted: 0,
             commands: Vec::with_capacity(16),
@@ -118,6 +123,9 @@ impl<S: Strategy, V: VenueAdapter> Engine<S, V> {
     /// Processes one recorded record at its local timestamp.
     pub fn on_record(&mut self, record: &Record) {
         self.clock.advance_to(record.ts_local());
+        if self.halted.is_some() {
+            self.cancel_all_open();
+        }
         self.check_kill_switch();
         let result = match record {
             Record::Snapshot(s) => self.book.apply_snapshot(s),
@@ -127,31 +135,44 @@ impl<S: Strategy, V: VenueAdapter> Engine<S, V> {
         if let Err(e) = result {
             self.line(format_args!("book {e:?}"));
         }
+        self.check_daily_loss();
+        if self.next_reconcile.is_none() {
+            // Startup: nothing has been sent, so nothing is in flight to disagree about.
+            self.reconcile();
+        }
         if let Record::Market(m) = record {
             self.dispatch(&Event::Market(*m));
         }
         self.drain();
-        let now = self.clock.now();
-        match self.next_reconcile {
-            None => self.next_reconcile = Some(Timestamp(now.0 + RECONCILE_EVERY_NS)),
-            Some(t) if now >= t => {
-                self.next_reconcile = Some(Timestamp(now.0 + RECONCILE_EVERY_NS));
-                self.reconcile();
-            }
-            Some(_) => {}
+        let due = self.next_reconcile.is_some_and(|t| self.clock.now() >= t);
+        if due || !self.reconciled {
+            self.reconcile();
         }
     }
 
-    /// Compares the OMS with the venue; any discrepancy halts.
+    /// Compares the OMS with the venue; any discrepancy halts. Order fills are
+    /// compared, positions are not: the adapter has no position endpoint yet.
     pub fn reconcile(&mut self) {
-        let Ok(venue_orders) = self.venue.order_snapshot() else {
-            self.line(format_args!("reconcile skipped: venue unreachable"));
-            return;
+        self.next_reconcile = Some(Timestamp(self.clock.now().0 + RECONCILE_EVERY_NS));
+        let venue_orders = match self.venue.order_snapshot() {
+            Ok(v) => v,
+            Err(e) => {
+                self.reconciled = false;
+                self.line(format_args!("reconcile failed {e:?}"));
+                return;
+            }
         };
         let r = reconcile(&self.oms, &venue_orders);
         if r.halt() {
             self.line(format_args!("reconcile {:?}", r.discrepancies));
             self.halt(HaltReason::Reconciliation);
+        }
+        self.reconciled = true;
+    }
+
+    fn check_daily_loss(&mut self) {
+        if self.halted.is_none() && self.risk.daily_loss_reached(self.daily_pnl()) {
+            self.halt(HaltReason::MaxDailyLoss);
         }
     }
 
@@ -161,13 +182,18 @@ impl<S: Strategy, V: VenueAdapter> Engine<S, V> {
         }
     }
 
-    /// Stops all order entry for good and cancels every working order.
+    /// Stops all order entry for good and cancels every working order. Cancels
+    /// the venue could not take are sent again on every record until none is open.
     fn halt(&mut self, reason: HaltReason) {
         if self.halted.is_some() {
             return;
         }
         self.halted = Some(reason);
         self.line(format_args!("halt {reason:?}"));
+        self.cancel_all_open();
+    }
+
+    fn cancel_all_open(&mut self) {
         let open: Vec<_> = self
             .oms
             .open_orders()
@@ -175,9 +201,25 @@ impl<S: Strategy, V: VenueAdapter> Engine<S, V> {
             .map(|o| o.request.client_id)
             .collect();
         for id in open {
-            if self.oms.request_cancel(id).is_ok() {
-                let _ = self.venue.cancel(id);
-                self.line(format_args!("cancel {}", id.0));
+            self.cancel(id);
+        }
+    }
+
+    fn cancel(&mut self, id: ClientOrderId) {
+        if let Err(e) = self.oms.request_cancel(id) {
+            self.line(format_args!("cancel-skip {} {e:?}", id.0));
+            return;
+        }
+        match self.venue.cancel(id) {
+            Ok(()) => self.line(format_args!("cancel {}", id.0)),
+            Err(e) => {
+                self.line(format_args!("cancel-failed {} {e:?}", id.0));
+                let refused = OrderEvent::CancelRejected {
+                    client_id: id,
+                    ts: self.clock.now(),
+                };
+                let _ = self.oms.apply(&refused);
+                self.feedback.push_back(refused);
             }
         }
     }
@@ -234,6 +276,7 @@ impl<S: Strategy, V: VenueAdapter> Engine<S, V> {
                 };
                 self.position = Qty::from_raw(self.position.raw() + dq);
                 self.cash += dc;
+                self.check_daily_loss();
             }
             self.dispatch(&Event::Order(order_event));
         }
@@ -255,7 +298,11 @@ impl<S: Strategy, V: VenueAdapter> Engine<S, V> {
             position: self.position,
             open_buy_qty: Qty::from_raw(open_buy),
             open_sell_qty: Qty::from_raw(open_sell),
-            reference_price: self.book.mid(),
+            // A book awaiting resync keeps levels it knows may be wrong.
+            reference_price: self
+                .book
+                .mid()
+                .filter(|_| self.book.status() == BookStatus::Synced),
             daily_pnl: self.daily_pnl(),
         }
     }
@@ -270,22 +317,7 @@ impl<S: Strategy, V: VenueAdapter> Engine<S, V> {
     fn execute(&mut self, cmd: Command) {
         match cmd {
             Command::Submit(order) => self.submit(&order),
-            Command::Cancel(id) => {
-                if let Err(e) = self.oms.request_cancel(id) {
-                    self.line(format_args!("cancel-skip {} {e:?}", id.0));
-                    return;
-                }
-                self.line(format_args!("cancel {}", id.0));
-                if let Err(e) = self.venue.cancel(id) {
-                    self.line(format_args!("gateway {e:?}"));
-                    let refused = OrderEvent::CancelRejected {
-                        client_id: id,
-                        ts: self.clock.now(),
-                    };
-                    let _ = self.oms.apply(&refused);
-                    self.feedback.push_back(refused);
-                }
-            }
+            Command::Cancel(id) => self.cancel(id),
         }
     }
 
@@ -294,13 +326,23 @@ impl<S: Strategy, V: VenueAdapter> Engine<S, V> {
             self.line(format_args!("drop {} halted", order.client_id.0));
             return;
         }
+        if !self.reconciled {
+            self.line(format_args!("drop {} unreconciled", order.client_id.0));
+            self.reject_locally(order);
+            return;
+        }
         let ctx = self.context(order);
         if let Err(reject) = self.risk.check(order, &ctx) {
             self.line(format_args!("risk-reject {} {reject:?}", order.client_id.0));
-            if reject == RiskReject::KillSwitch {
-                self.halt(HaltReason::KillSwitch);
-            } else {
-                self.reject_locally(order);
+            match reject {
+                RiskReject::KillSwitch => self.halt(HaltReason::KillSwitch),
+                RiskReject::MaxDailyLoss => self.halt(HaltReason::MaxDailyLoss),
+                RiskReject::InvalidOrder
+                | RiskReject::StaleData
+                | RiskReject::PriceBand
+                | RiskReject::MaxNotional
+                | RiskReject::MaxPosition
+                | RiskReject::MaxOrderRate => self.reject_locally(order),
             }
             return;
         }
