@@ -9,16 +9,18 @@ Updated 2026-09-28. Draft for both founders to edit; the process spec is
 
 | Person | GitHub | Status | Evidence |
 |---|---|---|---|
-| Satyam Dave | @SatyamDave | Confirmed. Repository owner and the only collaborator. | `gh api repos/SatyamDave/fall_forward_labs/collaborators` lists one login, 2026-09-27 |
-| Second founder | UNKNOWN | Not identified in any file, PR or collaborator list. | Nothing to cite |
+| Satyam Dave | @SatyamDave | Confirmed. Repository owner. | `gh api repos/SatyamDave/fall_forward_labs/collaborators`, 2026-09-27 |
+| Rohit | @rovivek | Assumed from the collaborator list — **confirm**: `gh api repos/SatyamDave/fall_forward_labs/collaborators` now lists two logins, `SatyamDave` and `rovivek`, but `rovivek` has not yet added themselves to this file, and no PR in the repository is authored by that login as of this update. Treat the name "Rohit" and the ownership split below as the docs lane's working assumption, not a confirmed fact, until Rohit edits this row themselves. | `gh api repos/SatyamDave/fall_forward_labs/collaborators` lists `rovivek`, checked 2026-09-27 |
 
-No document in this repository should name, describe or assign work to the second founder until
-they add themselves here in their own PR.
+No document in this repository should name, describe or assign work to a second founder beyond
+what this file states, until they add themselves here in their own PR.
 
 ## Ownership
 
-Every area has one confirmed owner today. The backup column stays empty until a second person is
-confirmed.
+The engine/research/CI split below predates ADR-0040 and is unchanged. The agentic-pipeline split
+is proposed by [ADR-0040](adr/0040-agentic-decision.md) and the coordinator's build-lane spec
+(2026-09-28); **Rohit has not yet confirmed it** — treat the "Primary" column for the new rows as
+assumed, same caveat as the People table above.
 
 | Area | Paths | Primary | Backup |
 |---|---|---|---|
@@ -29,6 +31,9 @@ confirmed.
 | CI and security (workflows protected) | `.github/`, `scripts/`, `SECURITY.md` | @SatyamDave | none |
 | Autonomy policy (protected) | `autonomy/` | @SatyamDave | none |
 | Docs and process | `docs/`, `README.md`, `CONTRIBUTING.md` | @SatyamDave | none |
+| **Agentic: bridge, `qc-bridge`, approval-token protocol, Robinhood Agentic MCP gateway adapter, external kill switch, reconciliation** | `engine/crates/bridge/`, `schemas/decision/`, `agent/src/broker/` (gateway shell) | @rovivek (assumed — confirm) | @SatyamDave |
+| **Agentic: agent service, prompts, decision-schema consumer, eval suite and workflow, decision-ledger analysis, Robinhood account/legal/counsel liaison** | `agent/` (TypeScript, minus `src/broker/`), `evals/`, `scripts/eval/`, `tests/evals/` | @SatyamDave | none |
+| **Agentic: shared data recorder, classifier on real data, shadow/canary review** | `data/recorders/`, `ml/` (real-data path) | Shared (both approve) | — |
 
 ## Handoffs
 
@@ -83,10 +88,13 @@ Proposed policy, for both founders to accept or change (nothing here is applied)
 
 | Decision | Blocks | Where |
 |---|---|---|
-| Second founder identity and GitHub handle | Two-person review, backup owners | this file |
+| Rohit's confirmation of the @rovivek handle and the agentic ownership split above | Two-person review, backup owners, ADR-0040 approval | this file |
 | Operators' jurisdiction and entity | Venue choice, any account | ADR-0003 (#5), ADR-0020 (#9) |
 | First vertical: kalshi-events or crypto perps | Vertical adapter, specialization milestone | ADR-0020 (#9), ADR-0003 (#5) |
 | Accept or revise ADRs 0001-0005 (merged, still Proposed) | Toolchain pin (patch 0001), registry, engine dependency | `docs/adr/` |
 | GitHub plan or organization for rulesets | Any enforced review or required check | this file |
 | Whether to add `ANTHROPIC_API_KEY` and enable a loop in `autonomy/POLICY.yaml` | AI review and knowledge-loop workflows (paid calls, gated by `scripts/ci/ai_gate.py`) | `autonomy/POLICY.yaml` |
+| Rohit's approval of ADR-0040 and the root CLAUDE.md rule 1 amendment | A2 onward; enabling `loop-agent-eval` | `docs/adr/0040-agentic-decision.md` |
+| Counsel review: Robinhood consent/personal-use clauses; Anthropic's high-risk-use and no-training-on-outputs clauses | A0 closing; A6 first agentic trade | ADR-0040 Challenges 8-9 |
+| First asset for the agentic account (ADR-0040 recommends a liquid ETF; not yet decided) | A0 closing, A4 data capture | ADR-0040 Challenges 5 |
 | Founders' agreement (IP, roles) | Anything beyond research; outside the repo | team spec, human checklist |

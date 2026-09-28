@@ -16,9 +16,20 @@ trades, nothing connects to a venue for trading, and no strategy has shown an ed
 | Paid agent jobs | None. The four AI workflows run only if `scripts/ci/ai_gate.py` allows them under `autonomy/POLICY.yaml`, which denies today; no `ANTHROPIC_API_KEY` exists |
 | Auto-merge | Not enabled (`allow_auto_merge: false`); no workflow enables it |
 
-Biggest open items: review is not platform-enforced on this GitHub plan (403); the second
-founder is unknown; the devcontainer is unbuilt; study 0001's data lives off git; ADRs, the
-deflated-Sharpe threshold and the first vertical are undecided (vertical PENDING).
+Biggest open items: review is not platform-enforced on this GitHub plan (403); Rohit (@rovivek,
+confirmed collaborator) has not yet approved ADR-0040; the devcontainer is unbuilt; study 0001's
+data lives off git; ADRs, the deflated-Sharpe threshold and the first vertical are undecided.
+
+## Architecture decision: agentic final decision (ADR-0040)
+
+[ADR-0040](docs/adr/0040-agentic-decision.md) (Accepted by Satyam, **pending Rohit's approval**)
+moves the final trade decision to an AI agent, amending root `CLAUDE.md` rule 1 for that one step:
+classifier (unchanged, deterministic) → `qc-bridge` (Rust) → agent service (TS, Claude Agent SDK,
+only tool: `submit_order_intent`) → risk engine + kill switch (unchanged, authoritative) → OMS →
+gateway → SimVenue today / Robinhood Agentic MCP once built. Alternatives, consequences and a
+"Challenges to the owner's plan, with evidence" section are in the ADR itself; diagram in
+[ARCHITECTURE.md](docs/ARCHITECTURE.md#agentic-decision-pipeline-adr-0040-current-plus-planned);
+milestones A0-A7 in [ROADMAP.md](docs/ROADMAP.md#a0-a7-the-agentic-pipeline-blocked-on-human-decisions).
 
 New here? Start with the illustrated [project guide](docs/guide/quant-core-guide.html) (open the
 file in a browser; GitHub shows HTML as source). It explains every component, the safety model, and
@@ -70,6 +81,8 @@ Proposed pending the operators' jurisdiction.
 | Study 0001 favorite-longshot | #16, #17 | yes, from snapshot | INSUFFICIENT EVIDENCE; snapshot is off git |
 | ADRs 0001-0006, 0010, 0011, 0013, 0020; plans; data classes | #2-#5, #9 | n/a | All Proposed |
 | Contributor docs, templates, devcontainer (non-root) | #8, #17 | n/a | Devcontainer never built |
+| ADR-0040 + docs (ARCHITECTURE/ROADMAP/NOW/TEAM, guide §3/9/10/11) | in PR (`agentic/docs`, not yet opened; re-query `gh pr list`) | n/a | Accepted by Satyam only; **pending Rohit** |
+| `schemas/decision/v1/*`, `qc-bridge`, agent service skeleton (fake mode), `just eval` | in progress (`agentic/bridge` has one schema commit; `agent-service`/`evals` lanes not yet pushed as of this check) | not yet | A1/A2 exit tests not yet met |
 
 Per-component detail with evidence: [docs/audits/0001-reality-audit.md](docs/audits/0001-reality-audit.md).
 
@@ -216,23 +229,24 @@ Dated evidence: [docs/reports/base-status.md](docs/reports/base-status.md). In s
 
 | Decision | Status | Blocks | Owner |
 |---|---|---|---|
-| First vertical: ADR-0020 (Kalshi) vs ADR-0003 | Proposed | M1 | founders |
+| ADR-0040 agentic decision; Robinhood/Anthropic counsel review (Challenges 8-9) | Accepted by Satyam | A2 onward, root CLAUDE.md rule 1, A6 | Rohit's approval, counsel |
+| First vertical (ADR-0020 vs ADR-0003, engine) and first asset for the agentic account (ADR-0040: a liquid ETF) | Proposed / undecided | A4 | founders |
 | Operators' jurisdiction, entity | Unknown | Any venue account | founders, with counsel |
 | ADR-0001 NautilusTrader (LGPL-3.0 flagged for legal review in ADR-0002) | Proposed; not used | Engine dependency choice | founders |
 | ADR-0004 toolchain pin (patch 0001), ADR-0005 MLflow | Proposed; code differs | Pin, registry migration | founders |
 | TypeSafe MCA §2.3(b) distillation clause (ADR-0011) | Blocks decision-layer distillation | Decision layer | legal review |
 | GATES.md thresholds, DSR gate units | Unreviewed | Any promotion | founders |
-| Second founder, GitHub plan | Unknown | Enforced review | founders |
+| Rohit's confirmation of the agentic ownership split, GitHub plan | Unknown | Enforced review | founders |
 
 ## 13. Roadmap
 
-M0 is the offline foundation on `main`; M1 is the first specialization, after the vertical is
-chosen. Full list, deferred items with reasons, and the historical "base complete" checklist:
-[docs/ROADMAP.md](docs/ROADMAP.md). Next three steps:
+M0 (offline foundation) is met. ADR-0040 replaces the old M1 plan with milestones A0-A7, built
+around the agentic pipeline; A0/A1 are in progress. Full list, deferred items with reasons, and the
+historical "base complete" checklist: [docs/ROADMAP.md](docs/ROADMAP.md). Next three steps:
 
-1. Register study 0001 v2 with a population measured by metadata-only calls first.
-2. Move to a GitHub plan where rulesets work, and add the second founder.
-3. Decide the ADRs (then apply [patch 0001](docs/proposals/README.md)) and the deflated-Sharpe threshold.
+1. Get Rohit's approval on ADR-0040, then merge the four `agentic/*` lane PRs.
+2. Request counsel review (Robinhood, Anthropic) and decide the agentic account's first asset.
+3. Register study 0001 v2 and decide the remaining ADRs (then apply [patch 0001](docs/proposals/README.md)) and the deflated-Sharpe threshold.
 
 ## 14. Contributing, security, confidentiality
 

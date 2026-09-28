@@ -2,7 +2,14 @@
 
 ## Status
 
-Proposed. Needs human approval before any Phase 2 code is written.
+Proposed. Needs human approval before any Phase 2 code is written. Partly superseded for trade
+decisions by [ADR-0040](0040-agentic-decision.md) (Accepted by Satyam 2026-09-28, pending Rohit's
+approval): a risk-wrapped agent may now propose the final trade decision. Decision point 1 below
+("Jev and every other hosted decision API are not used in the trading engine... or for price
+prediction") still holds for the deterministic engine and for Jev specifically; it no longer holds
+for every hosted decision model everywhere, since ADR-0040 puts a different one (a Claude Agent SDK
+service) after the classifier and before risk. The control-plane use (Decision point 2) is
+unaffected.
 
 ## Context
 
