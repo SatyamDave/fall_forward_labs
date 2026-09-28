@@ -101,6 +101,7 @@ def write_synthetic_snapshot(raw: Path) -> None:
 
 
 def test_recompute_matches_on_synthetic_fixture(tmp_path: Path) -> None:
+    """Plumbing only: the two code paths agree on SYNTHETIC data. Says nothing about Kalshi."""
     import study
 
     write_synthetic_snapshot(tmp_path)
