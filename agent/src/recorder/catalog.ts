@@ -30,6 +30,11 @@ export interface CatalogManifest {
   poll_interval_ms: number;
   request_budget: number;
   requests_made: number;
+  /** How many polls got real Level 2 depth (get_equity_price_book) vs. fell back to a
+   *  top-of-book quote -- session.ts's SessionResult.depthCounts, carried into the manifest so
+   *  the fallback flag survives past the process, not just in-memory (issue #43/#46 follow-up:
+   *  "fall back to top-of-book with an explicit flag"). */
+  depth: { l2: number; top_of_book: number };
   coverage:
     | {
         record_count: number;
@@ -56,6 +61,7 @@ export interface BuildManifestOptions {
   pollIntervalMs: number;
   requestBudget: number;
   requestsMade: number;
+  depthCounts: { l2: number; top_of_book: number };
   records: readonly SnapshotRecord[];
   quality: QualityReport;
   /** Path of the recorded CSV, relative to the repo root (used as the files-map key). */
@@ -85,6 +91,7 @@ export function buildManifest(opts: BuildManifestOptions): CatalogManifest {
     poll_interval_ms: opts.pollIntervalMs,
     request_budget: opts.requestBudget,
     requests_made: opts.requestsMade,
+    depth: opts.depthCounts,
     coverage,
     quality: opts.quality,
     files: { [opts.recordingRelPath]: sha256File(opts.recordingAbsPath) },

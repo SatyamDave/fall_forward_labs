@@ -48,6 +48,10 @@ const PREVIEW_TOOLS = new Set(["review_equity_order", "preview_crypto_order"]);
 const CANCEL_TOOLS = new Set(["cancel_equity_order", "cancel_crypto_order"]);
 const STATUS_TOOLS = new Set(["get_equity_orders", "get_crypto_orders"]);
 const QUOTE_TOOLS = new Set(["get_equity_quotes", "get_crypto_quotes"]);
+// Level 2 (issue #43/#46 follow-up): equity only -- robinhood-agentic-mcp.md §2 lists no
+// equivalent tool for options or crypto, and robinhood.ts's TOOLS table has no crypto `book`
+// entry to match, so a crypto pollBook() falls back to QUOTE_TOOLS instead of reaching here.
+const BOOK_TOOLS = new Set(["get_equity_price_book"]);
 // Issue #45 (reconciliation): read-only tools with no client_order_id filter.
 const POSITIONS_TOOLS = new Set(["get_equity_positions", "get_crypto_holdings"]);
 const ACCOUNT_TOOLS = new Set(["get_accounts"]);
@@ -117,6 +121,7 @@ export function createMockRobinhoodServer(opts: MockRobinhoodOptions = {}): Serv
       ...CANCEL_TOOLS,
       ...STATUS_TOOLS,
       ...QUOTE_TOOLS,
+      ...BOOK_TOOLS,
       ...POSITIONS_TOOLS,
       ...ACCOUNT_TOOLS,
     ].map((name) => ({
@@ -191,6 +196,27 @@ export function createMockRobinhoodServer(opts: MockRobinhoodOptions = {}): Serv
 
     if (QUOTE_TOOLS.has(name)) {
       return structured({ quotes: [{ symbol: args.symbols, bid: "100.00", ask: "100.05" }] });
+    }
+
+    if (BOOK_TOOLS.has(name)) {
+      const symbols = Array.isArray(args.symbols) ? args.symbols.filter((s): s is string => typeof s === "string") : [];
+      // SYNTHETIC 3-level book per side, strictly sorted best-first and centered on the same
+      // 100.00/100.05 top-of-book QUOTE_TOOLS reports -- deterministic and clearly labelled, per
+      // the hard limit on recorded/synthetic Robinhood responses only.
+      const books = symbols.map((symbol) => ({
+        symbol,
+        bids: [
+          { price: "99.99", quantity: "500" },
+          { price: "99.98", quantity: "300" },
+          { price: "99.97", quantity: "200" },
+        ],
+        asks: [
+          { price: "100.05", quantity: "400" },
+          { price: "100.06", quantity: "250" },
+          { price: "100.07", quantity: "150" },
+        ],
+      }));
+      return structured({ books });
     }
 
     return errorResult(`SYNTHETIC mock has no handler for tool ${name}`);

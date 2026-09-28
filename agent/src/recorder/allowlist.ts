@@ -5,11 +5,10 @@
 // fails if an order/cancel/preview tool is ever called through this wrapper.
 import type { McpClient } from "../broker/mcp-client.js";
 
-// Robinhood's published quote tools (robinhood-agentic-mcp.md §2). get_equity_price_book (Level
-// 2) is listed here too: it's a read-only market-data tool, but agent/src/broker/robinhood.ts
-// (the one file that owns Robinhood tool names -- not this lane's to edit, wave2-spec lane D)
-// doesn't map it yet, so nothing in this module calls it today. Adding it is follow-up work for
-// whichever lane extends that mapping (see agent/src/recorder/poll.ts's header).
+// Robinhood's published quote tools (robinhood-agentic-mcp.md §2), plus get_equity_price_book
+// (Level 2, wave3-spec lane 5 / issue #43/#46 follow-up): a read-only market-data tool, now
+// mapped in agent/src/broker/robinhood.ts's TOOLS table and called by
+// agent/src/recorder/poll.ts's pollBook() for the equity asset class.
 export const READ_ONLY_TOOLS: ReadonlySet<string> = new Set([
   "get_equity_quotes",
   "get_crypto_quotes",

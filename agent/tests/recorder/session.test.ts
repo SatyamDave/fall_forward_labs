@@ -10,13 +10,21 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
-function quoteClient(): McpClient {
+function bookClient(): McpClient {
   return {
     connect: vi.fn(),
     close: vi.fn(),
     callTool: vi.fn().mockResolvedValue({
       content: [],
-      structuredContent: { quotes: [{ symbol: ["SPY"], bid: "100.00", ask: "100.05" }] },
+      structuredContent: {
+        books: [
+          {
+            symbol: "SPY",
+            bids: [{ price: "99.99", quantity: "500" }],
+            asks: [{ price: "100.05", quantity: "400" }],
+          },
+        ],
+      },
     }),
   } as unknown as McpClient;
 }
@@ -26,7 +34,7 @@ describe("runSession", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "recorder-session-"));
     try {
       const writer = new RecordWriter(path.join(dir, "out.csv"));
-      const client = quoteClient();
+      const client = bookClient();
       const sleep = vi.fn().mockResolvedValue(undefined);
 
       const result = await runSession({
@@ -48,6 +56,10 @@ describe("runSession", () => {
       expect(sleep).toHaveBeenCalledTimes(3);
       expect(sleep).toHaveBeenCalledWith(250);
       expect(writer.written.map((r) => r.seq)).toEqual([1, 2, 3, 4]);
+      // Every poll got a real book response -- all 4 counted as "l2", none fell back.
+      expect(result.depthCounts).toEqual({ l2: 4, top_of_book: 0 });
+      expect(writer.written[0]!.bids).toEqual([{ price: "99.99", qty: "500" }]);
+      expect(writer.written[0]!.asks).toEqual([{ price: "100.05", qty: "400" }]);
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -57,7 +69,7 @@ describe("runSession", () => {
     const dir = mkdtempSync(path.join(tmpdir(), "recorder-session-"));
     try {
       const writer = new RecordWriter(path.join(dir, "out.csv"));
-      const client = quoteClient();
+      const client = bookClient();
       const controller = new AbortController();
       let calls = 0;
       const sleep = vi.fn().mockImplementation(async () => {
