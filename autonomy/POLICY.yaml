@@ -84,7 +84,13 @@
     # Tests for the protected hooks.
     "tests/hooks/**",
     # The T3 reviewer; a softer prompt is a softer T3.
-    ".claude/agents/risk-auditor.md"
+    ".claude/agents/risk-auditor.md",
+    # Checks the paid and knowledge loops read from main: loosening the AI
+    # gate turns every paid loop on, loosening the scope check widens what a
+    # knowledge PR may touch.
+    "scripts/ci/ai_gate.py",
+    "tests/ci/**",
+    "scripts/knowledge/scope_check.py"
   ],
 
   # Never auto-merged, whatever tier a path would otherwise get. Deliberately
@@ -98,7 +104,10 @@
     ".github/workflows/**",
     ".claude/settings.json",
     ".claude/hooks/**",
-    "autonomy/**"
+    "autonomy/**",
+    "scripts/ci/ai_gate.py",
+    "tests/ci/**",
+    "scripts/knowledge/scope_check.py"
   ],
 
   # Ordered; the first matching rule sets a path's tier. Globs: "**" spans
@@ -175,7 +184,10 @@
     "loop-models":    {"enabled": false, "daily_usd": 4, "max_turns": 30, "timeout_minutes": 90, "open_pr_cap": 1},
     "loop-backlog":   {"enabled": false, "daily_usd": 1, "max_turns": 10, "timeout_minutes": 10, "open_pr_cap": 0},
     "loop-meta":      {"enabled": false, "daily_usd": 5, "max_turns": 30, "timeout_minutes": 60, "open_pr_cap": 1},
-    "loop-report":    {"enabled": false, "daily_usd": 1, "max_turns": 10, "timeout_minutes": 10, "open_pr_cap": 1}
+    "loop-report":    {"enabled": false, "daily_usd": 1, "max_turns": 10, "timeout_minutes": 10, "open_pr_cap": 1},
+    # ai-review.yml (both jobs). Zero budget on purpose: scripts/ci/ai_gate.py denies until a
+    # human sets real numbers from measured cost per review.
+    "loop-review":    {"enabled": false, "daily_usd": 0, "max_turns": 0, "timeout_minutes": 30, "open_pr_cap": 0}
   },
 
   # Backlog ranking (Phase C): rank = expected_value * confidence / cost,

@@ -7,14 +7,13 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parents[1]))
-from registry import Trial, record  # noqa: E402
+from registry import TRIALS, Trial, record  # noqa: E402
 
-LOG = HERE.parents[1] / "registry" / "trials.jsonl"
 EXPERIMENT = "study-0001-favorite-longshot"
 
 config_hash = hashlib.sha256((HERE / "config.json").read_bytes()).hexdigest()
-if LOG.exists() and any(
-    json.loads(line)["config_hash"] == config_hash for line in LOG.read_text().splitlines()
+if TRIALS.exists() and any(
+    json.loads(line)["config_hash"] == config_hash for line in TRIALS.read_text().splitlines()
 ):
     sys.exit("trial for this frozen config already recorded")
 res = json.loads((HERE / "results.json").read_text())
@@ -37,7 +36,7 @@ else:
         if k in s:
             metrics[k] = s[k]
 record(
-    LOG,
+    TRIALS,
     Trial(
         EXPERIMENT,
         config_hash,
@@ -48,4 +47,4 @@ record(
         f"results.json sha256 {hashlib.sha256((HERE / 'results.json').read_bytes()).hexdigest()}",
     ),
 )
-print(f"recorded {EXPERIMENT} -> {LOG}")
+print(f"recorded {EXPERIMENT} -> {TRIALS}")

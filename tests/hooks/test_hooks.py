@@ -343,7 +343,9 @@ def test_non_toml_under_limits_blocked_with_flag(repo: Path) -> None:
 def load_capture_learnings():
     import importlib.util
 
-    spec = importlib.util.spec_from_file_location("capture_learnings", HOOKS / "capture-learnings.py")
+    spec = importlib.util.spec_from_file_location(
+        "capture_learnings", HOOKS / "capture-learnings.py"
+    )
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module

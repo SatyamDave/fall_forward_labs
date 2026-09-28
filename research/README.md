@@ -13,7 +13,7 @@ Why: research and ML use the same data stack, and two lockfiles would drift, so 
 Run from the repository root:
 
 - `just setup` installs the locked environment (`uv sync --locked`).
-- `just test` runs pytest over `tests/`, `../ml/tests/` and `../data/`; `just lint` runs ruff and `mypy --strict` on `registry` and `ml` (mypy follows `ml`'s imports into `data`).
+- `just test` runs the Rust tests, then one pytest per suite: `tests/`, `../ml/tests/` and `../data/` together, then `../tests/hooks`, `../tests/knowledge`, `../tests/autonomy`, `../tests/ci` and `studies/0001-favorite-longshot/tests`. `just lint` runs ruff on `research/`, `ml/`, `data/`, `scripts/`, `tests/knowledge`, `tests/hooks`, `tests/ci` and `.claude/hooks` (not yet `autonomy/`, `tests/autonomy/` or `tests/replay/`, which fail it today), and `mypy --strict` on `registry` and `ml` (mypy follows `ml`'s imports into `data`).
 - `just walkforward <name>` runs `ml.validation.walkforward` on `backtest/configs/<name>.yaml`.
 - To run one test file outside `tests/`, pass the config: `uv run pytest -c pyproject.toml ../ml/tests/test_parity.py`.
 

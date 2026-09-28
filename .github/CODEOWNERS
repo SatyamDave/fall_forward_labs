@@ -1,0 +1,32 @@
+# CODEOWNERS requests review from the listed owner on a matching PR. It does not enforce a
+# review count: GitHub's "require review from code owners" needs one approval from any listed
+# owner, never two. Nothing enforces the root rule that protected-zone changes need two human
+# approvals today: branch protection and rulesets are unavailable on this private repo's plan
+# (the API returns 403), so this file only decides who gets pinged.
+#
+# Order matters: for each file the last matching pattern wins, so the catch-all comes first
+# and the protected-zone lines below it take precedence.
+
+# Everything else, for now
+*                                    @SatyamDave
+
+# Protected zones (root CLAUDE.md rule 3, plus autonomy/** per the bootstrap plan)
+/engine/crates/risk/**              @SatyamDave
+/config/limits/**                   @SatyamDave
+/ops/deploy/**                      @SatyamDave
+/fund/**                            @SatyamDave
+/.github/workflows/**               @SatyamDave
+/.claude/hooks/**                   @SatyamDave
+/.claude/settings.json              @SatyamDave
+/autonomy/**                        @SatyamDave
+
+# Autonomy Phase A additions (T3 per autonomy/POLICY.yaml, PR #3): the gate workflow and the
+# tests that pin its behavior are as sensitive as autonomy/ itself.
+/tests/autonomy/**                  @SatyamDave
+/tests/hooks/**                     @SatyamDave
+/.github/workflows/autonomy-gate.yml @SatyamDave
+
+# Checks the AI and knowledge loops read from main (T3 per autonomy/POLICY.yaml).
+/scripts/ci/ai_gate.py              @SatyamDave
+/tests/ci/**                        @SatyamDave
+/scripts/knowledge/scope_check.py   @SatyamDave

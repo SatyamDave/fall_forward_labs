@@ -200,6 +200,21 @@ def test_gate_cli_passes_t0(tmp_path):
     assert classify_mod.main(args) == 0
 
 
+@pytest.mark.parametrize(
+    "path", ["scripts/ci/ai_gate.py", "tests/ci/test_ai_gate.py", "scripts/knowledge/scope_check.py"]
+)
+def test_checks_the_loops_trust_are_protected_and_never_auto_merge(path):
+    # Loosening ai_gate.py turns every paid loop on; loosening scope_check.py widens what a
+    # knowledge PR may touch. Both are read from main, so a change to them is T3.
+    r = classify([path])
+    assert r["tier"] == "T3"
+    assert r["auto_merge_allowed"] is False
+    loose = json.loads(json.dumps(POLICY))
+    loose["protected_paths"] = []
+    loose["rules"].insert(0, {"pattern": "**", "tier": "T0"})
+    assert classify_mod.classify([path], (), loose)["auto_merge_allowed"] is False
+
+
 def test_gate_cli_counts_only_write_permission_approvals(tmp_path):
     files = [{"filename": "research/x.py"}]
     assert classify_mod.main(_write_gate_inputs(tmp_path, files, [review("alice")])) == 0

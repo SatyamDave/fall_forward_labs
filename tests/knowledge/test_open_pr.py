@@ -18,8 +18,11 @@ exit 1
 
 
 def git(cwd: Path, *args: str) -> str:
-    return subprocess.run(
-        ["git", "-C", str(cwd), *args], check=True, capture_output=True, text=True
+    return subprocess.run(  # noqa: S603 - fixed local git/bash in a temp repo
+        ["git", "-C", str(cwd), *args],  # noqa: S607 - fixed local git in a temp repo
+        check=True,
+        capture_output=True,
+        text=True,
     ).stdout.strip()
 
 
@@ -29,8 +32,8 @@ class OpenPrTest(unittest.TestCase):
         tmp = Path(self._tmp.name)
         self.origin = tmp / "origin.git"
         self.work = tmp / "work"
-        subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(self.origin)], check=True)
-        subprocess.run(["git", "clone", "-q", str(self.origin), str(self.work)], check=True)
+        subprocess.run(["git", "init", "-q", "--bare", "-b", "main", str(self.origin)], check=True)  # noqa: S603, S607 - fixed local git/bash in a temp repo
+        subprocess.run(["git", "clone", "-q", str(self.origin), str(self.work)], check=True)  # noqa: S603, S607 - fixed local git/bash in a temp repo
         (self.work / "scripts/knowledge").mkdir(parents=True)
         for name in ("scope_check.py", "open_pr.sh"):
             src = REPO / "scripts/knowledge" / name
@@ -64,8 +67,14 @@ class OpenPrTest(unittest.TestCase):
         self._tmp.cleanup()
 
     def run_script(self, **env: str) -> subprocess.CompletedProcess:
-        return subprocess.run(
-            ["bash", "scripts/knowledge/open_pr.sh", str(self.proposal), "knowledge/abc", "docs: x"],
+        return subprocess.run(  # noqa: S603 - fixed local git/bash in a temp repo
+            [  # noqa: S607 - fixed local git/bash in a temp repo
+                "bash",
+                "scripts/knowledge/open_pr.sh",
+                str(self.proposal),
+                "knowledge/abc",
+                "docs: x",
+            ],
             cwd=self.work,
             env={**self.env, **env},
             capture_output=True,

@@ -23,9 +23,36 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Reads autonomy/POLICY.yaml and scripts/ci/ai_gate.py from a trusted ref; the paid
+  # job below runs only on run=true, with the loop's turn, dollar and time budget.
+  gate:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      run: ${{ steps.gate.outputs.run }}
+      max_turns: ${{ steps.gate.outputs.max_turns }}
+      max_budget_usd: ${{ steps.gate.outputs.max_budget_usd }}
+      timeout_minutes: ${{ steps.gate.outputs.timeout_minutes }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+          sparse-checkout: |
+            autonomy
+            scripts/ci
+      - id: gate
+        env:
+          AUTONOMY_ENABLED: ${{ vars.AUTONOMY_ENABLED }}
+        run: python3 scripts/ci/ai_gate.py loop-knowledge || echo "::notice::paid step skipped by ai_gate.py"
+
   propose:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: ${{ fromJSON(needs.gate.outputs.timeout_minutes) }}
     permissions:
       contents: read
       pull-requests: read
@@ -56,7 +83,8 @@ jobs:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ github.token }}
           claude_args: |
-            --max-turns 60
+            --max-turns ${{ needs.gate.outputs.max_turns }}
+            --max-budget-usd ${{ needs.gate.outputs.max_budget_usd }}
             --allowedTools "Read,Edit,Write,Glob,Grep"
             --disallowedTools "Bash,WebFetch,WebSearch"
             --add-dir ${{ runner.temp }}/knowledge
