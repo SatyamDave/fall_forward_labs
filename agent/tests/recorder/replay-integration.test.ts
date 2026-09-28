@@ -48,8 +48,12 @@ describe("just record-quotes --dry-run output replays through qc-replay", () => 
         "1", // matches qc_replay's SAMPLE_INSTRUMENT and tests/replay/limits.toml
         "--symbol",
         "SPY",
+        // 50 ms polls with a 1 s gap allowance: a real gap check, but with room for a slow CI
+        // runner's scheduling jitter (5 ms polls with a 25 ms allowance flagged gaps on CI).
         "--poll-interval-ms",
-        "5",
+        "50",
+        "--gap-multiple",
+        "20",
         "--request-budget",
         "10",
         "--out",
