@@ -47,14 +47,23 @@ Architecture and data flow: docs/ARCHITECTURE.md.
 just setup | just check (fmt+lint+test+audit) | just test | just bench
 just replay | just backtest <cfg> | just paper <strategy> | just learnings
 just fmt | just lint | just walkforward <name>
+just eval | just agent-sim | just agent-sim-external | just bench-latency
+just report-ledger | just report-pnl | just record-quotes --dry-run | just study-0002
 ```
 `just` finds the root justfile from any subdirectory, so these work wherever you are.
 Run `just check` before every push; CI (`ci.yml`) runs the same recipe on every PR and on `main`.
 `just backtest` is a placeholder that exits 2 and `just paper` refuses; `just test` runs every
-suite (Rust, research/ml/data, hooks, knowledge, autonomy, ci, study 0001).
+suite (Rust, research/ml/data, hooks, knowledge, autonomy, ci, study 0001, study 0002).
+The second new command line is ADR-0040's agentic pipeline: `agent-sim` runs the TypeScript agent
+in fake mode against the real `qc-bridge`/SimVenue twice for a deterministic ledger hash;
+`agent-sim-external` runs the same loop through a mock Robinhood MCP server, never a real broker;
+`eval` is the free Tier 1 suite CI runs on every PR (replay, risk, walk-forward, registry, study
+guard, agent-sim); `bench-latency` measures real decision latency end to end
+(docs/reports/latency.md); `report-ledger`/`report-pnl` read the agent's own decision ledger.
 
 ## How we work
-- Start every session with docs/NOW.md: the current milestone (M0, offline foundation; see
+- Start every session with docs/NOW.md: the current milestone (M0 offline foundation is met; A1
+  Handoff and A2 Evals are built in fake/replay mode; A3 Broker is a mock-tested scaffold — see
   docs/ROADMAP.md), next task and blockers. If a task does not serve the milestone, say so and ask
   before proceeding. Owners and handoffs: docs/TEAM.md. Governing specs: docs/specs/README.md.
 - Research follows docs/process/research-cycle.md (register before measuring, baseline, leakage-free
