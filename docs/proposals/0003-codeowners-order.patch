@@ -1,0 +1,47 @@
+Proposal 0003: CODEOWNERS order and header. NOT APPLIED.
+
+PROTECTED: .github/CODEOWNERS is a protected path (T3). Apply only after a
+human edits it or the owner explicitly approves this protected-file change:
+
+    git apply docs/proposals/0003-codeowners-order.patch
+
+- Moves the `*` catch-all to the top. GitHub uses the last matching pattern,
+  so with `*` last it overrode every protected-zone line above it.
+- Corrects the header: it claimed a branch-protection ruleset enforces two
+  approvals, but branch protection and rulesets return HTTP 403 on this
+  private repo's plan, so no such ruleset exists.
+
+Every line still names only @SatyamDave, so the owner resolved per path does
+not change today; the order matters once different owners are listed.
+
+diff --git a/.github/CODEOWNERS b/.github/CODEOWNERS
+index 8950ed4..e9fd23f 100644
+--- a/.github/CODEOWNERS
++++ b/.github/CODEOWNERS
+@@ -1,8 +1,14 @@
+-# CODEOWNERS requests review from the listed owner on a matching PR. It does NOT enforce a
+-# review *count* — GitHub only supports "require review from code owners" (one approval), not
+-# "require two." The root rule that protected-zone changes need two human approvals is enforced
+-# by a branch-protection ruleset (added in the Phase 4 security-pipeline lane), not by this file
+-# alone. Treat this file as "who gets pinged," not as the two-approval guarantee.
++# CODEOWNERS requests review from the listed owner on a matching PR. It does not enforce a
++# review count: GitHub's "require review from code owners" needs one approval from any listed
++# owner, never two. Nothing enforces the root rule that protected-zone changes need two human
++# approvals today: branch protection and rulesets are unavailable on this private repo's plan
++# (the API returns 403), so this file only decides who gets pinged.
++#
++# Order matters: for each file the last matching pattern wins, so the catch-all comes first
++# and the protected-zone lines below it take precedence.
++
++# Everything else, for now
++*                                    @SatyamDave
+ 
+ # Protected zones (root CLAUDE.md rule 3, plus autonomy/** per the bootstrap plan)
+ /engine/crates/risk/**              @SatyamDave
+@@ -19,6 +25,3 @@
+ /tests/autonomy/**                  @SatyamDave
+ /tests/hooks/**                     @SatyamDave
+ /.github/workflows/autonomy-gate.yml @SatyamDave
+-
+-# Everything else, for now
+-*                                    @SatyamDave
