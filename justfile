@@ -46,6 +46,7 @@ test:
     cd {{research}} && uv run pytest -q ../tests/evals
     cd {{research}} && uv run pytest -q ../tests/ops
     cd {{research}} && uv run pytest -q studies/0001-favorite-longshot/tests
+    cd {{research}} && uv run pytest -q studies/0002-favorite-longshot-v2/tests
 
 # Known-vulnerability and license checks; each tool is skipped with a message if it is not installed
 audit:
@@ -122,6 +123,11 @@ test-hooks:
 study-0001:
     cd {{research}} && uv run python studies/0001-favorite-longshot/study.py
     cd {{research}} && uv run pytest studies/0001-favorite-longshot/tests -q
+
+# Study 0002 (favorite-longshot bias v2): offline analysis from the saved snapshot, then its checks
+study-0002:
+    cd {{research}} && uv run python studies/0002-favorite-longshot-v2/study.py
+    cd {{research}} && uv run pytest studies/0002-favorite-longshot-v2/tests -q
 
 # Tier 1 eval suite: free, deterministic, every PR. Writes out/eval/report.{json,md}.
 # See evals/README.md for the tier design (this is Tier 1 of 3).
