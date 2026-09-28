@@ -31,9 +31,12 @@ jobs:
       pull-requests: read
     steps:
       # The classifier and policy come from the base branch so a PR cannot
-      # loosen the rules it is judged by. The workflow file itself still runs
-      # from the PR; CODEOWNERS two-approval review on .github/workflows/ and
-      # autonomy/ covers that (see docs/plans/0002-autonomy.md).
+      # loosen the rules it is judged by. This workflow file still runs from
+      # the PR: a PR that edits it, or adds a job named `gate`, passes the gate.
+      # CODEOWNERS cannot require two approvals and rulesets return 403 on this
+      # plan, so nothing else enforces T3 on such a PR today. The real fix is an
+      # org-level required workflow or required reviewers on .github/workflows/
+      # (docs/plans/0002-autonomy.md, limit 5).
       - name: Check out the base branch policy
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
