@@ -1,0 +1,45 @@
+#!/usr/bin/env node
+// Entry point: QC_BRIDGE_BIN spawns qc-bridge (or a stand-in speaking the same protocol,
+// e.g. src/testkit/fake-bridge.ts); QC_AGENT_MODE picks the decider. Runs the loop to feed
+// exhaustion, then prints counts and the ledger sha256 (see justfile `agent-sim`).
+import { BridgeClient } from "./bridge.js";
+import { FakeDecider } from "./decider/fake.js";
+import { LiveDecider, PROMPT_VERSION } from "./decider/live.js";
+import type { Decider } from "./decider/types.js";
+import { ledgerSha256 } from "./ledger.js";
+import { runLoop } from "./loop.js";
+import type { LedgerMode } from "./types.js";
+
+async function main(): Promise<void> {
+  const mode: LedgerMode = process.env.QC_AGENT_MODE === "live" ? "live" : "fake";
+
+  const bridgeBin = process.env.QC_BRIDGE_BIN;
+  if (!bridgeBin) {
+    throw new Error(
+      "QC_BRIDGE_BIN is not set: point it at the qc-bridge binary, or at a stand-in " +
+        "process speaking the same JSON Lines protocol (e.g. src/testkit/fake-bridge.ts).",
+    );
+  }
+  const bridgeArgs = (process.env.QC_BRIDGE_ARGS ?? "").split(" ").filter(Boolean);
+
+  const bridge = new BridgeClient({ command: bridgeBin, args: bridgeArgs });
+  bridge.start();
+
+  const decider: Decider = mode === "live" ? new LiveDecider() : new FakeDecider();
+  const model = mode === "live" ? (process.env.ANTHROPIC_MODEL ?? "unspecified") : "fake-rule-v1";
+
+  try {
+    const counts = await runLoop({ bridge, decider, mode, promptVersion: PROMPT_VERSION, model });
+    console.log(
+      `decisions=${counts.decisions} accepted=${counts.accepted} rejected=${counts.rejected} no_trade=${counts.noTrades}`,
+    );
+    console.log(`ledger sha256: ${ledgerSha256()}`);
+  } finally {
+    await bridge.shutdown();
+  }
+}
+
+main().catch((err: unknown) => {
+  console.error(err instanceof Error ? err.message : err);
+  process.exitCode = 1;
+});
