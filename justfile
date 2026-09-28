@@ -147,6 +147,21 @@ report-ledger *args:
 report-pnl *args:
     python3 scripts/reports/pnl_report.py {{args}}
 
+# Issue #52: turn decision-ledger entries with known outcomes into new frozen scenarios under
+# evals/scenarios/from_ledger/ (provenance sidecar, synthetic/real label; never leaks the
+# outcome into the generated scenario's decision inputs). No-op, exit 0, if no ledger exists yet.
+scenarios-from-ledger *args:
+    python3 scripts/eval/scenarios_from_ledger.py {{args}}
+
+# Issue #53: champion/challenger promotion for agent prompt/tool-config versions. Runs the
+# frozen suite (fake mode; --live only when scripts/ci/ai_gate.py allows) and, if given
+# --champion-forward-ledger/--challenger-forward-ledger, a forward/shadow comparison; promotes
+# only when both tiers pass. Never edits agent/src/prompts/*.md or any decider default — writes
+# an append-only record to evals/promotions/ and, on PROMOTED, a recommendation file for
+# founders to act on by hand.
+promote *args:
+    python3 scripts/eval/promote.py {{args}}
+
 # ADR-0040 agent service (agent/): install pinned dependencies (npm ci, committed lockfile)
 agent-setup:
     cd {{agent}} && npm ci
@@ -189,3 +204,21 @@ agent-sim:
     echo "run 2 ledger sha256: $hash2"
     if [ "$hash1" != "$hash2" ]; then echo "FAIL: agent-sim ledger is not deterministic"; exit 1; fi
     echo "agent-sim deterministic across two runs"
+
+# Issue #46: polls Robinhood quotes for one instrument, writes a replay-store CSV under
+# data/raw/ (gitignored) and a data/catalog/<dataset>.json manifest (agent/src/recorder/).
+# Read-only: never calls a place/cancel/preview tool -- agent/src/recorder/allowlist.ts enforces
+# it, agent/tests/recorder/allowlist*.test.ts proves it. `--dry-run` runs entirely against the
+# in-process mock Robinhood MCP server (no network); without it, connects to ROBINHOOD_MCP_URL
+# like every other broker call in this repo. `just record-quotes --dry-run` alone writes a small
+# default-budget file; agent/tests/recorder/replay-integration.test.ts is what proves the output
+# actually replays through qc-replay.
+record-quotes *args:
+    cd {{agent}} && node_modules/.bin/tsx src/recorder/cli.ts {{args}}
+
+# Issues #31/#55: per-decision latency (raw bridge round trip, agent decide step, full loop) in
+# fake and replay mode, N decisions each (default 1000). Prints p50/p95/p99/max/throughput and
+# writes out/bench/latency-results.json (gitignored). See docs/reports/latency.md for the last
+# recorded run and the "first HFAT" definition it supports.
+bench-latency *args:
+    python3 scripts/bench/latency.py {{args}}
