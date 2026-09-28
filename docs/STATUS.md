@@ -6,7 +6,7 @@ Regenerated automatically by `.github/workflows/docs-status.yml` on every merge 
 Narrative docs: [project guide](guide/quant-core-guide.html) ·
 [base status](reports/base-status.md) · [NOW](NOW.md).
 
-Generated from `main` at **fa22726 2026-09-28**. Latest CI on `main`: **in_progress on fa22726**.
+Generated from `main` at **525399d 2026-09-28**. Latest CI on `main`: **in_progress on 525399d**.
 Paid AI loops: **off**.
 
 ## Open pull requests (1)
@@ -19,6 +19,7 @@ Paid AI loops: **off**.
 
 | PR | Title | Merged |
 |---|---|---|
+| [#85](https://github.com/SatyamDave/fall_forward_labs/pull/85) | External kill switch, real instrument, and protocol v1.2 for qc-bridge | 2026-09-28 |
 | [#83](https://github.com/SatyamDave/fall_forward_labs/pull/83) | Turn real trades into lessons, and only promote agent changes that prove better | 2026-09-28 |
 | [#82](https://github.com/SatyamDave/fall_forward_labs/pull/82) | Record real Robinhood price data for our asset | 2026-09-28 |
 | [#81](https://github.com/SatyamDave/fall_forward_labs/pull/81) | Measure real per-decision latency (bridge, decide, full loop) | 2026-09-28 |
@@ -33,24 +34,23 @@ Paid AI loops: **off**.
 | [#76](https://github.com/SatyamDave/fall_forward_labs/pull/76) | Stamp approved orders and prove the bridge refuses what it doesn't understand | 2026-09-28 |
 | [#62](https://github.com/SatyamDave/fall_forward_labs/pull/62) | Record the second merge batch as a dated founder exception | 2026-09-28 |
 | [#56](https://github.com/SatyamDave/fall_forward_labs/pull/56) | Add the three-tier eval harness (just eval, Tier 1) | 2026-09-28 |
-| [#61](https://github.com/SatyamDave/fall_forward_labs/pull/61) | Build the agent service against qc-bridge protocol v1 | 2026-09-28 |
 
 ## Recent commits on main
 
 | Commit | Date | Subject |
 |---|---|---|
+| `525399d` | 2026-09-28 | Merge pull request #85 from SatyamDave/wave2/bridge-control |
+| `4714a5c` | 2026-09-28 | chore: re-run PR checks after description fix |
+| `9c52c85` | 2026-09-28 | Merge main into wave2/bridge-control before merging #85 |
+| `195a15f` | 2026-09-28 | docs(bridge): document holiday-calendar gap and the missing kill-file heartbeat |
+| `eb26e68` | 2026-09-28 | feat(bridge): external kill switch, real instrument, protocol v1.2 |
+| `b4a9568` | 2026-09-28 | docs(status): regenerate live status from fa22726 [skip ci] |
 | `fa22726` | 2026-09-28 | Merge pull request #83 from SatyamDave/wave2/learning-loop |
 | `4529807` | 2026-09-28 | chore: re-run PR checks after description fix |
 | `6f86a03` | 2026-09-28 | Merge main into wave2/learning-loop before merging #83 |
 | `2000155` | 2026-09-28 | feat(evals): turn real trades into test scenarios, gate agent changes on proof (#52, #53) |
 | `878bdbe` | 2026-09-28 | docs(status): regenerate live status from 90b2ac1 [skip ci] |
 | `90b2ac1` | 2026-09-28 | Merge pull request #82 from SatyamDave/wave2/recorder |
-| `8788180` | 2026-09-28 | test(agent): close two side doors in the broker-isolation test |
-| `2b4752f` | 2026-09-28 | Merge main into wave2/recorder before merging #82 |
-| `a6036b7` | 2026-09-28 | feat(agent/recorder): record real Robinhood quotes into the replay-store format (#46) |
-| `84a0f7c` | 2026-09-28 | docs(status): regenerate live status from e0580e4 [skip ci] |
-| `e0580e4` | 2026-09-28 | Merge pull request #81 from SatyamDave/wave2/latency |
-| `f01b48d` | 2026-09-28 | feat(bench): measure real per-decision latency for issues #31/#55 |
 
 ## Decisions (ADRs)
 
@@ -71,6 +71,6 @@ Paid AI loops: **off**.
 ## Code and research
 
 - Engine crates: `bridge`, `core`, `gateway`, `inference`, `oms`, `orderbook`, `replay`, `risk`, `strategy-runtime`, `telemetry`
-- Rust #[test] functions: 95
-- Python test functions: 248
+- Rust #[test] functions: 128
+- Python test functions: 251
 - Registry trials: `demo` 4, `study-0001-favorite-longshot` 1, `study-0002-favorite-longshot-v2` 1
