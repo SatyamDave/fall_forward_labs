@@ -19,3 +19,5 @@ tz = "America/New_York"
 open = "09:30"
 close = "16:00"
 days = ["Mon", "Tue", "Wed", "Thu", "Fri"]
+# Resolved relative to this file's own directory, same convention as `limits` above.
+calendar = "calendars/nyse.toml"
