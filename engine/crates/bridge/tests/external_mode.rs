@@ -158,6 +158,29 @@ fn report_execution_illegal_transition_halts_the_engine() {
 }
 
 #[test]
+fn report_execution_for_an_unknown_client_order_id_halts_the_engine() {
+    // No order was ever submitted for id 1 in this process, so the OMS can't
+    // apply the report -- this must fail closed the same as any other
+    // reconciliation failure the OMS's state machine rejects, not be treated
+    // as a harmless no-op.
+    let mut engine = support::engine_external(&support::small_book_csv(), 1);
+    assert!(engine.next_decision_request().is_some());
+
+    let resp = call(
+        &mut engine,
+        r#"{"v":1,"id":"1","op":"report_execution","execution":
+            {"client_order_id":1,"event":"accepted","venue_order_id":"555","ts_ns":10}}"#,
+    );
+    assert_eq!(resp["ok"], false);
+    assert_eq!(resp["error"]["code"], "illegal_transition");
+    assert_eq!(
+        engine.status()["halted"],
+        "kill_switch",
+        "a report about an order we never sent must halt, not be ignored"
+    );
+}
+
+#[test]
 fn report_execution_in_sim_mode_is_a_protocol_error_with_no_state_change() {
     let mut engine = support::engine_from(&support::small_book_csv(), 1);
     let before = engine.status();
