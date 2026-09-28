@@ -96,3 +96,8 @@ learnings:
 # Tests for the Claude Code hooks in .claude/hooks (not part of `test`, which other phases own)
 test-hooks:
     cd {{research}} && uv run pytest ../tests/hooks -q
+
+# Study 0001 (favorite-longshot bias): offline analysis from the saved snapshot, then its checks
+study-0001:
+    cd {{research}} && uv run python studies/0001-favorite-longshot/study.py
+    cd {{research}} && uv run pytest studies/0001-favorite-longshot/tests -q
