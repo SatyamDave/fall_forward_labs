@@ -13,7 +13,12 @@ Expect an acknowledgement within 2 working days. A report that touches venue key
 
 - No secrets in git, ever: not in code, config, tests, fixtures, notebooks, commit messages, issues or PRs. `.env` is for local development only and is gitignored.
 - Production and paper secrets live in the secret manager (`ops/deploy/README.md`), scoped per strategy and per environment. Venue keys are trade-only, withdrawal-disabled and IP-allowlisted.
-- Never read, print, log or echo a secret, and never paste one into a prompt. Agents and CI jobs that read external content hold no credentials.
+- Never read, print, log or echo a secret, and never paste one into a prompt.
+- CI jobs that read PR or other external text do hold a credential: the model API key. The controls around it:
+  - Fork PRs get no secrets. `ai-review` runs only for same-repo, non-draft PRs.
+  - Every job that calls a paid model first asks the AI gate (`scripts/ci/ai_gate.py`, reading `autonomy/POLICY.yaml`), which ships switched off.
+  - The jobs that hold `ANTHROPIC_API_KEY` are `ai-review` (`security-review` and `code-review`: the PR diff, title, body and code, with a `pull-requests: write` token to post comments) and the `propose` jobs of `knowledge-sync`, `gardener` and `learnings-triage` (merged PR diffs, bodies and comments, and the learnings inbox, with a read-only token).
+  - None of these jobs gets venue, deploy or secret-manager credentials, or a token that can write code.
 - Pre-commit (gitleaks, detect-private-key) and CI (trivy secret scan, semgrep `p/secrets`) look for secrets on every change.
 - A leaked secret is rotated immediately, even if the commit never left a laptop. Removing it from history is not a substitute for rotation.
 
