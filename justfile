@@ -5,7 +5,8 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 engine := "engine"
 research := "research"
 # Python outside research/ and ml/ that ruff also checks, relative to research/. Not listed:
-# autonomy/ and tests/autonomy/ (protected paths that fail ruff today; fixing them needs a T3 PR).
+# autonomy/ and tests/autonomy/ (protected paths that fail ruff today; fixing them needs a T3 PR),
+# and tests/replay/generate_sample_day.py (S311, PTH123; the fixture it wrote must stay identical).
 py_extra := "../data ../scripts ../tests/knowledge ../tests/hooks ../tests/ci ../.claude/hooks"
 
 default:
