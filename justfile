@@ -77,10 +77,11 @@ paper strategy:
     @echo "refused: paper trading needs live market data, and bootstrap allows no venue connections ({{strategy}})" >&2
     @exit 1
 
-# Purged, embargoed walk-forward validation for a strategy or model
-# Writes backtest/reports/<name>/<date>.md and appends trials + a challenger to the registry.
-walkforward name:
-    cd {{research}} && PYTHONPATH=..:. uv run --locked python -m ml.validation.walkforward {{name}}
+# Purged, embargoed walk-forward validation for a strategy or model.
+# By default writes only to the gitignored out/walkforward/<name>/ (report, trials, challenger).
+# `just walkforward <name> --record` writes backtest/reports/<name>/<date>.md and the canonical registry.
+walkforward name *record:
+    cd {{research}} && PYTHONPATH=..:. uv run --locked python -m ml.validation.walkforward {{name}} {{record}}
 
 # Show untriaged session learnings
 learnings:

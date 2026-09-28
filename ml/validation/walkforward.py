@@ -1,9 +1,13 @@
-"""`just walkforward <name>`: purged, embargoed walk-forward of the baseline model.
+"""`just walkforward <name> [--record]`: purged, embargoed walk-forward of the baseline model.
 
 Reads backtest/configs/<name>.yaml, builds the point-in-time dataset, evaluates every config
 in the grid on identical folds, records each as a trial (failures included), computes deflated
 Sharpe with the cumulative registry trial count and PBO, registers the best config's exported
-artifact as a challenger, and writes backtest/reports/<name>/<date>.md, Assumptions first.
+artifact as a challenger, and writes a report with Assumptions first.
+
+Outputs go to the gitignored scratch directory out/walkforward/<name>/ (report, trial and model
+ledger, data, artifact), which each run replaces. Only `--record` writes the canonical registry
+(registry.REGISTRY_DIR) and backtest/reports/<name>/<date>.md.
 
 This is a label-level evaluation (enter at the touch, exit after the label horizon), not an
 execution backtest: latency and queue position are not simulated yet. The report says so.
@@ -12,6 +16,8 @@ execution backtest: latency and queue position are not simulated yet. The report
 import datetime as dt
 import hashlib
 import json
+import re
+import shutil
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -25,7 +31,7 @@ from data.recorders.synthetic import TICK, write_day
 from ml.datasets import DOWN, UP, Dataset, build, replay_top_of_book
 from ml.export import export
 from ml.features import FEATURE_NAMES, FEATURE_VERSION
-from ml.registry import ModelRecord, append
+from ml.registry import MODELS, ModelRecord, append
 from ml.training import TrainConfig, train
 from ml.validation import deflated_sharpe, pbo, purged_walk_forward, sharpe
 from registry import TRIALS, Trial, read, record, trial_count
@@ -82,11 +88,39 @@ def git_rev() -> str:
     return out.stdout.strip() or "unknown"
 
 
-def run(name: str) -> Path:
+@dataclass(frozen=True)
+class Outputs:
+    trials: Path
+    models: Path
+    reports: Path  # <reports>/<name>/<date>.md
+    data: Path
+    artifacts: Path  # <artifacts>/<name>/<sha>.json
+
+
+def outputs(name: str, record_to_registry: bool) -> Outputs:
+    if record_to_registry:
+        reports = ROOT / "backtest/reports"
+        return Outputs(TRIALS, MODELS, reports, ROOT / "data/raw", reports / "raw")
+    scratch = ROOT / "out/walkforward" / name
+    shutil.rmtree(scratch, ignore_errors=True)
+    return Outputs(
+        scratch / "registry/trials.jsonl",
+        scratch / "registry/models.jsonl",
+        scratch / "reports",
+        scratch / "data",
+        scratch / "artifacts",
+    )
+
+
+def run(name: str, record_to_registry: bool = False) -> Path:
+    # The name becomes a path under backtest/configs and out/, so it may not climb out of them.
+    if not re.fullmatch(r"[A-Za-z0-9_-]+", name):
+        raise SystemExit(f"refusing config name {name!r}: letters, digits, '-' and '_' only")
     cfg = load_config(name)
+    out = outputs(name, record_to_registry)
     data, label, val, model_cfg = cfg["data"], cfg["label"], cfg["validation"], cfg["model"]
     taker_bps = float(cfg["costs"]["fees"]["taker_bps"])
-    day = write_day(ROOT / "data/raw/synthetic", data["seed"], data["events"], data["date"])
+    day = write_day(out.data / "synthetic", data["seed"], data["events"], data["date"])
     books = replay_top_of_book(day / "l2_delta.parquet")
     h = int(label["horizon_events"])
     ds = build(books, TICK, h, source=f"synthetic seed={data['seed']} events={data['events']}")
@@ -123,9 +157,9 @@ def run(name: str) -> Path:
     rets = best.returns
     perf_pbo = pbo(np.column_stack([r.returns for r in results]), val["pbo_blocks"])
     # Every config in this run counts as a trial, on top of all earlier ones.
-    earlier = [t["metrics"]["sharpe"] for t in read(TRIALS) if t["experiment"] == name]
+    earlier = [t["metrics"]["sharpe"] for t in read(out.trials) if t["experiment"] == name]
     all_sr = earlier + [r.metrics["sharpe"] for r in results]
-    n_trials = trial_count(TRIALS, name) + len(results)
+    n_trials = trial_count(out.trials, name) + len(results)
     sd = float(np.std(rets))
     skew = float(np.mean((rets - rets.mean()) ** 3) / sd**3) if sd > 0 else 0.0
     kurt = float(np.mean((rets - rets.mean()) ** 4) / sd**4) if sd > 0 else 3.0
@@ -141,11 +175,11 @@ def run(name: str) -> Path:
     verdict = "PASS" if all(gates.values()) else "FAIL"
     for r in results:
         passed = r is best and verdict == "PASS"
-        record(TRIALS, Trial(name, r.config_hash, passed, r.metrics, notes="walkforward"))
+        record(out.trials, Trial(name, r.config_hash, passed, r.metrics, notes="walkforward"))
 
     final = train(ds.X, ds.y, best.tc)
     artifact, sha = export(final)
-    art_path = ROOT / "backtest/reports/raw" / name / f"{sha[:16]}.json"
+    art_path = out.artifacts / name / f"{sha[:16]}.json"
     art_path.parent.mkdir(parents=True, exist_ok=True)
     art_path.write_bytes(artifact)
     metrics = {**best.metrics, "deflated_sharpe": dsr, "pbo": perf_pbo}
@@ -159,17 +193,23 @@ def run(name: str) -> Path:
             config={**best.tc.as_dict(), "horizon": h, "trained_on": "all samples"},
             metrics=metrics,
             lineage={"git": git_rev(), "trial": best.config_hash, "parent": ""},
-        )
+        ),
+        out.models,
     )
 
     today = dt.datetime.now(dt.UTC).date().isoformat()
-    report = ROOT / "backtest/reports" / name / f"{today}.md"
+    report = out.reports / name / f"{today}.md"
     report.parent.mkdir(parents=True, exist_ok=True)
     rows = "\n".join(
         f"| {r.tc.C} | {r.metrics['sharpe']:.4f} | {int(r.metrics['trades'])} "
         f"| {r.metrics['net_bps']:.1f} | {r.metrics['max_drawdown_bps']:.1f} "
         f"| {r.metrics['turnover']:.3f} | {r.metrics['positive_folds']:.0%} |"
         for r in results
+    )
+    mode = (
+        "recorded to the canonical registry"
+        if record_to_registry
+        else "scratch run; the canonical registry was not touched (`--record` records)"
     )
     gate_rows = "\n".join(f"| {g} | {'met' if ok else 'not met'} |" for g, ok in gates.items())
     report.write_text(f"""# Walk-forward: {name} ({today})
@@ -216,13 +256,21 @@ Verdict: **{verdict}**.
 
 ## Registry
 
-- Trials: {len(results)} appended to `research/registry/log/trials.jsonl` (experiment `{name}`).
-- Challenger: artifact sha256 `{sha}` in `research/registry/log/models.jsonl`, \
+- Mode: {mode}.
+- Trials: {len(results)} appended to `{rel(out.trials)}` (experiment `{name}`).
+- Challenger: artifact sha256 `{sha}` in `{rel(out.models)}`, \
 status `challenger`, lineage git `{git_rev()}`. Artifact file (gitignored): \
-`{art_path.relative_to(ROOT)}`.
+`{rel(art_path)}`.
 """)
     return report
 
 
+def rel(p: Path) -> str:
+    return str(p.relative_to(ROOT)) if p.is_relative_to(ROOT) else str(p)
+
+
 if __name__ == "__main__":
-    print(run(sys.argv[1]))
+    args = sys.argv[1:]
+    if len(args) not in (1, 2) or (len(args) == 2 and args[1] != "--record"):
+        raise SystemExit("usage: walkforward <name> [--record]")
+    print(run(args[0], record_to_registry=len(args) == 2))

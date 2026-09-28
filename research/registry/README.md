@@ -15,4 +15,4 @@ The experiment registry: append-only JSON Lines, one record per trial or model e
 | `demo` | 4 trials in `trials.jsonl`, 1 challenger in `models.jsonl` | **Demo.** Synthetic data from `data/recorders/synthetic.py`, recorded by the first `just walkforward demo` run on 2026-09-27 (report `backtest/reports/demo/2026-09-27.md`). Tests mechanics only; says nothing about any market. | ml stack PR (#12) |
 | `study-0001-favorite-longshot` | 1 trial | Real registered study, verdict INSUFFICIENT EVIDENCE (no analysable markets). | `research/studies/0001-favorite-longshot/record_trial.py` |
 
-The demo records stay as history; lines are never edited or deleted.
+The demo records stay as history; lines are never edited or deleted. `just walkforward demo` now writes to the gitignored `out/` directory and adds nothing here; only `--record` appends to this ledger.

@@ -20,3 +20,5 @@ data/**/*.parquet
 secrets/
 .idea/
 .vscode/
+# Scratch outputs of demo and smoke runs (just walkforward without --record)
+out/
