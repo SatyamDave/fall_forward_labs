@@ -85,9 +85,15 @@ Phase A cannot touch these files. Each item names the lane that owns the file.
 
 1. **CODEOWNERS** (contributor lane): add `/autonomy/ @SatyamDave`,
    `/tests/autonomy/ @SatyamDave`, `/.github/workflows/autonomy-gate.yml
-   @SatyamDave`. CODEOWNERS sets who must review, not how many. The
-   two-approval requirement comes from the autonomy gate (T3 needs two) being
-   a required check.
+   @SatyamDave`. CODEOWNERS sets who must review, not how many; it cannot
+   require two approvals. The two-approval requirement exists only in the
+   autonomy gate, and the gate runs the PR's own copy of its workflow (item 5
+   under limits), so a PR that edits the gate can pass it. Rulesets and branch
+   protection return 403 on this plan today, so nothing enforces T3 on a PR
+   that edits `autonomy-gate.yml` or adds a job named `gate`. The real fix
+   needs an organization: an org ruleset that runs this gate as a required
+   workflow from the default branch, or required reviewers on
+   `.github/workflows/**`.
 2. **Branch protection / `scripts/harden-repo.sh`** (security lane): make
    `autonomy-gate / gate` a required status check on main. Also set
    "dismiss stale approvals" to match the gate's head-commit rule.
@@ -137,9 +143,14 @@ reading.
    gives the agent a bot identity that can leave a real review.
 5. **The gate workflow runs from the PR.** Under `pull_request`, GitHub runs
    the PR's copy of the workflow. The gate reads its policy and classifier from
-   the base branch, but a PR could still edit `autonomy-gate.yml` itself. That
-   file is covered by CODEOWNERS review and the T3 requirement, not by the gate
-   alone. Only the PR that first adds `classify.py` uses the PR's own
+   the base branch, but a PR can edit `autonomy-gate.yml` itself (for example
+   to `run: exit 0`), or add a job named `gate` to any workflow, and then pass
+   the gate whatever else it touches, `engine/crates/risk/**` included.
+   CODEOWNERS cannot require a count, and rulesets return 403 on this plan, so
+   today nothing else enforces T3 on such a PR; only a human reading the diff
+   catches it. The real fix is an org-level required workflow run from the
+   default branch, or required reviewers on `.github/workflows/**`, after the
+   repository moves to an organization. Only the PR that first adds `classify.py` uses the PR's own
    classifier, because main has none yet. That PR touches `autonomy/`, so it
    is T3 either way.
 6. **Two humans and one maintainer.** Today @SatyamDave is the only human with

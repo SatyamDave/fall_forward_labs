@@ -21,6 +21,6 @@ Runtime dependencies (numpy, pyarrow, scikit-learn, PyYAML) are pinned exactly i
 
 ## Contents
 
-- `registry/`: experiment registry client. Every trial is recorded, failures included. Records live in `registry/log/` (`trials.jsonl`, and `models.jsonl` from `ml.registry`).
+- `registry/`: experiment registry client. Every trial is recorded, failures included. Records live in `registry/log/` (`trials.jsonl`, and `models.jsonl` from `ml.registry`). `ml.monitoring.promote` refuses any model record whose walk-forward `verdict` is not PASS; records written before the field existed (the demo model `dbc74696…`) have none, so they cannot be promoted. The log is append-only and those records are left as written.
 - `features/`, `notebooks/`, `sandbox/`: see the README in each.
 - `tests/`: tests for research code.

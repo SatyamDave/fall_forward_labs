@@ -31,9 +31,12 @@ jobs:
       pull-requests: read
     steps:
       # The classifier and policy come from the base branch so a PR cannot
-      # loosen the rules it is judged by. The workflow file itself still runs
-      # from the PR; CODEOWNERS two-approval review on .github/workflows/ and
-      # autonomy/ covers that (see docs/plans/0002-autonomy.md).
+      # loosen the rules it is judged by. This workflow file still runs from
+      # the PR: a PR that edits it, or adds a job named `gate`, passes the gate.
+      # CODEOWNERS cannot require two approvals and rulesets return 403 on this
+      # plan, so nothing else enforces T3 on such a PR today. The real fix is an
+      # org-level required workflow or required reviewers on .github/workflows/
+      # (docs/plans/0002-autonomy.md, limit 5).
       - name: Check out the base branch policy
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -61,9 +64,27 @@ jobs:
           gh api --paginate "repos/$REPO/pulls/$PR/files?per_page=100" --jq '.[]' > "$RUNNER_TEMP/files.jsonl"
           gh api --paginate "repos/$REPO/pulls/$PR/reviews?per_page=100" --jq '.[]' > "$RUNNER_TEMP/reviews.jsonl"
 
+      # author_association says COLLABORATOR even for read access, so look up
+      # each approver's permission. A failed lookup records none: that
+      # approval does not count.
+      - name: Fetch approvers' repository permission
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          : > "$RUNNER_TEMP/permissions.jsonl"
+          jq -r 'select(.state == "APPROVED") | .user.login' "$RUNNER_TEMP/reviews.jsonl" | sort -u |
+          while read -r login; do
+            [[ "$login" =~ ^[A-Za-z0-9-]+$ ]] || continue
+            permission=$(gh api "repos/$REPO/collaborators/$login/permission" --jq .permission 2>/dev/null || echo none)
+            jq -cn --arg login "$login" --arg permission "$permission" '{$login, $permission}' >> "$RUNNER_TEMP/permissions.jsonl"
+          done
+
       - name: Classify and gate
         run: >
           python3 autonomy/classify.py --policy autonomy/POLICY.yaml gate
           --pr "$RUNNER_TEMP/pr.json"
           --files "$RUNNER_TEMP/files.jsonl"
           --reviews "$RUNNER_TEMP/reviews.jsonl"
+          --permissions "$RUNNER_TEMP/permissions.jsonl"

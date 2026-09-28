@@ -21,8 +21,12 @@ def review(login, state="APPROVED", commit=HEAD, assoc="COLLABORATOR", kind="Use
     return {"user": {"login": login, "type": kind}, "state": state, "commit_id": commit, "author_association": assoc}
 
 
+# Repository permission per login, as `gh api repos/{repo}/collaborators/{user}/permission` reports it.
+PERMISSIONS = {"alice": "write", "bob": "admin", "carol": "write", "author": "admin"}
+
+
 def gate(result, reviews, labels=()):
-    approvers, blockers = classify_mod.count_approvals(reviews, HEAD, "author")
+    approvers, blockers = classify_mod.count_approvals(reviews, HEAD, "author", PERMISSIONS)
     return classify_mod.gate(result, approvers, labels, blockers, POLICY)
 
 
@@ -117,8 +121,24 @@ def test_only_current_human_collaborator_approvals_count():
     bot = review("dependabot[bot]", kind="Bot")
     outsider = review("carol", assoc="CONTRIBUTOR")
     self_review = review("author")
-    approvers, _ = classify_mod.count_approvals([stale, bot, outsider, self_review], HEAD, "author")
+    approvers, _ = classify_mod.count_approvals([stale, bot, outsider, self_review], HEAD, "author", PERMISSIONS)
     assert approvers == []
+
+
+def test_only_approvers_with_write_maintain_or_admin_count():
+    # author_association is COLLABORATOR at any permission level, read-only included.
+    reviews = [review(login) for login in ("reader", "triager", "writer", "maintainer", "admin", "gone")]
+    permissions = {"reader": "read", "triager": "triage", "writer": "write", "maintainer": "maintain",
+                   "admin": "admin", "gone": "none"}
+    approvers, _ = classify_mod.count_approvals(reviews, HEAD, "author", permissions)
+    assert approvers == ["admin", "maintainer", "writer"]
+
+
+def test_read_only_collaborator_approval_does_not_satisfy_t2():
+    r = classify(["research/x.py"])
+    approvers, blockers = classify_mod.count_approvals([review("reader")], HEAD, "author", {"reader": "read"})
+    assert classify_mod.gate(r, approvers, [], blockers, POLICY)[0] is False
+    assert classify_mod.count_approvals([review("unknown")], HEAD, "author", {})[0] == []
 
 
 def test_latest_review_wins_and_changes_requested_blocks():
@@ -127,7 +147,7 @@ def test_latest_review_wins_and_changes_requested_blocks():
     assert ok is False
     assert any("changes requested" in p for p in problems)
     dismissed = [review("alice"), review("alice", state="DISMISSED")]
-    assert classify_mod.count_approvals(dismissed, HEAD, "author")[0] == []
+    assert classify_mod.count_approvals(dismissed, HEAD, "author", PERMISSIONS)[0] == []
 
 
 def test_comment_hash_inside_string_survives():
@@ -146,7 +166,7 @@ def test_all_loops_start_disabled():
     assert [t for t, s in POLICY["tiers"].items() if s["auto_merge_enabled"]] == ["T0"]
 
 
-def _write_gate_inputs(tmp_path, files, reviews, labels=(), changed=None):
+def _write_gate_inputs(tmp_path, files, reviews, labels=(), changed=None, permissions=PERMISSIONS):
     pr = {
         "changed_files": len(files) if changed is None else changed,
         "labels": [{"name": l} for l in labels],
@@ -156,8 +176,12 @@ def _write_gate_inputs(tmp_path, files, reviews, labels=(), changed=None):
     (tmp_path / "pr.json").write_text(json.dumps(pr))
     (tmp_path / "files.jsonl").write_text("\n".join(json.dumps(f) for f in files))
     (tmp_path / "reviews.jsonl").write_text("\n".join(json.dumps(r) for r in reviews))
+    (tmp_path / "permissions.jsonl").write_text(
+        "\n".join(json.dumps({"login": k, "permission": v}) for k, v in permissions.items())
+    )
     return ["gate", "--pr", str(tmp_path / "pr.json"), "--files", str(tmp_path / "files.jsonl"),
-            "--reviews", str(tmp_path / "reviews.jsonl")]
+            "--reviews", str(tmp_path / "reviews.jsonl"),
+            "--permissions", str(tmp_path / "permissions.jsonl")]
 
 
 def test_gate_cli_counts_rename_source(tmp_path):
@@ -174,3 +198,25 @@ def test_gate_cli_refuses_truncated_file_list(tmp_path):
 def test_gate_cli_passes_t0(tmp_path):
     args = _write_gate_inputs(tmp_path, [{"filename": "docs/research/graveyard.md"}], [])
     assert classify_mod.main(args) == 0
+
+
+@pytest.mark.parametrize(
+    "path", ["scripts/ci/ai_gate.py", "tests/ci/test_ai_gate.py", "scripts/knowledge/scope_check.py"]
+)
+def test_checks_the_loops_trust_are_protected_and_never_auto_merge(path):
+    # Loosening ai_gate.py turns every paid loop on; loosening scope_check.py widens what a
+    # knowledge PR may touch. Both are read from main, so a change to them is T3.
+    r = classify([path])
+    assert r["tier"] == "T3"
+    assert r["auto_merge_allowed"] is False
+    loose = json.loads(json.dumps(POLICY))
+    loose["protected_paths"] = []
+    loose["rules"].insert(0, {"pattern": "**", "tier": "T0"})
+    assert classify_mod.classify([path], (), loose)["auto_merge_allowed"] is False
+
+
+def test_gate_cli_counts_only_write_permission_approvals(tmp_path):
+    files = [{"filename": "research/x.py"}]
+    assert classify_mod.main(_write_gate_inputs(tmp_path, files, [review("alice")])) == 0
+    args = _write_gate_inputs(tmp_path, files, [review("alice")], permissions={"alice": "read"})
+    assert classify_mod.main(args) == 1

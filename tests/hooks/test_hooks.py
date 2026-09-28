@@ -227,3 +227,146 @@ def test_capture_learnings_quiet_session_writes_nothing(tmp_path: Path) -> None:
         == 0
     )
     assert not (tmp_path / ".claude/learnings/inbox").exists()
+
+
+# guard-protected: security review fixes (PR #11)
+
+
+@pytest.mark.parametrize(
+    "rel",
+    [
+        "Config/Limits/default.toml",
+        "engine/crates/RISK/src/lib.rs",
+        "config/./limits/../limits/default.toml",
+        "research/../config/limits/default.toml",
+    ],
+)
+def test_protected_match_ignores_case_and_dot_segments(repo: Path, rel: str) -> None:
+    result = run_hook(
+        "guard-protected.sh", tool_call("Write", file_path=str(repo) + "/" + rel, content="x")
+    )
+    assert result.returncode == 2
+    assert "protected zone" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "rel",
+    [
+        ".claude/settings.local.json",
+        ".claude/agents/risk-auditor.md",
+        "scripts/ci/ai_gate.py",
+        "tests/ci/test_ai_gate.py",
+        "scripts/knowledge/scope_check.py",
+    ],
+)
+def test_review_added_zones_blocked(repo: Path, rel: str) -> None:
+    result = run_hook(
+        "guard-protected.sh", tool_call("Write", file_path=str(repo / rel), content="{}")
+    )
+    assert result.returncode == 2
+    assert "protected zone" in result.stderr
+
+
+def test_settings_denies_edits_to_review_added_zones() -> None:
+    deny = json.loads((REPO / ".claude" / "settings.json").read_text())["permissions"]["deny"]
+    for rule in (
+        "Edit(/.claude/settings.local.json)",
+        "Edit(/.claude/agents/risk-auditor.md)",
+        "Edit(/scripts/ci/ai_gate.py)",
+        "Edit(/tests/ci/**)",
+        "Edit(/scripts/knowledge/scope_check.py)",
+    ):
+        assert rule in deny
+
+
+@pytest.mark.parametrize(
+    ("old", "new"),
+    [
+        ('max_position = "0.01"', 'max_position = "NaN"'),
+        ('max_position = "0.01"', 'max_position = "-Infinity"'),
+        ("max_order_rate_per_sec = 5", "max_order_rate_per_sec = nan"),
+        ("stale_data_ms = 1000", "stale_data_ms = inf"),
+        ('max_notional = "500"', 'max_notional = "lots"'),
+        ('max_notional = "500"', "max_notional = true"),
+    ],
+)
+def test_non_finite_or_non_numeric_limit_blocked_with_flag(repo: Path, old: str, new: str) -> None:
+    result = run_hook(
+        "guard-protected.sh", edit_limits(repo, old, new), env={"QC_ALLOW_PROTECTED": "1"}
+    )
+    assert result.returncode == 2
+    assert "guard-protected" in result.stderr
+
+
+def test_hook_exception_blocks(repo: Path) -> None:
+    payload = tool_call("Write", file_path=str(repo / "config/limits/default.toml"), content=5)
+    result = run_hook("guard-protected.sh", payload, env={"QC_ALLOW_PROTECTED": "1"})
+    assert result.returncode == 2
+    assert "guard-protected" in result.stderr
+
+
+def write_new_limits(repo: Path, name: str, content: str):
+    payload = tool_call("Write", file_path=str(repo / "config/limits" / name), content=content)
+    return run_hook("guard-protected.sh", payload, env={"QC_ALLOW_PROTECTED": "1"})
+
+
+@pytest.mark.parametrize(
+    "content",
+    [
+        'max_position = "1000000"\n',
+        "stale_data_ms = 60000\n",
+        'max_leverage = "3"\n',  # unknown key
+        '[venue]\nmax_position = "0.001"\n',  # unknown table key
+        "max_position = [1]\n",
+        "not toml = =\n",
+    ],
+)
+def test_new_limits_file_looser_than_default_blocked(repo: Path, content: str) -> None:
+    result = write_new_limits(repo, "strat-x.toml", content)
+    assert result.returncode == 2
+    assert "guard-protected" in result.stderr
+
+
+def test_new_limits_file_tighter_than_default_allowed(repo: Path) -> None:
+    content = 'max_position = "0.005"\nmax_notional = "500"\nstale_data_ms = 500\n'
+    assert write_new_limits(repo, "strat-x.toml", content).returncode == 0
+
+
+def test_non_toml_under_limits_blocked_with_flag(repo: Path) -> None:
+    result = write_new_limits(repo, "strat-x.json", '{"max_position": "1000000"}')
+    assert result.returncode == 2
+
+
+# capture-learnings redaction
+
+
+def load_capture_learnings():
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "capture_learnings", HOOKS / "capture-learnings.py"
+    )
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.mark.parametrize(
+    ("text", "secret"),
+    [
+        ('{"api_key": "AbC123xyzAbC123xyz"}', "AbC123xyzAbC123xyz"),
+        ("{'password': 'hunter2 with spaces'}", "hunter2"),
+        ('"client_secret" : "s3cr3tvalue"', "s3cr3tvalue"),
+        ("Authorization: Bearer abc.def-ghi_jkl", "abc.def-ghi_jkl"),
+        (
+            "token eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.c2lnbmF0dXJl here",
+            "eyJhbGciOiJIUzI1NiJ9",
+        ),
+        ("postgres://admin:S3cr3tP4ss@db.internal:5432/x", "S3cr3tP4ss"),
+        ("https://user:pa%40ss@example.com/", "pa%40ss"),
+    ],
+)
+def test_snippet_redacts_common_secret_shapes(text: str, secret: str) -> None:
+    out = load_capture_learnings().snippet(text)
+    assert secret not in out
+    assert "[REDACTED" in out

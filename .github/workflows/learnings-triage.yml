@@ -1,6 +1,14 @@
 # Weekly triage of .claude/learnings/inbox and the research journal (spec
 # section 8.3 and 8.5). Claude runs with a read-only token and exports a patch;
 # `open-pr` scope-checks it and opens one PR labeled `knowledge`.
+#
+# Opening the PR: `open-pr` uses GITHUB_TOKEN. The repository setting "Allow
+# GitHub Actions to create pull requests" is off (SECURITY runbook step 4), so
+# `gh pr create` fails and the job fails with the branch kept. Even with the
+# setting on, a PR created with GITHUB_TOKEN triggers no workflows, so its
+# required checks would never run. Until a GitHub App token replaces it, this
+# loop cannot open PRs; its paid step is also gated off by scripts/ci/ai_gate.py
+# once the AI workflow gating (#17) lands.
 name: learnings-triage
 
 on:
@@ -96,7 +104,7 @@ jobs:
                .claude/learnings/archive/. Do not delete or move files yourself.
             Learned entries must read `- YYYY-MM-DD: <lesson> ([#N](https://github.com/...))`
             with a source link; when an item has no PR or postmortem to link, put it in Gotchas
-            or a rule instead. Keep root CLAUDE.md within 150 lines and nested ones within 80.
+            or a rule instead. Never edit the root CLAUDE.md, .claude/agents/ or a protected zone; keep nested CLAUDE.md files within 80 lines.
 
             Task B, research journal: write docs/research/journal/${{ steps.context.outputs.week }}.md
             following docs/research/journal/README.md, from ${{ runner.temp }}/knowledge/context/research-log.txt,

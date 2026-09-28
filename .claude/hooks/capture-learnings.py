@@ -34,9 +34,16 @@ REDACTIONS = [
         "[REDACTED TOKEN]",
     ),
     (re.compile(r"\bxox[abposr]-[A-Za-z0-9-]{10,}"), "[REDACTED TOKEN]"),
+    (re.compile(r"\beyJ[\w-]+\.[\w-]+\.[\w-]+"), "[REDACTED JWT]"),
+    (re.compile(r"(?i)\b(Bearer|Basic|Token)\s+[\w.~+/=-]+"), r"\1 [REDACTED]"),
+    # Credentials in a URL: scheme://user:pass@host
+    (re.compile(r"(\b[a-z][a-z0-9+.-]*://[^/\s:@]*:)[^@\s/]+@", re.I), r"\1[REDACTED]@"),
+    # A quoted value may contain spaces; an unquoted one runs to the next space. The key may be
+    # quoted too, as in JSON or a Python dict.
     (
         re.compile(
-            r"(?i)\b([\w-]*(?:api[_-]?key|secret|token|password|passwd)[\w-]*)(\s*[:=]\s*)(\S+)"
+            r"""(?i)\b([\w-]*(?:api[_-]?key|secret|token|password|passwd)[\w-]*)(["']?\s*[:=]\s*)"""
+            r"""("[^"]*"|'[^']*'|\S+)"""
         ),
         r"\1\2[REDACTED]",
     ),

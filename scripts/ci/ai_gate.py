@@ -9,7 +9,8 @@ read, or a value that is missing, is a deny):
   - the repo variable named by "pause_repo_variable" (AUTONOMY_ENABLED), passed in the
     environment, is exactly "true" (unset denies);
   - the pause file named by "pause_file" (autonomy/PAUSE) does not exist;
-  - loops[LOOP] exists, is enabled, and has a positive daily_usd, max_turns and timeout_minutes.
+  - loops[LOOP] exists, is enabled, and has a positive, finite daily_usd, max_turns and
+    timeout_minutes.
 
 Prints the reason. Exit 0 allows, 1 denies. When GITHUB_OUTPUT is set, appends run=true|false
 and, on allow, max_turns, max_budget_usd and timeout_minutes for the paid step's arguments.
@@ -17,6 +18,7 @@ and, on allow, max_turns, max_budget_usd and timeout_minutes for the paid step's
 
 import argparse
 import json
+import math
 import os
 import sys
 from pathlib import Path
@@ -55,8 +57,14 @@ def decide(loop: str, root: Path, env: dict[str, str]) -> tuple[bool, str, dict[
     for key in BUDGET_KEYS:
         value = entry.get(key)
         # bool is an int subclass; true must not pass as a budget of 1.
-        if isinstance(value, bool) or not isinstance(value, (int, float)) or value <= 0:
-            return False, f"{loop}.{key} is {value!r}, needs a positive number", {}
+        # json.loads accepts Infinity and NaN, and NaN <= 0 is false.
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not math.isfinite(value)
+            or value <= 0
+        ):
+            return False, f"{loop}.{key} is {value!r}, needs a positive finite number", {}
         budget[key] = value
     return True, f"{loop} allowed", budget
 
