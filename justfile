@@ -200,3 +200,10 @@ agent-sim:
 # actually replays through qc-replay.
 record-quotes *args:
     cd {{agent}} && node_modules/.bin/tsx src/recorder/cli.ts {{args}}
+
+# Issues #31/#55: per-decision latency (raw bridge round trip, agent decide step, full loop) in
+# fake and replay mode, N decisions each (default 1000). Prints p50/p95/p99/max/throughput and
+# writes out/bench/latency-results.json (gitignored). See docs/reports/latency.md for the last
+# recorded run and the "first HFAT" definition it supports.
+bench-latency *args:
+    python3 scripts/bench/latency.py {{args}}
