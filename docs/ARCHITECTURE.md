@@ -6,8 +6,10 @@ is [docs/guide/quant-core-guide.html](guide/quant-core-guide.html).
 
 quant-core has two halves that share files but never a process: an offline side (data, research,
 ML, reports) and an execution side (the Rust engine). Today the execution side runs only against a
-simulated venue on a synthetic recording. No code connects to any venue, reads credentials, or
-calls an AI API.
+simulated venue on a synthetic recording. No code connects to any venue or reads credentials.
+Per [ADR-0040](adr/0040-agentic-decision.md), an agent service now exists that can call an AI API
+for the trade-decision step, but `QC_AGENT_MODE=fake` (no network, no API key) is the only mode CI
+runs; see "Agentic decision pipeline" below.
 
 The engine is the in-house `qc-*` crates under `engine/crates/`. ADR-0001 (Proposed) recommends
 building on NautilusTrader and hftbacktest; neither is a dependency, and nothing here wraps them.
@@ -105,9 +107,59 @@ process.
 | Study 0001 raw pages | `fetch.py` (network) | `data/raw/study-0001/` | no; hashes in `data/catalog/study-0001.json`; snapshot kept outside git on one founder's machine |
 | Study 0001 results | `just study-0001` | `research/studies/0001-favorite-longshot/results.json` | yes |
 
+## Agentic decision pipeline (ADR-0040: current plus planned)
+
+[ADR-0040](adr/0040-agentic-decision.md) (Accepted by Satyam 2026-09-28, pending Rohit's approval)
+moves the final trade decision to an AI agent, placed after the classifier and before risk. This is
+a **current plus planned** picture: solid boxes are built by this batch of PRs (the `agentic/bridge`,
+`agentic/agent-service` and `agentic/evals` lanes); dashed boxes remain planned. Nothing here is
+live: `QC_AGENT_MODE=fake` is the only mode CI runs, and the Robinhood adapter does not exist.
+
+```mermaid
+flowchart LR
+  subgraph lab["Offline lab (unchanged)"]
+    data[data + features] --> studies[registered studies] --> wf2[walk-forward] --> ledger1[(experiment ledger)]
+  end
+  subgraph rustengine["Rust engine (unchanged core, no network)"]
+    book2[order book] --> classifier[qc-inference classifier]
+  end
+  classifier --> bridge["qc-bridge<br/>(Rust, JSON Lines v1)"]
+  bridge -- DecisionRequest --> agentsvc["agent service<br/>(TypeScript, Claude Agent SDK)"]
+  agentsvc -- "submit_order_intent<br/>(only callable tool)" --> bridge
+  bridge --> risk["qc-risk + kill switch<br/>(unchanged, authoritative)"]
+  risk --> oms2[qc-oms]
+  oms2 --> gateway["gateway<br/>(approval-token check)"]
+  gateway --> simvenue[SimVenue]:::built
+  gateway -.-> rhmcp["Robinhood Agentic MCP<br/>(planned, not built)"]:::planned
+  wf2 -.-> classifier
+  classDef built fill:#e3f3ea,stroke:#1f7a4d
+  classDef planned stroke-dasharray: 5 5,fill:#f0f1f4,stroke:#7a7f8c
+  class bridge,agentsvc,risk,oms2 built
+  class gateway,rhmcp planned
+```
+
+**The wall still holds.** The agent service's only registered tool is `submit_order_intent`; the
+Robinhood MCP client is never in its process (`options.mcpServers` never names it), only in the
+gateway, which executes an order only after the bridge returns an approval token bound to the
+intent's hash. Risk and the kill switch run identically whether an intent came from the agent or
+from any other source — the agent proposes, risk and the kill switch dispose. See
+[section 9 of the project guide](guide/quant-core-guide.html#agents) for the plain-language version
+and ADR-0040's Challenges section for the evidence behind each limit below.
+
+| Failure | What happens | What does not happen |
+|---|---|---|
+| Agent call times out (`abortController` wall-clock deadline) | Treated as "no decision" for that request; the bridge logs it and the loop moves to the next `DecisionRequest` | No retry loop, no fallback order is guessed |
+| Agent returns an invalid `Decision` (fails `outputFormat` schema validation) | `qc-bridge` rejects it before it ever becomes an `order_intent`; recorded in the decision ledger as a rejected proposal | The bridge never falls back to inventing a "reasonable" order |
+| `maxBudgetUsd` or `maxTurns` exhausted mid-decision | The `query()` call ends without a usable `Decision`; treated the same as a timeout (no decision) | The agent is not granted extra budget automatically |
+| Gateway error (Robinhood MCP unreachable, rejected, or disconnected) | `intent_result` carries the error; OMS treats the order as never sent; reconciliation on the next cycle confirms no position changed | The bridge does not assume the order went through |
+| Human revokes the agent's Robinhood connection | New orders stop at the gateway on the next attempt | Already-received instructions are **not** cancelled retroactively (Robinhood §29.8) — this is why the gateway's own per-order/day caps and kill switch matter, not just the in-app disconnect |
+| Risk rejects the agent's proposed order | `intent_result.risk_reject` is set; recorded in the ledger; no order reaches OMS | The agent is never told to "try a smaller size" automatically — the next `DecisionRequest` carries the updated (unchanged) risk budget |
+
 ## Boundaries
 
-- No crate under `engine/` makes a network call or reads credentials; no process calls an AI API.
+- No crate under `engine/` makes a network call or reads credentials; no process calls an AI API,
+  **except** the agent service, which is not under `engine/`, holds no venue credentials, and whose
+  only callable action is `submit_order_intent` (ADR-0040).
 - Protected paths are listed in root `CLAUDE.md` rule 3. What enforces them today, and what does
   not, is in [docs/TEAM.md](TEAM.md#review-and-the-enforcement-gap).
 
@@ -121,3 +173,5 @@ process.
 | Slow-signal store with staleness and influence bounds | Final base spec | Vertical |
 | Decision layer (`platform/decide`) | ADR-0010, ADR-0011 | Measured need; distillation blocked |
 | L0-L3 learning, autonomy loops B-H, agent swarm | ADR-0013, ADR-0006, POLICY.yaml | A validated signal; enforced review |
+| Robinhood Agentic MCP gateway adapter, external kill switch, reconciliation | ADR-0040 (A3) | Recorded-response tests; risk-wrapper proven end to end |
+| Live (`QC_AGENT_MODE=live`) agent decisions, shadow, first agentic trade | ADR-0040 (A5, A6) | Counsel review, `loop-agent-eval` enabled with a real budget, both founders' sign-off |
