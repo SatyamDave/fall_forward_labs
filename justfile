@@ -40,9 +40,14 @@ audit:
     set -euo pipefail
     cd {{engine}}
     if command -v cargo-deny >/dev/null && [ -f deny.toml ]; then cargo deny check; else echo "skip: cargo-deny or engine/deny.toml missing (CI runs it; install with 'cargo install cargo-deny')"; fi
-    if command -v cargo-audit >/dev/null; then cargo audit; else echo "skip: cargo-audit not installed (CI runs it; install with 'cargo install cargo-audit')"; fi
+    if command -v cargo-audit >/dev/null; then cargo audit --deny warnings; else echo "skip: cargo-audit not installed (CI runs it; install with 'cargo install cargo-audit')"; fi
     cd ../{{research}}
     if command -v pip-audit >/dev/null; then uv export --format requirements-txt --no-hashes --quiet | pip-audit --strict -r /dev/stdin; else echo "skip: pip-audit not installed (CI runs it; install with 'uv tool install pip-audit')"; fi
+
+# Install the git pre-commit hook and run every hook once over the whole tree
+precommit:
+    uvx pre-commit install
+    uvx pre-commit run --all-files
 
 # Criterion benchmarks for engine hot paths
 bench:
@@ -75,9 +80,19 @@ paper strategy:
     @exit 1
 
 # Purged, embargoed walk-forward validation for a strategy or model
+# Writes backtest/reports/<name>/<date>.md and appends trials + a challenger to the registry.
 walkforward name:
-    @echo "not implemented yet: research/ml phase 6 ({{name}})"
+    cd {{research}} && PYTHONPATH=..:. uv run --locked python -m ml.validation.walkforward {{name}}
 
 # Show untriaged session learnings
 learnings:
-    @echo "not implemented yet: knowledge loop phase 5"
+    #!/usr/bin/env bash
+    set -euo pipefail
+    shopt -s nullglob
+    items=(.claude/learnings/inbox/*.md)
+    echo "${#items[@]} untriaged learning(s) in .claude/learnings/inbox"
+    for f in ${items[@]+"${items[@]}"}; do echo "  $f: $(head -1 "$f" | sed 's/^# //')"; done
+
+# Tests for the Claude Code hooks in .claude/hooks (not part of `test`, which other phases own)
+test-hooks:
+    cd {{research}} && uv run pytest ../tests/hooks -q
