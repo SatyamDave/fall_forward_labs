@@ -6,8 +6,8 @@ earlier prompts. The earlier prompts were read as condensations written by the c
 not the owner's full text; the research-loop prompt's author also said the full files were
 unavailable. Nothing is merged: `main` holds only the initial commit (`4975ec3`).
 
-Refreshed 2026-09-27 (later the same day) at audited revision `0cf6c2c` (integration candidate `f1293e3`
-plus fixes #17 `17e5abd` plus docs #8); command evidence is in
+Refreshed 2026-09-28 for `main` at `9f39eee`: PRs #1-#7 and #9-#17 are merged, #8 (docs) is open;
+command evidence is in
 [docs/reports/base-status.md](../reports/base-status.md). Rows marked *refreshed* replace earlier text.
 
 Status words: VERIFIED (I ran it, or a CI run shows it), HYPOTHESIS, UNKNOWN, REFUTED.
@@ -23,20 +23,20 @@ Status words: VERIFIED (I ran it, or a CI run shows it), HYPOTHESIS, UNKNOWN, RE
 | Graveyard `docs/research/graveyard.md` (#1) | | Empty table | | | keep |
 | Plan + ADR-0001..0005 (#5) | | | All Proposed | Venue (C1), Rust pin (C6) | fix: decide after jurisdiction |
 | CLAUDE.md hierarchy, VISION, ARCHITECTURE (#7) | `just check` exit 0; root 64 lines, nested ≤80 | Many MUST checks point at code other lanes own | | Learned format (C12, fixed in #7 `f9bf682`) | keep |
-| `.claude/` settings, hooks, rules, agents, skills (#11, `bootstrap/phase-3-claude-config`) | `just test-hooks` 30 passed on `e0f104d`, run 2026-09-27 | Hooks never exercised in a live Claude Code session | | | keep |
-| Knowledge loop workflows (#10) | `python3 -m unittest discover -s tests/knowledge` 10 OK on `d0ee3fb` | Claude steps never ran (no `ANTHROPIC_API_KEY`); scope-check run 36357505012 skipped (no label) | | GITHUB_TOKEN PRs trigger no checks (C10) | keep, dormant |
-| Contributor kit, CODEOWNERS, devcontainer (#8, #17) | *Refreshed:* docs match `0cf6c2c`; devcontainer runs as non-root `vscode`, trivy 0 HIGH | Devcontainer never built (no docker); CODEOWNERS catch-all `*` is last and overrides the protected lines | | CODEOWNERS vs two approvals (C11) | fix: apply `docs/proposals/0003-codeowners-order.patch` (protected; a human applies it); build devcontainer once |
-| Autonomy POLICY, classifier, gate (#3) | pytest 23 passed; gate run 36356358758 exits 1 as designed | Reports only; loops disabled | Phases B-H | T3 two humans (C3); scorecards tier (C9) | defer loops |
+| `.claude/` settings, hooks, rules, agents, skills (#11) | *Refreshed:* merged; 62 hook tests pass in `just check` on `main` | Hooks never exercised in a live Claude Code session; bind Claude Code only | | | keep |
+| Knowledge loop workflows (#10) | *Refreshed:* merged; 16 knowledge tests pass | Claude steps never ran: `scripts/ci/ai_gate.py` denies under `autonomy/POLICY.yaml`, and no `ANTHROPIC_API_KEY` exists | | GITHUB_TOKEN PRs trigger no checks (C10) | keep, dormant |
+| Contributor kit, CODEOWNERS, devcontainer (#8, #17) | *Refreshed:* docs match `main` `9f39eee` (#8 open); CODEOWNERS catch-all moved first (patch 0003 applied); devcontainer non-root, trivy 0 HIGH | Devcontainer never built (no docker); CODEOWNERS cannot require a count | | CODEOWNERS vs two approvals (C11) | build devcontainer once |
+| Autonomy POLICY, classifier, gate (#3, #17) | *Refreshed:* merged; 29 autonomy + 17 AI-gate tests pass; only write-or-higher approvers counted | Reports only; loops disabled; gate cannot block merge without branch protection | Phases B-H | T3 two humans (C3); scorecards tier (C9) | defer loops |
 | Self-learning ADR-0013, plan 0004 (#2) | | | L0-L3 all | | defer |
 | Decision layer ADR-0010/0011, data classes (#4) | | Vendor facts cited, many UNVERIFIED | Phases 2-7 | Distillation vs MCA (C2) | defer; keep data-classes.md |
 | Team plan (#6) | | *Refreshed:* NOW.md dropped from #6; plan 0006 kept | Phases 2-7 | Override rule (C4), ratchet (C5), sops (C8) | NOW.md superseded here |
 | ADR-0020 first vertical, plan 0005 (#9) | Kalshi OpenAPI/AsyncAPI SHA-256 recorded | Fee coefficients UNVERIFIED (PDF 429) | Base phases 1-6 | Venue (C1) | fix: human decides |
-| Security CI, `deny.toml`, pre-commit, harden script (#13, #17) | *Refreshed:* at `0cf6c2c` (#8) and `17e5abd` (#17), rust, python, miri, just-check, semgrep, osv-scanner, checkov, trivy pass; bandit clean; `CI=true just audit` fails when a scanner is missing | codeql skipped (`vars.CODE_SCANNING` unset), sbom release-only; AI reviews skipped on drafts; `scripts/harden-repo.sh` blocked by plan (403); AI workflows ungated until patch 0002 | | | keep; apply 0002 before any API key |
-| ML stack: data schemas, tob-v1 features, walk-forward, inference parity (#12, #17) | *Refreshed:* `just walkforward demo` exit 0, Verdict FAIL, writes only gitignored `out/`; `--record` writes the registry | Synthetic day only: mechanics, not evidence. `deflated_sharpe` returns a probability, so GATES.md "≥ 1.0" is effectively unreachable; exits 0 on FAIL | | GATES.md thresholds unreviewed | keep; plumbing only; human redefines the DSR gate |
-| Engine core (#15, `4556880`) | *Refreshed:* `cargo test --workspace` 42 passed on the candidate; `just replay` twice gives `d3400a1a...b8e0` both runs | Replay fixture `tests/replay/sample_day.csv` is synthetic; SimVenue ignores queue position and reuses displayed size; kill switch stops new orders and requests cancels (unconfirmed, no flattening, no external trigger); fuzz target not written; token-bucket test history not recoverable | | ADR-0001 proposes NautilusTrader; not used | keep; never cite as fill evidence |
+| Security CI, `deny.toml`, pre-commit, harden script (#13, #17) | *Refreshed:* on `main` `9f39eee`, `ci` (run 36365980069), `security` and `scorecard` succeed; AI workflows gated by patch 0002 (applied) | codeql skipped (`vars.CODE_SCANNING` unset), sbom release-only; `ci` was red on the #16 and #6 merges (bandit B310, fixed by #17); `scripts/harden-repo.sh` blocked by plan (403) | | | keep |
+| ML stack: data schemas, tob-v1 features, walk-forward, inference parity (#12, #17) | *Refreshed:* `just walkforward demo` exit 0, Verdict FAIL, writes only gitignored `out/`; a FAIL registers `no_signal`, never a challenger | Synthetic day only: mechanics, not evidence. `deflated_sharpe` returns a probability, so GATES.md "≥ 1.0" is effectively unreachable; exits 0 on FAIL | | GATES.md thresholds unreviewed | keep; plumbing only; founders redefine the DSR gate |
+| Engine core (#15) | *Refreshed:* 47 Rust tests pass on `main`; `just replay` matches the committed `tests/replay/expected_order_log.sha256` | Replay fixture is synthetic; SimVenue ignores queue position and reuses displayed size; halt stops new orders and resends cancels until none is open (no flattening, no external trigger); daily loss now halts; fuzz target not written; token-bucket test history not recoverable | | ADR-0001 proposes NautilusTrader; not used | keep; never cite as fill evidence |
 | Research cycle 0001 (#16, #17; registered `a299ba1`) | *Refreshed:* decision INSUFFICIENT EVIDENCE (listing cap dropped all 40 days, 0 analysable markets; hypothesis untested); 504 of 3000 requests; `just study-0001` reproduces `results.json` sha256 `115aca07...` from the preserved, hash-verified snapshot; 13 tests pass, 1 skipped by design | Snapshot kept outside git on one founder's machine; a clean clone exits 2; Kalshi data terms UNVERIFIED; fees UNVERIFIED | | | fix: approved shared store; register v2 with a bounded population |
-| CI running `just check` on PRs (#13, #17) | *Refreshed:* `just test` runs all seven suites; CI passes on #17 and #8 | `ci.yml` unmerged; autonomy `gate` fails by design (T2 approval) | | Root CLAUDE.md said "CI runs the same recipe" | fixed in root CLAUDE.md |
-| Integration candidate `f1293e3` + fixes #17 | *Refreshed:* `just check` exit 0 at `0cf6c2c`; all 17 PR heads are ancestors; #6 included after it dropped its NOW.md | Unreviewed; not on `main` | | | merge in the base-status sequence |
+| CI running `just check` (#13, #17) | *Refreshed:* `just test` runs all seven suites; CI runs them on every PR and on `main` | Required checks cannot be set (403) | | | keep |
+| `main` `9f39eee` | *Refreshed:* `just setup`, `just check`, replay, walk-forward demo, study 0001 from snapshot all verified on a clean clone | Merged with agent COMMENT reviews and the second human approval waived by the sole founder (dated exception, 2026-09-28) | | | #8 merges last |
 
 ## Missing inputs
 
@@ -65,7 +65,7 @@ Status words: VERIFIED (I ran it, or a CI run shows it), HYPOTHESIS, UNKNOWN, RE
 | C10 | Knowledge PRs must pass required checks | PRs opened with `GITHUB_TOKEN` trigger no workflows (#10) | Needs a GitHub App token (autonomy Phase B) |
 | C11 | Protected paths need two approvals (root rule 3, 4) | CODEOWNERS requests one review and cannot set a count (#8); rulesets unavailable on this plan | Unenforced today |
 | C12 | #7 Learned placeholders as plain text | #10 `scope_check.py` fails non-comment Learned text | Fixed in #7 `f9bf682` |
-| C13 | Rule 11: kill switch "tested in CI"; rule 7 replay blocks merge | *Refreshed:* #15 adds a kill switch (chaos tests in `cargo test`) and `just replay`; CI (#13) runs `cargo test` but is unmerged and cannot be required (403) | Tested on branches; still unenforced on `main` |
+| C13 | Rule 11: kill switch "tested in CI"; rule 7 replay blocks merge | *Refreshed:* #15 adds a kill switch (chaos tests in `cargo test`) and `just replay` against a committed hash; CI runs both on `main` but cannot be made required (403) | Tested in CI; not platform-enforced |
 | C14 | Decision spec: Jev latency "~70-500 ms" | #4: only a self-reported vendor benchmark exists | UNVERIFIED |
 
 ## Rejected or unsupported claims
@@ -75,7 +75,7 @@ Status words: VERIFIED (I ran it, or a CI run shows it), HYPOTHESIS, UNKNOWN, RE
 - HFT framing: nothing has been measured against a venue. See the definition below.
 - Jev latency figures: vendor-reported only (C14).
 - "Self-learning model stack" (root `CLAUDE.md` repo map, `docs/VISION.md:13`, `ml/__init__.py`, README in #8): no model, label or validated signal exists; describe `ml/` as the planned model pipeline.
-- "CI runs the same recipe" (root CLAUDE.md, justfile skip messages): `ci.yml` exists only on #13 and has run only on that PR.
+- "CI runs the same recipe" (root CLAUDE.md, justfile skip messages): true since #13 and #17 merged; earlier, no workflow existed.
 
 ## Deferred scope (not needed for M0)
 

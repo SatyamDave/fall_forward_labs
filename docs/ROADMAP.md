@@ -1,11 +1,11 @@
 # Roadmap
 
-Updated 2026-09-27. What must be true for an offline engineering foundation, what the first
+Updated 2026-09-28. What must be true for an offline engineering foundation, what the first
 specialization adds, and what is deferred and why. Current state is in
 [docs/reports/base-status.md](reports/base-status.md); the week-to-week view is
 [docs/NOW.md](NOW.md).
 
-## M0: offline engineering foundation (current)
+## M0: offline engineering foundation (met on `main` `9f39eee`, 2026-09-28)
 
 An identified, reproducible checkout on `main` that either founder can set up, check, and use to
 run one genuine offline end-to-end fixture demo, with its interfaces, limits and unfinished work
@@ -13,18 +13,18 @@ written down. It needs no venue, no credentials and no paid service.
 
 Definition of done:
 
-- [ ] The bootstrap PRs are merged into `main` in the order in [base-status](reports/base-status.md#merge-sequence),
-      with conflicts resolved by a human.
-- [ ] `just setup` and `just check` exit 0 on a fresh clone of `main`, and CI (`ci.yml`) passes
+- [x] The bootstrap PRs are merged into `main` ([base-status](reports/base-status.md#how-the-prs-were-merged));
+      this documentation PR (#8) merges last.
+- [x] `just setup` and `just check` exit 0 on a fresh clone of `main`, and CI (`ci.yml`) passes
       on `main`.
-- [ ] `just replay` reproduces the same order-log hash twice on the committed fixture.
-- [ ] `just walkforward demo` runs end to end and writes its report and registry rows to a known
-      place (it may, and on synthetic data does, end in FAIL).
-- [ ] Interfaces, risk checks and kill-switch behavior documented as built
+- [x] `just replay` reproduces the committed order-log hash twice on the committed fixture.
+- [x] `just walkforward demo` runs end to end and writes its report and registry rows to a known
+      place (gitignored `out/`) (it may, and on synthetic data does, end in FAIL).
+- [x] Interfaces, risk checks and kill-switch behavior documented as built (this PR)
       ([ARCHITECTURE](ARCHITECTURE.md), [kill-switch runbook](runbooks/kill-switch.md)).
-- [ ] Known defects recorded with owners: the unreachable deflated-Sharpe gate, the SimVenue fill
+- [x] Known defects recorded with owners: the unreachable deflated-Sharpe gate, the SimVenue fill
       limits, the unenforced review rules.
-- [ ] Study 0001 recorded with a decision (REJECT and INSUFFICIENT EVIDENCE are acceptable).
+- [x] Study 0001 recorded with a decision (REJECT and INSUFFICIENT EVIDENCE are acceptable).
 
 M0 does not require L0-L3 learning, autonomy loops, the decision layer, a live track record,
 multi-agent services or a chosen venue.
@@ -62,7 +62,7 @@ authorization.
 ## History: the Final Base "base complete" checklist
 
 Preserved from [docs/specs/0005-final-base.md](specs/0005-final-base.md) Phase 5. Status as of
-2026-09-27 in brackets.
+2026-09-28 in brackets.
 
 - ADR-0020 and ADR-0021 human-approved [0020 Proposed, 0021 not written]
 - Audit complete, cuts in ROADMAP with code removed [audit in #14, no code removed]
@@ -72,7 +72,7 @@ Preserved from [docs/specs/0005-final-base.md](specs/0005-final-base.md) Phase 5
 - Slow-signal path rejects stale, unsigned, over-influence; leakage-flagged features blocked [not started]
 - L0-L3 run for the vertical in shadow or offline with demotion tested [not started]
 - Autonomy loops within budget, weekly cost report [not started]
-- Security green, zero High/Critical on `main`, hardening script run [CI passes on #17 and #8, nothing on `main`; hardening blocked by plan]
+- Security green, zero High/Critical on `main`, hardening script run [CI green on `main` `9f39eee`, no known vulnerabilities; hardening blocked by plan (403)]
 - Fresh-clone test to a passing PR without asking [not run]
 - CLAUDE.md within budget, `/context` evidence, no references to removed paths [budgets met; `/context` not run]
 

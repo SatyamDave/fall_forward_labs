@@ -1,7 +1,7 @@
 # Team
 
 Who works on quant-core, who owns what, how work is handed over, and which decisions are open.
-Updated 2026-09-27. Draft for both founders to edit; the process spec is
+Updated 2026-09-28. Draft for both founders to edit; the process spec is
 [docs/specs/0006-team.md](specs/0006-team.md) as amended by
 [docs/specs/0007-research-loop.md](specs/0007-research-loop.md) §8.
 
@@ -47,7 +47,7 @@ Simultaneous work uses separate branches or git worktrees, one per task.
 What the rules ask for: protected-zone changes need human approval, loosening a risk limit needs
 two human approvals (root rules 3 and 4), and autonomy T3 needs two humans (#3).
 
-What the platform enforces today: nothing. Checked 2026-09-27:
+What the platform enforces today: nothing. Checked 2026-09-28:
 
 - Branch protection and rulesets return HTTP 403 "Upgrade to GitHub Pro or make this repository
   public" on this private, user-owned repository. No check is required and `main` accepts a direct
@@ -55,10 +55,17 @@ What the platform enforces today: nothing. Checked 2026-09-27:
 - GitHub does not let a PR author approve their own PR. Every PR so far is authored by
   @SatyamDave, so with one collaborator no PR can receive any approving review, and with two
   collaborators a founder-authored PR can receive at most one.
-- CODEOWNERS requests a review from the listed owner. It cannot require a count, and it does
-  nothing without a branch rule that requires code-owner review.
+- CODEOWNERS requests a review from the listed owner (the catch-all now comes first, so the
+  protected-path lines win). It cannot require a count, and it does nothing without a branch rule
+  that requires code-owner review.
 - `.claude/hooks/guard-protected.sh` (#11) blocks protected edits only inside Claude Code sessions
   started with that settings file. It does not bind humans, other tools or CI.
+
+Dated exception, 2026-09-28: on the owner's explicit instruction, PRs #1-#7 and #9-#17 were
+merged, including protected-zone (T3) changes, with the second human approval **waived by the sole
+founder**. Agent reviewers left COMMENT reviews, which are not approvals. This records a human
+decision; it is not enforcement and not a precedent. Details:
+[base-status](reports/base-status.md#how-the-prs-were-merged).
 
 Proposed policy, for both founders to accept or change (nothing here is applied):
 
@@ -79,7 +86,7 @@ Proposed policy, for both founders to accept or change (nothing here is applied)
 | Second founder identity and GitHub handle | Two-person review, backup owners | this file |
 | Operators' jurisdiction and entity | Venue choice, any account | ADR-0003 (#5), ADR-0020 (#9) |
 | First vertical: kalshi-events or crypto perps | Vertical adapter, specialization milestone | ADR-0020 (#9), ADR-0003 (#5) |
-| Accept or revise ADRs 0001-0005 | Toolchain pin, registry, engine dependency | #5 |
+| Accept or revise ADRs 0001-0005 (merged, still Proposed) | Toolchain pin (patch 0001), registry, engine dependency | `docs/adr/` |
 | GitHub plan or organization for rulesets | Any enforced review or required check | this file |
-| Whether to add `ANTHROPIC_API_KEY` | AI review and knowledge-loop workflows (paid calls) | #13, #10 |
+| Whether to add `ANTHROPIC_API_KEY` and enable a loop in `autonomy/POLICY.yaml` | AI review and knowledge-loop workflows (paid calls, gated by `scripts/ci/ai_gate.py`) | `autonomy/POLICY.yaml` |
 | Founders' agreement (IP, roles) | Anything beyond research; outside the repo | team spec, human checklist |

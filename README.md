@@ -7,19 +7,18 @@ trades, nothing connects to a venue for trading, and no strategy has shown an ed
 
 | Audited | Value |
 |---|---|
-| Date | 2026-09-27 |
-| `main` | `4975ec3` (initial commit, one README). No PR is merged |
-| Audited revision | `0cf6c2c` (this branch) = `integration/base-candidate-2026-09-27` `f1293e3` (PRs #1-#16) + `fix/base-integration` `17e5abd` (#17) + docs; unreviewed |
-| Documentation verdict | **Complete** for snapshot `0cf6c2c` |
-| Engineering foundation verdict | **Partially ready** (reasons in [base-status](docs/reports/base-status.md#verdicts)) |
+| Date | 2026-09-28 |
+| Audited revision | `main` `9f39eee`: PRs #1-#7 and #9-#17 merged on the owner's instruction; #8 (these docs) merges last |
+| Documentation verdict | **Complete** for `main` `9f39eee` plus this PR |
+| Engineering foundation verdict | **Ready as an offline foundation**, with open conditions ([base-status](docs/reports/base-status.md#verdicts)). Not a trading system; no edge shown |
 | Live trading | Disabled and not built. `just paper` refuses; no venue adapter exists |
 | Venue connectivity | None. The only market-data network code is study 0001's read-only client for Kalshi's public endpoints |
-| Paid agent jobs | None running: no workflows on `main`, no `ANTHROPIC_API_KEY` secret. The four AI workflows stay ungated until `docs/proposals/0002-ai-workflow-gating.patch` is applied |
+| Paid agent jobs | None. The four AI workflows run only if `scripts/ci/ai_gate.py` allows them under `autonomy/POLICY.yaml`, which denies today; no `ANTHROPIC_API_KEY` exists |
 | Auto-merge | Not enabled (`allow_auto_merge: false`); no workflow enables it |
 
-Biggest blockers: nothing is on `main` and nothing is reviewed; review rules are unenforceable
-on the current GitHub plan; three protected-file patches await approval; the first vertical and
-the operators' jurisdiction are undecided (vertical PENDING).
+Biggest open items: review is not platform-enforced on this GitHub plan (403); the second
+founder is unknown; the devcontainer is unbuilt; study 0001's data lives off git; ADRs, the
+deflated-Sharpe threshold and the first vertical are undecided (vertical PENDING).
 
 ## Contents
 
@@ -41,11 +40,11 @@ Proposed pending the operators' jurisdiction.
 
 ## 2. Current state
 
-- All work is on 17 open PRs, every one authored by @SatyamDave and none reviewed. The
-  integration candidate merges #1-#16; #17 fixes what broke when combined; this PR (#8) adds docs.
-- At `0cf6c2c`, `just check` exits 0 with every suite executed, and every CI job that ran passes
-  except `gate`, which fails by design until a human approves (T2). Branch protection and
-  rulesets return HTTP 403 on this plan.
+- PRs #1-#7 and #9-#17 were merged on 2026-09-28 after agent reviews (COMMENT reviews, not
+  approvals). The sole founder waived the second human approval for protected-zone changes, a
+  dated exception recorded in [base-status](docs/reports/base-status.md#how-the-prs-were-merged).
+- On `main` `9f39eee`, `just check` exits 0 with every suite executed, and CI (`ci`, `security`,
+  `scorecard`) is green. Branch protection and rulesets return HTTP 403 on this plan.
 - Unverified: the devcontainer (no docker on the verifying machine), any behavior on Linux or on
   a second founder's machine.
 
@@ -59,10 +58,10 @@ Proposed pending the operators' jurisdiction.
 | Rust inference with Python parity | #12 | tests only | Not wired into the engine |
 | Experiment registry (JSONL, one ledger) | #1, #12, #17 | yes | Not MLflow (ADR-0005 says MLflow) |
 | CLAUDE.md hierarchy, VISION, ARCHITECTURE | #7, #14 | n/a | Guidance, not enforcement |
-| `.claude/` settings, hooks, rules, agents, skills | #11 | 30 hook tests | Hooks bind Claude Code sessions only |
-| Knowledge-loop workflows and scope check | #10 | 10 tests | Never ran; would call Anthropic |
-| CI, security scanners, pre-commit, harden script | #13 | CI green on #13 | Harden script blocked by plan (403) |
-| Autonomy tier policy, gate, AI-workflow gate script | #3, #17 | 23 + 15 tests | Loops not built; workflows call the gate only after patch 0002 |
+| `.claude/` settings, hooks, rules, agents, skills | #11 | 62 hook tests | Hooks bind Claude Code sessions only |
+| Knowledge-loop workflows and scope check | #10 | 16 tests | Never ran; gated off by POLICY.yaml |
+| CI, security scanners, pre-commit, harden script | #13 | CI green on `main` | Harden script blocked by plan (403) |
+| Autonomy tier policy, gate, AI-workflow gate script | #3, #17 | 29 + 17 tests | Loops not built; AI workflows denied by policy |
 | Study 0001 favorite-longshot | #16, #17 | yes, from snapshot | INSUFFICIENT EVIDENCE; snapshot is off git |
 | ADRs 0001-0006, 0010, 0011, 0013, 0020; plans; data classes | #2-#5, #9 | n/a | All Proposed |
 | Contributor docs, templates, devcontainer (non-root) | #8, #17 | n/a | Devcontainer never built |
@@ -71,13 +70,13 @@ Per-component detail with evidence: [docs/audits/0001-reality-audit.md](docs/aud
 
 ## 4. What you can run today
 
-On a checkout of this branch at `0cf6c2c`, offline, with no credentials:
+On a checkout of `main`, offline, with no credentials:
 
 | Command | Kind | What it does | Expected result |
 |---|---|---|---|
 | `just setup` | setup | `cargo fetch`; `uv sync --locked` | exit 0; creates `research/.venv` |
 | `just check` | checks | fmt, clippy, ruff, mypy, all seven test suites, audits | exit 0, about 21 s |
-| `just replay` | offline replay, simulated execution | Replays `tests/replay/sample_day.csv` twice | `run 1/2 order-log sha256: d3400a1a...b8e0`, `replay deterministic`, exit 0 |
+| `just replay` | offline replay, simulated execution | Replays `tests/replay/sample_day.csv` twice, compares with the committed hash | `d3400a1a...b8e0` twice, `replay deterministic and matches the committed order log` |
 | `just walkforward demo` | offline research demo | Synthetic day through features, training, walk-forward | Verdict FAIL, exit 0; writes only gitignored `out/` (`--record` writes the registry) |
 | `just learnings` | knowledge | Counts inbox files | `0 untriaged learning(s)` |
 
@@ -93,7 +92,7 @@ Not available:
 
 ## 5. Quickstart
 
-Prerequisites, versions as verified on 2026-09-27 (macOS arm64): Rust/cargo 1.97.1 (the repo asks
+Prerequisites, versions as verified on 2026-09-28 (macOS arm64): Rust/cargo 1.97.1 (the repo asks
 for floating `stable` via `engine/rust-toolchain.toml`, honoured only with rustup), uv 0.11.28
 (it provides Python 3.12 for `research/`), just 1.58.0, git, and read access to the private repo
 `SatyamDave/fall_forward_labs`. Optional for a full audit: cargo-deny, cargo-audit, pip-audit;
@@ -101,9 +100,8 @@ without them `just audit` prints `SKIPPED (not a pass)`, exits 0 locally and fai
 
 ```sh
 git clone https://github.com/SatyamDave/fall_forward_labs.git && cd fall_forward_labs
-git checkout bootstrap/phase-7-contributor   # main has only a README until the PRs merge
 just setup    # downloads crates from crates.io and packages from PyPI
-just check    # exit 0 at 0cf6c2c
+just check    # exit 0 on main 9f39eee
 just replay   # the smallest offline end-to-end demo
 ```
 
@@ -201,8 +199,8 @@ interactive).
 
 Dated evidence: [docs/reports/base-status.md](docs/reports/base-status.md). In short:
 
-- Passed at `0cf6c2c`: setup, `just check` (all suites), audits, replay, bandit, CI jobs.
-- Failing by design: autonomy `gate` (needs a human T2 approval).
+- Passed on `main` `9f39eee`: setup, `just check` (all suites), audits, replay, CI.
+- CI was red on `main` for two intermediate merges (#16, #6; bandit B310), fixed by #17.
 - Not run or unavailable: devcontainer build, fuzzing, bench timings, codeql, AI reviews.
 - Study 0001 cannot be reproduced from a clean clone; the snapshot is outside git on one
   founder's machine until an approved shared store exists.
@@ -220,7 +218,6 @@ Dated evidence: [docs/reports/base-status.md](docs/reports/base-status.md). In s
 | TypeSafe MCA §2.3(b) distillation clause (ADR-0011) | Blocks decision-layer distillation | Decision layer | legal review |
 | GATES.md thresholds, DSR gate units | Unreviewed | Any promotion | founders |
 | Second founder, GitHub plan | Unknown | Enforced review | founders |
-| Protected patches 0002 (AI gating), 0003 (CODEOWNERS) | Prepared, unapplied | API key, review routing | founders |
 
 ## 13. Roadmap
 
@@ -228,9 +225,9 @@ M0 is the offline foundation on `main`; M1 is the first specialization, after th
 chosen. Full list, deferred items with reasons, and the historical "base complete" checklist:
 [docs/ROADMAP.md](docs/ROADMAP.md). Next three steps:
 
-1. Review and merge the PRs in the [base-status merge sequence](docs/reports/base-status.md#merge-sequence), then #17 and #8.
-2. Apply the [protected patches](docs/proposals/README.md) after approval, 0002 before any API key.
-3. Register study 0001 v2 with a population measured by metadata-only calls first.
+1. Register study 0001 v2 with a population measured by metadata-only calls first.
+2. Move to a GitHub plan where rulesets work, and add the second founder.
+3. Decide the ADRs (then apply [patch 0001](docs/proposals/README.md)) and the deflated-Sharpe threshold.
 
 ## 14. Contributing, security, confidentiality
 

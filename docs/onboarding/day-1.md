@@ -5,14 +5,13 @@ protected.
 
 ## 1. Get the environment working
 
-`main` has only a README until the PRs merge; check out `bootstrap/phase-7-contributor` first
-(README §5 lists prerequisites).
+Work from a clone of `main` (README §5 lists prerequisites).
 
 | Command | Purpose | Expected output |
 |---|---|---|
 | `just setup` | download crates and PyPI packages, create `research/.venv` | exit 0 |
 | `just check` | fmt, lint, all test suites, audits | exit 0 (about 21 s on the verifying Mac) |
-| `just replay` | replay the synthetic day twice | two identical `order-log sha256` lines and `replay deterministic` |
+| `just replay` | replay the synthetic day twice | two identical `order-log sha256` lines and `replay deterministic and matches the committed order log` |
 
 Any other failure on a fresh clone is a bug: open an issue with the command's output rather than
 working around it. The devcontainer (`.devcontainer/`) has never been built, so treat it as

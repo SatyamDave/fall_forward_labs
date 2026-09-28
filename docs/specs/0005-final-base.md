@@ -1,6 +1,6 @@
 > **Origin:** condensed by the coordinating agent from a prompt the repo owner pasted in chat on 2026-09-27; not the verbatim prompt. The full text is not in the repository.
 >
-> **Status:** Phase 0 only (#9, draft; ADR-0020 Proposed). The Phase 5 base-complete checklist is preserved as history in docs/ROADMAP.md with a proposed scoped correction.
+> **Status:** Phase 0 only (#9, merged; ADR-0020 Proposed). The Phase 5 base-complete checklist is preserved as history in docs/ROADMAP.md with a proposed scoped correction.
 
 # quant-core final base spec (from the repo owner; runs last)
 

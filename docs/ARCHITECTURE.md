@@ -1,6 +1,6 @@
 # Architecture
 
-What is built at the audited revision `0cf6c2c` (2026-09-27), then what is planned. Nothing
+What is built on `main` at `9f39eee` (2026-09-28), then what is planned. Nothing
 here is on `main` yet; see [docs/reports/base-status.md](reports/base-status.md).
 
 quant-core has two halves that share files but never a process: an offline side (data, research,
@@ -74,21 +74,22 @@ the engine (`IllegalOrderEvent`).
 Book status: a new book accepts only a snapshot; then `Synced` → `NeedsResync` on any rejected
 delta → `Synced` after a valid snapshot.
 
-Engine halt: `halted = None` until one of `KillSwitch`, `IllegalOrderEvent`, `Reconciliation`, or
-`Runaway` (one record causing more than 10,000 follow-up events). Halting is one-way within the
+Engine halt: `halted = None` until one of `KillSwitch`, `MaxDailyLoss`, `IllegalOrderEvent`,
+`Reconciliation`, or `Runaway` (one record causing more than 10,000 follow-up events). Halting is one-way within the
 process.
 
 ## Failure behavior
 
 | Failure | What happens | What does not happen |
 |---|---|---|
-| Kill switch engaged (another thread) | Next record: engine halts, risk rejects new orders, cancel requests sent for every working order | Cancels are not confirmed; positions are not flattened; no external command engages it |
+| Kill switch engaged (another thread) | Next record: engine halts, risk rejects new orders, cancels sent for every working order and resent on every record until none is open (also while disconnected) | Positions are not flattened; no external command engages it |
 | Sequence gap or crossing delta | Delta rejected, book `NeedsResync`, strategy pulls quotes | No guessed book |
 | Stale data past `stale_data_ms` | Risk rejects new orders | Existing orders stay until the strategy cancels |
-| Daily loss reaches `max_daily_loss` | Risk rejects every new order, including risk-reducing ones | Not an engine halt; working orders are not cancelled by it |
+| Daily loss reaches `max_daily_loss` (realized plus unrealized) | Engine halts (`MaxDailyLoss`) and cancels working orders; risk rejects every new order | Positions are not flattened |
 | Reconciliation discrepancy, including an unknown venue order | Engine halts and cancels | |
+| Reconcile not yet succeeded, or last one failed | New orders are dropped (`unreconciled`) until a reconcile succeeds | Positions are not reconciled (no position endpoint) |
 | Model artifact hash mismatch | `LinearModel::load` returns an error | Provenance is not proven: the same PR can change bytes and hash |
-| Walk-forward gate miss | Report says FAIL | Exit code stays 0; a challenger is still registered |
+| Walk-forward gate miss | Report says FAIL; the model is recorded as `no_signal`, never a challenger | Exit code stays 0 |
 
 ## Data and artifact flow
 

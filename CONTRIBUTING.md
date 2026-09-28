@@ -76,8 +76,8 @@ Run from the repo root. Expected results are from the verified run on 2026-09-27
 |---|---|---|
 | `just setup` | Fetch crates, create `research/.venv` from `uv.lock` | exit 0 |
 | `just check` | fmt check, clippy `-D warnings`, ruff, mypy, `just test`, `just audit` | exit 0. A `SKIPPED (not a pass)` line means an audit tool is missing: a warning locally, a failure in CI |
-| `just test` | Rust tests, then pytest for research/ml/data, hooks, knowledge, autonomy, `tests/ci`, study 0001 | 42 Rust; 22, 30, 10, 23, 15 passed; study 13 passed, 1 skipped by design |
-| `just replay` | determinism of the engine on the synthetic day | two identical sha256 lines, `replay deterministic` |
+| `just test` | Rust tests, then pytest for research/ml/data, hooks, knowledge, autonomy, `tests/ci`, study 0001 | 47 Rust; 27, 62, 16, 29, 17 passed; study 13 passed, 1 skipped by design |
+| `just replay` | determinism of the engine on the synthetic day | two identical sha256 lines equal to `tests/replay/expected_order_log.sha256` |
 | `git diff --name-only <base>... \| python3 scripts/knowledge/scope_check.py` | Scope, CLAUDE.md budgets and Learned format for docs-only PRs (reads changed paths) | exit 0, no output |
 
 `just backtest` is a placeholder that exits 2, and `just paper` refuses (exit 1).

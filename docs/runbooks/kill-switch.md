@@ -1,6 +1,6 @@
 # Runbook: kill switch
 
-Status 2026-09-27: nothing trades, so this runbook describes what the kill switch does in the
+Status 2026-09-28: nothing trades, so this runbook describes what the kill switch does in the
 simulated engine (#15) and what a live procedure still lacks. Owner: @SatyamDave.
 
 ## What exists
@@ -13,24 +13,26 @@ When it is engaged, `qc_replay::Engine` (`engine/crates/replay/src/lib.rs`):
 1. Notices on the next record it processes (`check_kill_switch`) or when risk rejects an order
    with `RiskReject::KillSwitch`, and records `halt KillSwitch` in the order log.
 2. Refuses every new order: risk rejects them, and the engine drops any command after the halt.
-3. Sends a cancel request to the venue for every working order that is not already pending cancel.
+3. Sends a cancel to the venue for every working order that is not already pending cancel, and
+   sends again, on every later record, any cancel the venue could not take (for example while
+   disconnected), until no order is open.
 
 What it does not do:
 
-- It does not wait for or verify the cancels. The OMS keeps each order in `PendingCancel` until
-  the venue answers, and `halt()` ignores a cancel that fails to send (for example while
-  disconnected). SimVenue answers every cancel while connected, so the chaos test ends with 0 open
-  orders; a real venue could lose or refuse a cancel and leave a working order.
+- It does not confirm cancels beyond the venue's own answers. The OMS keeps each order in
+  `PendingCancel` until the venue answers. SimVenue answers every cancel while connected, so the
+  chaos test ends with 0 open orders; a real venue could still lose or refuse one.
 - It does not flatten or hedge positions. Inventory stays as it was.
 - It is not engaged by anything outside the process: there is no operator command, endpoint or
   file flag.
 - It is checked per record, so the one-second bound (root rule 11) depends on records arriving.
   The chaos test `kill_switch_from_another_thread_halts_within_one_second`
   (`engine/crates/replay/tests/chaos.rs`) engages it from another thread and asserts the halt
-  within 1 s and no submission after it; it runs in `cargo test` and passes in CI on #17 and #8; nothing is
-  on `main` yet.
+  within 1 s and no submission after it; it runs in `cargo test` and in CI on `main`, but no check is
+  required (branch protection is unavailable on this plan).
 
-Other halt reasons with the same effect (no new orders, cancel requests): `IllegalOrderEvent`,
+Other halt reasons with the same effect (no new orders, cancels): `MaxDailyLoss` (realized plus
+unrealized loss reached the limit), `IllegalOrderEvent`,
 `Reconciliation` (any discrepancy, including an unknown venue order) and `Runaway`.
 
 ## Procedure for a live process (planned, not available)

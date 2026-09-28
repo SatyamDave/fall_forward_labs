@@ -1,6 +1,6 @@
 > **Origin:** condensed by the coordinating agent from a prompt the repo owner pasted in chat on 2026-09-27; not the verbatim prompt. The full text is not in the repository.
 >
-> **Status:** ADR-0013 proposed in #2 (draft). L0-L3 are deferred until a validated signal and labels exist; nothing in the repository learns online.
+> **Status:** ADR-0013 (Proposed) merged in #2. L0-L3 are deferred until a validated signal and labels exist; nothing in the repository learns online.
 
 # quant-core self-learning model spec (from the repo owner; runs after bootstrap, autonomy, decision-layer Phase 6)
 

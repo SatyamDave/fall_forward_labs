@@ -1,6 +1,6 @@
 > **Origin:** condensed by the coordinating agent from a prompt the repo owner pasted in chat on 2026-09-27; not the verbatim prompt. The full text is not in the repository.
 >
-> **Status:** Phase A only was built (#3, draft). Phases B-H are deferred (docs/audits/0001-reality-audit.md). The eval-suite size (30-100 tasks) is superseded by research-loop §7.
+> **Status:** Phase A only was built (#3, merged 2026-09-28). Phases B-H are deferred (docs/audits/0001-reality-audit.md). The eval-suite size (30-100 tasks) is superseded by research-loop §7.
 
 # quant-core autonomy spec (from the repo owner; runs after bootstrap)
 

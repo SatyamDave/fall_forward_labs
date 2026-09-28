@@ -1,6 +1,6 @@
 > **Origin:** condensed by the coordinating agent from a prompt the repo owner pasted in chat on 2026-09-27; not the verbatim prompt. The full text is not in the repository.
 >
-> **Status:** Phase 1 docs only (#4, draft). Phase 5 distillation is blocked by the TypeSafe MCA §2.3(b) distillation clause recorded in #4. Phases 2-7 are deferred.
+> **Status:** Phase 1 docs only (#4, merged 2026-09-28). Phase 5 distillation is blocked by the TypeSafe MCA §2.3(b) distillation clause recorded in #4. Phases 2-7 are deferred.
 
 # quant-core decision-layer spec (from the repo owner; after bootstrap + autonomy A-B)
 
