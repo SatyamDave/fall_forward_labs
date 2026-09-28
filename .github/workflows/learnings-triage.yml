@@ -68,7 +68,7 @@ jobs:
                .claude/learnings/archive/. Do not delete or move files yourself.
             Learned entries must read `- YYYY-MM-DD: <lesson> ([#N](https://github.com/...))`
             with a source link; when an item has no PR or postmortem to link, put it in Gotchas
-            or a rule instead. Keep root CLAUDE.md within 150 lines and nested ones within 80.
+            or a rule instead. Never edit the root CLAUDE.md, .claude/agents/ or a protected zone; keep nested CLAUDE.md files within 80 lines.
 
             Task B, research journal: write docs/research/journal/${{ steps.context.outputs.week }}.md
             following docs/research/journal/README.md, from ${{ runner.temp }}/knowledge/context/research-log.txt,

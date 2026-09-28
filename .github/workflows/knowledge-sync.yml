@@ -107,7 +107,7 @@ jobs:
                workflows, hooks, or settings.
             3. Learned entries are newest first, at most 15 per file (drop the oldest), each exactly:
                `- YYYY-MM-DD: <one-sentence lesson> ([#${{ steps.context.outputs.number }}](<PR url from pr.json>))`
-               using the merge date. Keep the root CLAUDE.md within 150 lines and nested ones within 80.
+               using the merge date. Never edit the root CLAUDE.md, .claude/agents/ or a protected zone; keep nested CLAUDE.md files within 80 lines.
             4. If nothing is worth recording, change no files.
             5. Write ${{ runner.temp }}/knowledge/out/pr-body.md: what you changed and why, one line
                per edit naming the file, and which inbox items it covers. Plain words, no hype.

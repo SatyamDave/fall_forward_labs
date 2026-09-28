@@ -70,7 +70,7 @@ jobs:
             4. Runbooks: every runbook that an alert under ops/monitoring/ links to must exist under
                docs/runbooks/. Report missing ones in the PR body; do not write runbooks.
             Edit only markdown in CLAUDE.md files, .claude/rules/ and .claude/skills/. Never weaken a
-            rule, limit or check. Keep root CLAUDE.md within 150 lines and nested ones within 80.
+            rule, limit or check. Never edit the root CLAUDE.md, .claude/agents/ or a protected zone; keep nested CLAUDE.md files within 80 lines.
 
             Write ${{ runner.temp }}/knowledge/out/pr-body.md with one section per numbered task
             above: what you changed and what needs a human. Plain words, no hype.

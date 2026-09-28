@@ -56,11 +56,28 @@ class ScopeCheckTest(unittest.TestCase):
         self.write("engine/CLAUDE.md", ["line"] * 80)
         self.assertEqual(self.errors("engine/CLAUDE.md"), [])
 
-    def test_over_budget_root_claude_md_fails(self) -> None:
-        self.write("CLAUDE.md", ["line"] * 150)
-        self.assertEqual(self.errors("CLAUDE.md"), [])
-        self.write("CLAUDE.md", ["line"] * 151)
+    def test_root_claude_md_fails(self) -> None:
+        # The root CLAUDE.md holds the non-negotiable rules: human-edited only.
+        self.write("CLAUDE.md", ["line"] * 10)
         self.assertTrue(self.errors("CLAUDE.md"))
+
+    def test_agent_definitions_fail(self) -> None:
+        self.assertTrue(self.errors(".claude/agents/risk-auditor.md"))
+        self.assertTrue(self.errors(".claude/agents/new-agent.md"))
+
+    def test_markdown_in_protected_zones_fails(self) -> None:
+        for path in (
+            "engine/crates/risk/CLAUDE.md",
+            "engine/crates/risk/src/NOTES.md",
+            "config/limits/README.md",
+            "ops/deploy/README.md",
+            "fund/README.md",
+            ".github/PULL_REQUEST_TEMPLATE.md",
+            ".claude/hooks/README.md",
+            "autonomy/README.md",
+            "Engine/Crates/Risk/CLAUDE.md",
+        ):
+            self.assertTrue(self.errors(path), path)
 
     def test_undated_learned_entry_fails(self) -> None:
         self.write(
