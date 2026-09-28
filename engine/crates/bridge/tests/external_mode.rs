@@ -17,12 +17,13 @@ fn call(engine: &mut qc_bridge::BridgeEngine, line: &str) -> Value {
 }
 
 #[test]
-fn hello_reports_v1_1_external_mode_and_a_usable_public_key() {
+fn hello_reports_v1_2_external_mode_and_a_usable_public_key() {
     let mut engine = support::engine_external(&support::small_book_csv(), 1);
     let resp = call(&mut engine, r#"{"v":1,"id":"1","op":"hello"}"#);
     assert_eq!(resp["ok"], true);
-    assert_eq!(resp["hello"]["protocol"], "1.1");
+    assert_eq!(resp["hello"]["protocol"], "1.2");
     assert_eq!(resp["hello"]["venue_mode"], "external");
+    assert!(resp["hello"]["market_ts_ns"].is_u64(), "{resp:#}");
     let key_b64 = resp["hello"]["approval_public_key"].as_str().unwrap();
     let decoded = base64::engine::general_purpose::STANDARD
         .decode(key_b64)
@@ -39,7 +40,7 @@ fn sim_mode_hello_reports_sim_and_never_routes_the_op_elsewhere() {
 
 #[test]
 fn external_mode_never_routes_to_simvenue_and_carries_a_verifiable_approval() {
-    let mut engine = support::engine_external(&support::small_book_csv(), 1);
+    let mut engine = support::engine_external_reconciled(&support::small_book_csv(), 1);
     assert!(engine.next_decision_request().is_some(), "book is synced");
 
     let hello = call(&mut engine, r#"{"v":1,"id":"1","op":"hello"}"#);
@@ -89,7 +90,7 @@ fn external_mode_never_routes_to_simvenue_and_carries_a_verifiable_approval() {
 
 #[test]
 fn report_execution_applies_legal_transitions_through_to_a_fill() {
-    let mut engine = support::engine_external(&support::small_book_csv(), 1);
+    let mut engine = support::engine_external_reconciled(&support::small_book_csv(), 1);
     assert!(engine.next_decision_request().is_some());
 
     let submit = r#"{"v":1,"id":"1","op":"submit_order_intent","intent":
@@ -123,7 +124,7 @@ fn report_execution_applies_legal_transitions_through_to_a_fill() {
 
 #[test]
 fn report_execution_illegal_transition_halts_the_engine() {
-    let mut engine = support::engine_external(&support::small_book_csv(), 1);
+    let mut engine = support::engine_external_reconciled(&support::small_book_csv(), 1);
     assert!(engine.next_decision_request().is_some());
 
     let submit = r#"{"v":1,"id":"1","op":"submit_order_intent","intent":
@@ -145,16 +146,22 @@ fn report_execution_illegal_transition_halts_the_engine() {
     );
     assert_eq!(illegal["ok"], false);
     assert_eq!(illegal["error"]["code"], "illegal_transition");
+    // Protocol v1.2 (wave 2): an illegal OMS transition now halts with its
+    // own distinct reason, matching `docs/runbooks/kill-switch.md`'s
+    // already-documented forward-compatible vocabulary and
+    // `scripts/ops/alerts.py`'s contract, rather than collapsing into the
+    // generic "kill_switch" reason wave 1 used (it still blocks new orders
+    // exactly the same way -- see `BridgeEngine::halt`).
     assert_eq!(
         engine.status()["halted"],
-        "kill_switch",
-        "a reconciliation failure must halt, not just log"
+        "illegal_order_event",
+        "an illegal OMS transition must halt, not just log"
     );
 
     // The halt is enforced on the next order too, not just observed in status.
     let after = call(&mut engine, submit);
     assert_eq!(after["result"]["accepted"], false);
-    assert_eq!(after["result"]["halted"], "kill_switch");
+    assert_eq!(after["result"]["halted"], "illegal_order_event");
 }
 
 #[test]
@@ -175,7 +182,7 @@ fn report_execution_for_an_unknown_client_order_id_halts_the_engine() {
     assert_eq!(resp["error"]["code"], "illegal_transition");
     assert_eq!(
         engine.status()["halted"],
-        "kill_switch",
+        "illegal_order_event",
         "a report about an order we never sent must halt, not be ignored"
     );
 }
@@ -206,7 +213,7 @@ fn report_execution_rejects_a_negative_fill_price_instead_of_corrupting_cash() {
     // flipped the sign of the cash delta a buy produces (cash should fall on
     // a buy; a negative price makes it rise instead) -- exactly the
     // bookkeeping the max-daily-loss kill switch reads.
-    let mut engine = support::engine_external(&support::small_book_csv(), 1);
+    let mut engine = support::engine_external_reconciled(&support::small_book_csv(), 1);
     assert!(engine.next_decision_request().is_some());
 
     let submit = r#"{"v":1,"id":"1","op":"submit_order_intent","intent":
@@ -242,7 +249,7 @@ fn a_gateway_reported_fill_feeds_the_wash_trade_check() {
     // #40 in external mode: the fill arrives through report_execution, not
     // SimVenue, and must still count, or the live path would have no
     // wash-trade protection at all.
-    let mut engine = support::engine_external(&support::small_book_csv(), 1);
+    let mut engine = support::engine_external_reconciled(&support::small_book_csv(), 1);
     assert!(engine.next_decision_request().is_some());
     let buy = r#"{"v":1,"id":"1","op":"submit_order_intent","intent":
         {"request_id":"dr-1","instrument":"1","side":"buy","qty":"0.001",

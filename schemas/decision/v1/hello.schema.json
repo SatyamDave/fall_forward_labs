@@ -7,12 +7,13 @@
   "required": [
     "protocol",
     "venue_mode",
-    "approval_public_key"
+    "approval_public_key",
+    "market_ts_ns"
   ],
   "properties": {
     "protocol": {
       "type": "string",
-      "const": "1.1"
+      "const": "1.2"
     },
     "venue_mode": {
       "enum": [
@@ -23,6 +24,11 @@
     "approval_public_key": {
       "type": "string",
       "description": "Base64 (standard alphabet, padded) of the raw 32-byte Ed25519 public key every approval this process mints can be verified against."
+    },
+    "market_ts_ns": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Latest feed/market timestamp this process has seen (protocol v1.2). The gateway must check approval expiry against this, never Date.now()."
     }
   }
 }

@@ -24,6 +24,9 @@
         "status",
         "hello",
         "report_execution",
+        "kill",
+        "cancel_order_intent",
+        "reconcile",
         "shutdown"
       ]
     },
@@ -39,6 +42,77 @@
     "reason": {
       "type": "string",
       "maxLength": 500
+    },
+    "client_order_id": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "cancel_order_intent (protocol v1.2): the order to cancel."
+    },
+    "venue": {
+      "type": "object",
+      "description": "reconcile (protocol v1.2): the gateway's view of venue orders/position/cash.",
+      "additionalProperties": false,
+      "required": [
+        "orders",
+        "position"
+      ],
+      "properties": {
+        "orders": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "venue_order_id",
+              "state",
+              "filled_qty"
+            ],
+            "properties": {
+              "client_order_id": {
+                "oneOf": [
+                  {
+                    "type": "null"
+                  },
+                  {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                ]
+              },
+              "venue_order_id": {
+                "type": "string"
+              },
+              "state": {
+                "enum": [
+                  "open",
+                  "filled",
+                  "canceled",
+                  "rejected"
+                ]
+              },
+              "filled_qty": {
+                "type": "string",
+                "pattern": "^[0-9]+(\\.[0-9]{1,8})?$"
+              }
+            }
+          }
+        },
+        "position": {
+          "type": "string",
+          "pattern": "^-?[0-9]+(\\.[0-9]{1,8})?$"
+        },
+        "cash": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "string",
+              "pattern": "^-?[0-9]+(\\.[0-9]{1,8})?$"
+            }
+          ]
+        }
+      }
     }
   },
   "allOf": [
@@ -82,6 +156,49 @@
       "then": {
         "required": [
           "execution"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "op": {
+            "const": "kill"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "reason"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "op": {
+            "const": "cancel_order_intent"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "client_order_id",
+          "reason"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "op": {
+            "const": "reconcile"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "venue"
         ]
       }
     }

@@ -35,6 +35,30 @@ Other halt reasons with the same effect (no new orders, cancels): `MaxDailyLoss`
 unrealized loss reached the limit), `IllegalOrderEvent`,
 `Reconciliation` (any discrepancy, including an unknown venue order) and `Runaway`.
 
+## qc-bridge: an externally-triggered switch that works even if the agent is stuck (#44)
+
+`qc_replay::Engine` above has no trigger outside the process. `qc-bridge` (`engine/crates/bridge/`,
+the live/agent-facing engine, ADR-0040) does, as of protocol v1.2, and this is the manual procedure
+for tripping it:
+
+1. **File trigger (works even if the agent process is dead or hung).** Start `qc-bridge` with
+   `--kill-file <path>`, then from an operator shell: `touch <path>` (contents are never read, only
+   existence). The bridge polls this path on every record it processes and every op it dispatches —
+   whatever is still alive and sending the bridge *anything* (in practice the gateway's own periodic
+   `status`/`reconcile` heartbeat, not necessarily the agent's own decision loop) discovers it, so
+   this does not depend on the agent's cooperation. `tests/chaos.rs`
+   (`kill_file_halts_within_one_second_and_cancels_every_open_order`) proves the 1-second bound.
+2. **In-band trigger.** If something can still send the bridge a line on its stdin (the gateway, a
+   manual `qc-bridge` session), send `{"v":1,"op":"kill","reason":"<why>","id":"<any>"}`. Same
+   effect, immediate instead of polled.
+3. Both engage the same shared `KillSwitch` a plain external `engage()` call would (root rule 11),
+   and both then run the same one-way `halt`: refuse every new `submit_order_intent`, and cancel
+   every open order (`SimVenue` in `sim` mode; `PendingCancel` in `external` mode, for the gateway
+   to finish against the real venue — the same "confirm cancels in the venue's own view" step below
+   still applies, since this process alone cannot confirm a real fill or cancel).
+4. Everything after tripping the switch is the same as the plain procedure below: confirm, decide on
+   positions, notify, don't restart blind, write it up.
+
 ## Procedure for a live process (planned, not available)
 
 Blocked on a venue adapter and an operator trigger (M1, see [docs/ROADMAP.md](../ROADMAP.md)).
@@ -55,16 +79,15 @@ Until they exist, the steps below are the intended shape, not a working procedur
 
 ## Alerting (#64)
 
-This section is about `qc-bridge` (`engine/crates/bridge/`), the live/agent-facing engine (ADR-0040)
--- a separate binary from `qc_replay::Engine` above, though both share `qc_risk`'s `KillSwitch` and
-`RiskEngine`. `qc-bridge` has no structured event log yet; `scripts/ops/alerts.py`'s contract asks
-for one JSON object per line, reusing the same snake_case vocabulary its `submit_order_intent`
-wire result already uses (`risk_reject_code()` and the `halted` field in
-`engine/crates/bridge/src/engine.rs`): `{"ts_ns", "event": "halt", "reason":
-"kill_switch"|"max_daily_loss"|"reconciliation"|"illegal_order_event", "detail"?}` (the last two
-are anticipated from protocol v1.1's `report_execution`, not yet implemented). It raises a generic
-**halt** alert for any `event: "halt"` line, and a narrower **kill_switch** alert specifically when
-`reason == "kill_switch"` (or a future `event: "kill_switch_engaged"` line, for the externally
-triggered switch in #44, which may fire before the bridge's next message observes the halt). Both
-fire from the same log line. See `ops/live/README.md` for where the log file lives and how the
-alert checker runs, and `scripts/ops/alerts.py`'s module docstring for the full contract.
+`qc-bridge` (`engine/crates/bridge/src/eventlog.rs`, protocol v1.2) now writes one JSON object per
+line to stderr on every halt, kill-switch engagement, risk reject, reconcile result and accepted
+intent, matching `scripts/ops/alerts.py`'s contract exactly (one snake_case vocabulary, not two):
+`{"ts_ns", "event": "halt", "reason": "kill_switch"|"max_daily_loss"|"reconciliation"|
+"illegal_order_event", "detail"?}` and `{"ts_ns", "event": "kill_switch_engaged", "source":
+"file"|"op"}` for the externally-triggered switch above (fires before the bridge's next message
+would otherwise observe the halt). `alerts.py` raises a generic **halt** alert for any `event:
+"halt"` line, and a narrower **kill_switch** alert specifically for `reason == "kill_switch"` or a
+`kill_switch_engaged` line; both fire from the same trigger. See `ops/live/README.md` for where the
+log file lives and how the alert checker runs, `scripts/ops/alerts.py`'s module docstring for the
+full contract, and `tests/ops/test_bridge_alerts_contract.py` for the real-binary proof that the
+bridge's own stderr output actually drives `alerts.py`'s rules end to end.

@@ -6,6 +6,8 @@
 //! Determinism: time comes only from recorded timestamps via [`SimClock`],
 //! and record order is a `Vec`, never a `HashMap`.
 
+use std::path::PathBuf;
+
 use ed25519_dalek::SigningKey;
 use qc_core::{
     ClientOrderId, Clock, Event, InstrumentId, OrderEvent, OrderRequest, OrderType, Price, Qty,
@@ -14,12 +16,14 @@ use qc_core::{
 use qc_gateway::{Record, SimVenue, VenueAdapter, record::parse as parse_records};
 use qc_inference::features::{FeatureState, N_FEATURES, TopOfBook};
 use qc_inference::{Direction, Model, Signal};
-use qc_oms::{Oms, OmsError, OrderState};
+use qc_oms::{Discrepancy, Oms, OmsError, OrderState, VenueOrder, reconcile as oms_reconcile};
 use qc_orderbook::{BookStatus, OrderBook};
 use qc_risk::{KillSwitch, Limits, RiskCheck, RiskContext, RiskEngine, RiskReject};
 use serde_json::{Map, Value, json};
 
-use crate::approval::{self, OrderFields};
+use crate::approval::{self, CancelFields, OrderFields};
+use crate::eventlog;
+use crate::instrument::Instrument;
 
 /// The only instrument the v1 bridge trades, and its label on the wire.
 pub const INSTRUMENT: InstrumentId = InstrumentId(1);
@@ -42,6 +46,24 @@ pub fn risk_reject_code(reject: RiskReject) -> &'static str {
         RiskReject::MaxPosition => "max_position",
         RiskReject::WashTrade => "wash_trade",
         RiskReject::MaxOrderRate => "max_order_rate",
+    }
+}
+
+/// Human-readable form of a `qc_oms::Discrepancy`, for the `reconcile` op's
+/// wire response and the structured event log's `detail` field.
+fn describe_discrepancy(d: &Discrepancy) -> String {
+    match d {
+        Discrepancy::UnknownVenueOrder(v) => format!("unknown_venue_order: venue_order_id={}", v.0),
+        Discrepancy::MissingAtVenue(c) => format!("missing_at_venue: client_order_id={}", c.0),
+        Discrepancy::OpenAtVenueOnly(c) => format!("open_at_venue_only: client_order_id={}", c.0),
+        Discrepancy::FillMismatch {
+            client_id,
+            local,
+            venue,
+        } => format!(
+            "fill_mismatch: client_order_id={} local={local} venue={venue}",
+            client_id.0
+        ),
     }
 }
 
@@ -86,6 +108,34 @@ impl std::str::FromStr for VenueMode {
     }
 }
 
+/// Why the bridge stopped accepting new orders (protocol v1.2, issue #44).
+/// Halting is one-way within the process, mirroring `qc_replay::HaltReason`
+/// (`engine/crates/replay/src/lib.rs`) — this crate has its own copy rather
+/// than depending on `qc_replay` for one enum, since the two engines are
+/// otherwise independent (`qc-bridge` has no `qc_replay::Engine` inside it).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HaltReason {
+    KillSwitch,
+    MaxDailyLoss,
+    /// A `report_execution`/OMS transition the state machine does not allow.
+    IllegalOrderEvent,
+    /// A `reconcile` op found an unknown venue order, a state or fill
+    /// mismatch, or a position mismatch.
+    Reconciliation,
+}
+
+impl HaltReason {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::KillSwitch => "kill_switch",
+            Self::MaxDailyLoss => "max_daily_loss",
+            Self::IllegalOrderEvent => "illegal_order_event",
+            Self::Reconciliation => "reconciliation",
+        }
+    }
+}
+
 /// Snake-case wire name for an [`OrderState`], used by `status()` so a
 /// caller (and this crate's own tests) can tell a pending-external-approval
 /// order apart from one already resting at the venue.
@@ -115,9 +165,13 @@ pub struct BridgeEngine {
     position: Qty,
     /// Cash from fills, raw [`Price`] units, wide so it cannot overflow.
     cash: i128,
-    /// Latches once the daily loss limit is reached; there is no reset (root rule: a
-    /// human restarts the process, same as `qc_replay::Engine`'s halt).
-    daily_loss_halted: bool,
+    /// One-way once set (root rule: a human restarts the process), mirroring
+    /// `qc_replay::Engine::halted`.
+    halted: Option<HaltReason>,
+    /// `external` mode only: false until a `reconcile` op finds no
+    /// discrepancy; `sim` mode has no venue to reconcile with and starts
+    /// (and stays) `true`, unchanged from v1.1 behaviour.
+    reconciled: bool,
     records: Vec<Record>,
     cursor: usize,
     decide_every: u32,
@@ -129,6 +183,13 @@ pub struct BridgeEngine {
     /// across a restart, so an old approval cannot outlive the process that
     /// minted it.
     signing_key: SigningKey,
+    /// `--kill-file` (protocol v1.2, issue #44): polled on every record/op;
+    /// its existence engages the kill switch independent of any op the
+    /// agent sends, so a stuck or crashed agent process cannot block it.
+    kill_file: Option<PathBuf>,
+    /// `--instrument` (protocol v1.2, issue #66): `None` keeps the v1
+    /// hard-coded instrument and skips every tick/qty-step/trading-hours check.
+    instrument_cfg: Option<Instrument>,
 }
 
 impl BridgeEngine {
@@ -142,19 +203,51 @@ impl BridgeEngine {
         model: Option<LoadedModel>,
         venue_mode: VenueMode,
     ) -> Self {
+        Self::with_instrument(
+            records,
+            limits,
+            kill_switch,
+            tick,
+            decide_every,
+            model,
+            venue_mode,
+            None,
+            None,
+        )
+    }
+
+    /// Same as [`Self::new`] plus protocol v1.2's `--kill-file` (issue #44)
+    /// and `--instrument` (issue #66), both `None` by default so every
+    /// existing call site (and `just replay`'s sibling `just agent-sim`,
+    /// which never sets either flag) keeps today's behaviour byte-for-byte.
+    #[must_use]
+    #[allow(clippy::too_many_arguments)]
+    pub fn with_instrument(
+        records: Vec<Record>,
+        limits: Limits,
+        kill_switch: KillSwitch,
+        tick: Price,
+        decide_every: u32,
+        model: Option<LoadedModel>,
+        venue_mode: VenueMode,
+        kill_file: Option<PathBuf>,
+        instrument_cfg: Option<Instrument>,
+    ) -> Self {
+        let instrument_id = instrument_cfg.as_ref().map_or(INSTRUMENT, |i| i.id);
         Self {
-            book: OrderBook::new(INSTRUMENT),
+            book: OrderBook::new(instrument_id),
             tick,
             features: FeatureState::new(tick),
             last_features: None,
             model,
             risk: RiskEngine::new(limits, kill_switch),
             oms: Oms::default(),
-            venue: SimVenue::new(VenueId(1), INSTRUMENT),
+            venue: SimVenue::new(VenueId(1), instrument_id),
             clock: SimClock::default(),
             position: Qty::ZERO,
             cash: 0,
-            daily_loss_halted: false,
+            halted: None,
+            reconciled: venue_mode == VenueMode::Sim,
             records,
             cursor: 0,
             decide_every,
@@ -163,7 +256,22 @@ impl BridgeEngine {
             next_client_id: 0,
             venue_mode,
             signing_key: approval::generate_signing_key(),
+            kill_file,
+            instrument_cfg,
         }
+    }
+
+    fn instrument_id(&self) -> InstrumentId {
+        self.instrument_cfg.as_ref().map_or(INSTRUMENT, |i| i.id)
+    }
+
+    /// Wire label `DecisionRequest.instrument`/`OrderIntent.instrument` must
+    /// match: the configured symbol (issue #66) or the v1 placeholder `"1"`.
+    #[must_use]
+    pub fn instrument_label(&self) -> &str {
+        self.instrument_cfg
+            .as_ref()
+            .map_or(INSTRUMENT_LABEL, |i| i.symbol.as_str())
     }
 
     #[must_use]
@@ -171,15 +279,25 @@ impl BridgeEngine {
         self.venue_mode
     }
 
-    /// `hello` response body (protocol v1.1): the protocol version this
-    /// binary speaks, the venue mode it was started with, and the public
-    /// key every approval it mints can be verified against.
+    /// Sets `--kill-file` after construction (mainly for tests that don't
+    /// otherwise need the fuller [`Self::with_instrument`] constructor).
+    pub fn set_kill_file(&mut self, path: PathBuf) {
+        self.kill_file = Some(path);
+    }
+
+    /// `hello` response body (protocol v1.2): the protocol version this
+    /// binary speaks, the venue mode it was started with, the public key
+    /// every approval it mints can be verified against, and `market_ts_ns`
+    /// (the latest market/feed timestamp this process has seen) — the
+    /// gateway's approval-expiry clock (issue #45's gap: it must never
+    /// compare against `Date.now()`).
     #[must_use]
     pub fn hello(&self) -> Value {
         json!({
-            "protocol": "1.1",
+            "protocol": "1.2",
             "venue_mode": self.venue_mode.as_str(),
             "approval_public_key": approval::encode_public_key(&self.signing_key.verifying_key()),
+            "market_ts_ns": self.clock.now().0,
         })
     }
 
@@ -198,8 +316,87 @@ impl BridgeEngine {
     }
 
     fn check_daily_loss(&mut self) {
-        if !self.daily_loss_halted && self.risk.daily_loss_reached(self.daily_pnl()) {
-            self.daily_loss_halted = true;
+        if self.halted.is_none() && self.risk.daily_loss_reached(self.daily_pnl()) {
+            self.halt(HaltReason::MaxDailyLoss, None);
+        }
+    }
+
+    /// Detects an externally-engaged [`KillSwitch`] (another thread holding
+    /// a clone, root rule 11) — the bridge itself never engages this flag
+    /// for any reason but a genuine kill (the `kill` op or `--kill-file`;
+    /// see [`Self::kill`]/[`Self::poll_kill_file`]).
+    pub(crate) fn check_kill_switch(&mut self) {
+        if self.halted.is_none() && self.risk.kill_switch().is_engaged() {
+            self.halt(HaltReason::KillSwitch, None);
+        }
+    }
+
+    /// `--kill-file` (protocol v1.2, issue #44): an out-of-band trigger
+    /// independent of stdin, so a stuck or crashed agent process cannot
+    /// block it — anything that can still touch the filesystem (an
+    /// operator, a supervisor, the ops runbook) engages the switch, and the
+    /// *next* record or op this process handles (from any source, not
+    /// necessarily the agent) observes it within root rule 11's budget.
+    pub fn poll_kill_file(&mut self) {
+        if self.halted.is_some() {
+            return;
+        }
+        let Some(path) = &self.kill_file else { return };
+        if path.exists() {
+            self.risk.kill_switch().engage();
+            eventlog::kill_switch_engaged(self.clock.now().0, "file");
+            self.halt(HaltReason::KillSwitch, None);
+        }
+    }
+
+    /// `kill` op (protocol v1.2, issue #44): the same path as an
+    /// externally-engaged switch or `--kill-file`, triggered in-band instead.
+    pub fn kill(&mut self, reason: &str) {
+        if self.halted.is_none() {
+            self.risk.kill_switch().engage();
+            eventlog::kill_switch_engaged(self.clock.now().0, "op");
+        }
+        self.halt(HaltReason::KillSwitch, Some(reason));
+    }
+
+    /// Stops all order entry for good (one-way; a human restarts the
+    /// process) and cancels every working order, mirroring
+    /// `qc_replay::Engine::halt`. Idempotent: the first reason recorded is
+    /// the one that sticks, and only the first call logs and cancels.
+    fn halt(&mut self, reason: HaltReason, detail: Option<&str>) {
+        if self.halted.is_some() {
+            return;
+        }
+        self.halted = Some(reason);
+        eventlog::halt(self.clock.now().0, reason.as_str(), detail);
+        self.cancel_all_open();
+    }
+
+    /// Requests a cancel for every non-terminal order (risk never blocks a
+    /// cancel). `sim` mode also routes the cancel to `SimVenue` and drains
+    /// its ack, exactly as `qc_replay::Engine::cancel_all_open` does; there
+    /// is no venue to route to in `external` mode (no code path ever
+    /// submitted to `SimVenue` there), so the OMS moves to `PendingCancel`
+    /// and the TS gateway — which does hold the real venue connection —
+    /// observes that through `status` and finishes the cancel for real
+    /// (issue #44's acceptance criteria: verified in this crate's own suite
+    /// via `SimVenue` in CI, and in the broker-adapter's own suite against a
+    /// recorded venue response).
+    fn cancel_all_open(&mut self) {
+        let open: Vec<_> = self
+            .oms
+            .open_orders()
+            .filter(|o| o.state != OrderState::PendingCancel)
+            .map(|o| o.request.client_id)
+            .collect();
+        for id in open {
+            let _ = self.oms.request_cancel(id);
+            if self.venue_mode == VenueMode::Sim {
+                let _ = self.venue.cancel(id);
+            }
+        }
+        if self.venue_mode == VenueMode::Sim {
+            self.drain_venue_events();
         }
     }
 
@@ -308,10 +505,119 @@ impl BridgeEngine {
         self.clock.advance_to(Timestamp(ts_ns));
         let result = self.apply_order_event(&event);
         self.check_daily_loss();
-        if result.is_err() {
-            self.risk.kill_switch().engage();
+        if let Err(e) = &result {
+            self.halt(HaltReason::IllegalOrderEvent, Some(&format!("{e:?}")));
         }
         result.map(|_| ())
+    }
+
+    /// `cancel_order_intent` (protocol v1.2, issue #66's gap list): always
+    /// allowed for one of our own non-terminal orders — risk never blocks a
+    /// cancel, and this runs even while halted (halting itself already
+    /// requests every cancel via [`Self::cancel_all_open`], so this is
+    /// idempotent with that path). An id this process never opened is an
+    /// error, not a silently-ignored no-op.
+    ///
+    /// `sim` mode routes the cancel to `SimVenue` immediately, as
+    /// `submit_order_intent` already does for a new order. `external` mode
+    /// mints a signed `approval` over `{"action":"cancel","client_order_id",
+    /// "expires_ts_ns"}` (same key, same 5 s TTL) instead, exactly as
+    /// `submit_order_intent` does for a new order's approval.
+    ///
+    /// # Errors
+    /// A `&'static str` reason the cancel could not even be attempted:
+    /// `client_order_id` is unknown, the order is already terminal, or the
+    /// OMS's own state machine does not allow a cancel request from its
+    /// current state.
+    pub fn cancel_order_intent(
+        &mut self,
+        client_order_id: u64,
+        _reason: &str,
+    ) -> Result<Value, &'static str> {
+        let id = ClientOrderId(client_order_id);
+        let Some(order) = self.oms.get(id) else {
+            return Err("unknown client_order_id");
+        };
+        if order.state.is_terminal() {
+            return Err("order is already terminal");
+        }
+        self.oms
+            .request_cancel(id)
+            .map_err(|_| "cancel is not legal from this order's state")?;
+        if self.venue_mode == VenueMode::External {
+            let fields = CancelFields { client_order_id };
+            let approval = approval::mint_cancel(&self.signing_key, &fields, self.clock.now().0);
+            return Ok(
+                json!({"accepted": true, "client_order_id": client_order_id, "approval": approval}),
+            );
+        }
+        let _ = self.venue.cancel(id);
+        self.drain_venue_events();
+        Ok(json!({"accepted": true, "client_order_id": client_order_id}))
+    }
+
+    /// `reconcile` (protocol v1.2, issue #45's gap): compares the gateway's
+    /// view of venue orders and position with the OMS. Any discrepancy
+    /// halts (reason `"reconciliation"`) and returns the diff; a clean
+    /// compare marks the bridge reconciled (`external` mode refuses new
+    /// intents until the first one, like `qc_replay::Engine`). Cash is
+    /// accepted but not compared: this process has no independent ground
+    /// truth for fees/dividends/interest the way it does for order state and
+    /// position, so a mismatch there is not (yet) treated as a discrepancy.
+    pub fn reconcile_with_venue(&mut self, venue_orders: &[VenueOrder], position: Qty) -> Value {
+        let r = oms_reconcile(&self.oms, venue_orders);
+        let mut discrepancies: Vec<String> =
+            r.discrepancies.iter().map(describe_discrepancy).collect();
+        if self.position != position {
+            discrepancies.push(format!(
+                "position_mismatch: local={} venue={}",
+                self.position, position
+            ));
+        }
+        let ok = discrepancies.is_empty();
+        let detail = (!ok).then(|| discrepancies.join("; "));
+        eventlog::reconcile(self.clock.now().0, ok, detail.as_deref());
+        if ok {
+            self.reconciled = true;
+        } else {
+            self.halt(HaltReason::Reconciliation, detail.as_deref());
+        }
+        json!({"ok": ok, "discrepancies": discrepancies})
+    }
+
+    /// Checks `qty`/`limit_price` against the configured instrument's tick
+    /// size, quantity step and trading hours (issue #66). `None` when no
+    /// `--instrument` is configured (today's default: no such check exists).
+    fn instrument_reject(&self, qty: Qty, limit_price: Price) -> Option<&'static str> {
+        let cfg = self.instrument_cfg.as_ref()?;
+        if !cfg.trading_hours.is_open(self.clock.now().0) {
+            return Some("outside_trading_hours");
+        }
+        if !cfg.qty_is_valid(qty) {
+            return Some("invalid_qty_step");
+        }
+        if !cfg.price_is_valid(limit_price) {
+            return Some("invalid_tick_size");
+        }
+        None
+    }
+
+    fn log_accepted(
+        &self,
+        client_order_id: u64,
+        instrument: &str,
+        side: &str,
+        qty: Qty,
+        price: Price,
+    ) {
+        eventlog::accepted_intent(
+            self.clock.now().0,
+            client_order_id,
+            instrument,
+            side,
+            &qty.to_string(),
+            &price.to_string(),
+        );
     }
 
     fn update_features_and_signal(&mut self) {
@@ -337,6 +643,8 @@ impl BridgeEngine {
 
     fn process_record(&mut self, record: &Record) {
         self.clock.advance_to(record.ts_local());
+        self.poll_kill_file();
+        self.check_kill_switch();
         self.venue.on_record(record);
         match record {
             Record::Snapshot(s) => {
@@ -398,10 +706,23 @@ impl BridgeEngine {
             0
         };
         let limits = self.risk.limits();
+        let now_ns = self.clock.now().0;
+        // #66: the engine, not the agent, decides what is even offerable —
+        // outside trading hours (when an instrument is configured) buy/sell
+        // are not offered at all, not just rejected if attempted.
+        let trading = self
+            .instrument_cfg
+            .as_ref()
+            .is_none_or(|i| i.trading_hours.is_open(now_ns));
+        let allowed_actions: Vec<&str> = if trading {
+            vec!["buy", "sell", "no_trade"]
+        } else {
+            vec!["no_trade"]
+        };
         json!({
             "request_id": format!("dr-{}", self.decision_seq),
-            "ts_ns": self.clock.now().0,
-            "instrument": INSTRUMENT_LABEL,
+            "ts_ns": now_ns,
+            "instrument": self.instrument_label(),
             "best_bid": bid_px.to_string(),
             "best_ask": ask_px.to_string(),
             "mid": mid.to_string(),
@@ -415,7 +736,7 @@ impl BridgeEngine {
                 "max_order_rate_per_sec": limits.max_order_rate_per_sec,
                 "remaining_daily_loss": self.remaining_daily_loss().to_string(),
             },
-            "allowed_actions": ["buy", "sell", "no_trade"],
+            "allowed_actions": allowed_actions,
         })
     }
 
@@ -451,18 +772,27 @@ impl BridgeEngine {
         limit_price: Price,
         time_in_force: OrderType,
     ) -> Value {
-        if self.risk.kill_switch().is_engaged() {
-            return json!({"accepted": false, "halted": "kill_switch"});
+        self.poll_kill_file();
+        self.check_kill_switch();
+        if let Some(reason) = self.halted {
+            return json!({"accepted": false, "halted": reason.as_str()});
         }
-        if self.daily_loss_halted {
-            return json!({"accepted": false, "halted": "max_daily_loss"});
+        if self.venue_mode == VenueMode::External && !self.reconciled {
+            // #45: external mode refuses new intents until the first clean
+            // reconcile, like `qc_replay::Engine`'s own `unreconciled` gate.
+            return json!({"accepted": false, "risk_reject": "unreconciled"});
+        }
+        let instrument_label = self.instrument_label().to_owned();
+        if let Some(code) = self.instrument_reject(qty, limit_price) {
+            eventlog::risk_reject(self.clock.now().0, code, &instrument_label);
+            return json!({"accepted": false, "risk_reject": code});
         }
         self.next_client_id += 1;
         let client_id = ClientOrderId(self.next_client_id);
         let order = OrderRequest {
             client_id,
             strategy: BRIDGE_STRATEGY,
-            instrument: INSTRUMENT,
+            instrument: self.instrument_id(),
             side,
             order_type: time_in_force,
             price: limit_price,
@@ -470,10 +800,18 @@ impl BridgeEngine {
         };
         let ctx = self.context();
         if let Err(reject) = self.risk.check(&order, &ctx) {
+            eventlog::risk_reject(
+                self.clock.now().0,
+                risk_reject_code(reject),
+                &instrument_label,
+            );
             return match reject {
-                RiskReject::KillSwitch => json!({"accepted": false, "halted": "kill_switch"}),
+                RiskReject::KillSwitch => {
+                    self.halt(HaltReason::KillSwitch, None);
+                    json!({"accepted": false, "halted": "kill_switch"})
+                }
                 RiskReject::MaxDailyLoss => {
-                    self.daily_loss_halted = true;
+                    self.halt(HaltReason::MaxDailyLoss, None);
                     json!({"accepted": false, "halted": "max_daily_loss"})
                 }
                 other => json!({"accepted": false, "risk_reject": risk_reject_code(other)}),
@@ -482,15 +820,16 @@ impl BridgeEngine {
         if self.oms.insert(order).is_err() {
             return json!({"accepted": false, "risk_reject": "invalid_order"});
         }
+        let side_str = match side {
+            Side::Buy => "buy",
+            Side::Sell => "sell",
+        };
         if self.venue_mode == VenueMode::External {
             let fields = OrderFields {
                 client_order_id: client_id.0,
                 request_id,
-                instrument: INSTRUMENT_LABEL,
-                side: match side {
-                    Side::Buy => "buy",
-                    Side::Sell => "sell",
-                },
+                instrument: &instrument_label,
+                side: side_str,
                 qty,
                 limit_price,
                 // Mirrors `wire::WireTimeInForce`'s mapping (`Gtc` is the
@@ -502,6 +841,7 @@ impl BridgeEngine {
                 },
             };
             let approval = approval::mint(&self.signing_key, &fields, self.clock.now().0);
+            self.log_accepted(client_id.0, &instrument_label, side_str, qty, limit_price);
             return json!({
                 "accepted": true,
                 "client_order_id": client_id.0,
@@ -510,6 +850,7 @@ impl BridgeEngine {
         }
         if self.venue.submit(&order).is_ok() {
             self.drain_venue_events();
+            self.log_accepted(client_id.0, &instrument_label, side_str, qty, limit_price);
             return json!({"accepted": true, "client_order_id": client_id.0});
         }
         let rejected = OrderEvent::Rejected {
@@ -536,17 +877,12 @@ impl BridgeEngine {
                 })
             })
             .collect();
-        let halted = if self.risk.kill_switch().is_engaged() {
-            Some("kill_switch")
-        } else if self.daily_loss_halted {
-            Some("max_daily_loss")
-        } else {
-            None
-        };
         let limits = self.risk.limits();
         json!({
             "position": self.position.to_string(),
-            "halted": halted,
+            "halted": self.halted.map(HaltReason::as_str),
+            "reconciled": self.reconciled,
+            "market_ts_ns": self.clock.now().0,
             "open_orders": open_orders,
             "limits": {
                 "max_position": limits.max_position.to_string(),
