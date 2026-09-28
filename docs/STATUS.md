@@ -6,17 +6,27 @@ Regenerated automatically by `.github/workflows/docs-status.yml` on every merge 
 Narrative docs: [project guide](guide/quant-core-guide.html) ·
 [base status](reports/base-status.md) · [NOW](NOW.md).
 
-Generated from `main` at **162974a 2026-09-28**. Latest CI on `main`: **success on effb75d**.
+Generated from `main` at **836a1ab 2026-09-28**. Latest CI on `main`: **in_progress on 836a1ab**.
 Paid AI loops: **off**.
 
-## Open pull requests (0)
+## Open pull requests (2)
 
-None.
+| PR | Title | Author | Draft |
+|---|---|---|---|
+| [#78](https://github.com/SatyamDave/fall_forward_labs/pull/78) | Redo study 0001 favorite-longshot v2, bounded population, real sample | SatyamDave | no |
+| [#77](https://github.com/SatyamDave/fall_forward_labs/pull/77) | ops: give live trading a safe home and alert on it breaking | SatyamDave | no |
 
 ## Recently merged
 
 | PR | Title | Merged |
 |---|---|---|
+| [#79](https://github.com/SatyamDave/fall_forward_labs/pull/79) | Baseline-checked evals, decision/PnL reports, and a stop rule | 2026-09-28 |
+| [#72](https://github.com/SatyamDave/fall_forward_labs/pull/72) | Make SimVenue consume liquidity and respect queue position | 2026-09-28 |
+| [#75](https://github.com/SatyamDave/fall_forward_labs/pull/75) | Add self-cross, wash-trade and daily-notional dollar caps to qc-risk | 2026-09-28 |
+| [#80](https://github.com/SatyamDave/fall_forward_labs/pull/80) | Replaying a recorded decision gives the same ledger every time | 2026-09-28 |
+| [#74](https://github.com/SatyamDave/fall_forward_labs/pull/74) | Prove the agent can only place orders one way, replay decisions for free, write the live prompt | 2026-09-28 |
+| [#73](https://github.com/SatyamDave/fall_forward_labs/pull/73) | Build the broker gateway door and a mock Robinhood connection | 2026-09-28 |
+| [#76](https://github.com/SatyamDave/fall_forward_labs/pull/76) | Stamp approved orders and prove the bridge refuses what it doesn't understand | 2026-09-28 |
 | [#62](https://github.com/SatyamDave/fall_forward_labs/pull/62) | Record the second merge batch as a dated founder exception | 2026-09-28 |
 | [#56](https://github.com/SatyamDave/fall_forward_labs/pull/56) | Add the three-tier eval harness (just eval, Tier 1) | 2026-09-28 |
 | [#61](https://github.com/SatyamDave/fall_forward_labs/pull/61) | Build the agent service against qc-bridge protocol v1 | 2026-09-28 |
@@ -25,30 +35,23 @@ None.
 | [#60](https://github.com/SatyamDave/fall_forward_labs/pull/60) | Record ADR-0040, the agentic decision, across the docs | 2026-09-28 |
 | [#19](https://github.com/SatyamDave/fall_forward_labs/pull/19) | Add an illustrated project guide and the Robinhood trading path | 2026-09-28 |
 | [#18](https://github.com/SatyamDave/fall_forward_labs/pull/18) | build(deps): Bump bridgecrewio/checkov-action from 12.1347.0 to 12.3125.0 in the actions group | 2026-09-28 |
-| [#8](https://github.com/SatyamDave/fall_forward_labs/pull/8) | Document the actual base state and consolidate the repo guide | 2026-09-28 |
-| [#17](https://github.com/SatyamDave/fall_forward_labs/pull/17) | Fix base integration failures and make checks cover every suite | 2026-09-28 |
-| [#6](https://github.com/SatyamDave/fall_forward_labs/pull/6) | Draft team plan and docs/NOW.md for both founders (Phase 1) | 2026-09-28 |
-| [#16](https://github.com/SatyamDave/fall_forward_labs/pull/16) | Test favorite-longshot bias on settled Kalshi markets: insufficient evidence, listing cap dropped every day | 2026-09-28 |
-| [#9](https://github.com/SatyamDave/fall_forward_labs/pull/9) | Propose first vertical in ADR-0020 and plan base completion (Phase 0) | 2026-09-28 |
-| [#4](https://github.com/SatyamDave/fall_forward_labs/pull/4) | Record decision-layer ADRs and TypeSafe vendor review (Phase 1) | 2026-09-28 |
-| [#3](https://github.com/SatyamDave/fall_forward_labs/pull/3) | Add autonomy tier policy and gate check (Phase A) | 2026-09-28 |
 
 ## Recent commits on main
 
 | Commit | Date | Subject |
 |---|---|---|
-| `162974a` | 2026-09-28 | docs(status): regenerate live status from 360d053 [skip ci] |
-| `360d053` | 2026-09-28 | docs(status): regenerate live status from effb75d [skip ci] |
-| `effb75d` | 2026-09-27 | Merge pull request #62 from SatyamDave/docs/record-merge-exception |
-| `543468b` | 2026-09-27 | docs(team): record the second merge batch as a dated founder exception |
-| `fa7afb9` | 2026-09-28 | docs(status): regenerate live status from 9543372 [skip ci] |
-| `9543372` | 2026-09-27 | Merge pull request #56 from SatyamDave/agentic/evals |
-| `63f8270` | 2026-09-27 | Merge main into agentic/evals before merging #56 |
-| `b825e5a` | 2026-09-28 | docs(status): regenerate live status from 1ed4d2c [skip ci] |
-| `1ed4d2c` | 2026-09-27 | Merge pull request #61 from SatyamDave/agentic/agent-service |
-| `21ff75e` | 2026-09-28 | docs(status): regenerate live status from 4d26c8e [skip ci] |
-| `c32f44f` | 2026-09-27 | Merge main into agentic/agent-service before merging #61 |
-| `4d26c8e` | 2026-09-27 | Merge pull request #58 from SatyamDave/agentic/bridge |
+| `836a1ab` | 2026-09-28 | Merge pull request #79 from SatyamDave/wave1/evals-reports |
+| `7cfe50c` | 2026-09-28 | Merge main into wave1/evals-reports before merging #79 |
+| `8f0edce` | 2026-09-28 | docs(status): regenerate live status from 88064aa [skip ci] |
+| `88064aa` | 2026-09-28 | Merge pull request #72 from SatyamDave/wave1/simvenue |
+| `1b02f70` | 2026-09-28 | Merge main into wave1/simvenue before merging #72 |
+| `81c1f9a` | 2026-09-28 | Merge main into wave1/simvenue before merging #72 |
+| `a4456d8` | 2026-09-28 | docs(status): regenerate live status from 6c776c6 [skip ci] |
+| `6c776c6` | 2026-09-28 | Merge pull request #75 from SatyamDave/wave1/risk |
+| `abbe049` | 2026-09-28 | docs(status): regenerate live status from 1ac55f3 [skip ci] |
+| `212b43f` | 2026-09-28 | Merge main into wave1/risk before merging #75 |
+| `1ac55f3` | 2026-09-28 | Merge pull request #80 from SatyamDave/fix/replay-ledger-determinism |
+| `257b29c` | 2026-09-28 | fix(agent): record wall-clock latency only for live decisions |
 
 ## Decisions (ADRs)
 
@@ -69,6 +72,6 @@ None.
 ## Code and research
 
 - Engine crates: `bridge`, `core`, `gateway`, `inference`, `oms`, `orderbook`, `replay`, `risk`, `strategy-runtime`, `telemetry`
-- Rust #[test] functions: 70
-- Python test functions: 134
+- Rust #[test] functions: 95
+- Python test functions: 165
 - Registry trials: `demo` 4, `study-0001-favorite-longshot` 1

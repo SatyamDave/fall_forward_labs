@@ -76,7 +76,7 @@ replay:
     sha() { if command -v sha256sum >/dev/null; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -d' ' -f1; }
     out=$(mktemp -d)
     cargo build --release --locked -q -p qc-replay
-    for run in 1 2; do ./target/release/qc-replay ../tests/replay/sample_day.csv "$out/orders-$run.log"; done
+    for run in 1 2; do ./target/release/qc-replay ../tests/replay/sample_day.csv "$out/orders-$run.log" ../tests/replay/limits.toml; done
     first=$(sha "$out/orders-1.log"); second=$(sha "$out/orders-2.log")
     echo "run 1 order-log sha256: $first"
     echo "run 2 order-log sha256: $second"
@@ -128,6 +128,19 @@ study-0001:
 eval:
     python3 scripts/eval/run.py
 
+# Issue #39: render out/agent/ledger.jsonl into a short, readable markdown/JSON report
+# (out/reports/ledger/report.{json,md}, both gitignored). Pass extra args, e.g.
+# `just report-ledger --ledger some/other/ledger.jsonl`.
+report-ledger *args:
+    python3 scripts/reports/ledger_report.py {{args}}
+
+# Issue #70: realized+unrealized P&L after fees vs no-trade and buy-and-hold, drawdown, AI cost,
+# and a stop-rule check (scripts/reports/pnl_policy.toml — placeholder thresholds pending
+# founders' decision #23). Writes one append-only file per day to fund/track-record/daily/
+# (fund/track-record/README.md documents the format). Nonzero exit means the stop rule tripped.
+report-pnl *args:
+    python3 scripts/reports/pnl_report.py {{args}}
+
 # ADR-0040 agent service (agent/): install pinned dependencies (npm ci, committed lockfile)
 agent-setup:
     cd {{agent}} && npm ci
@@ -152,7 +165,7 @@ agent-sim:
       (cd ../engine && cargo build --release --locked -p qc-bridge -q)
       model=../ml/tests/fixtures/model.json
       export QC_BRIDGE_BIN=../engine/target/release/qc-bridge
-      export QC_BRIDGE_ARGS="../tests/replay/sample_day.csv --limits ../config/limits/default.toml --model $model --model-sha256 $(tr -d '[:space:]' < ../ml/tests/fixtures/model.sha256)"
+      export QC_BRIDGE_ARGS="../tests/replay/sample_day.csv --limits ../tests/replay/limits.toml --model $model --model-sha256 $(tr -d '[:space:]' < ../ml/tests/fixtures/model.sha256)"
       # Smoke threshold: low enough that the order path (risk, OMS, SimVenue) actually runs.
       export QC_FAKE_PROB_THRESHOLD="${QC_FAKE_PROB_THRESHOLD:-0.5}"
     fi

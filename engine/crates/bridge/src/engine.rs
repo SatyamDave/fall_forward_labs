@@ -6,17 +6,20 @@
 //! Determinism: time comes only from recorded timestamps via [`SimClock`],
 //! and record order is a `Vec`, never a `HashMap`.
 
+use ed25519_dalek::SigningKey;
 use qc_core::{
     ClientOrderId, Clock, Event, InstrumentId, OrderEvent, OrderRequest, OrderType, Price, Qty,
-    SCALE, Side, SimClock, StrategyId, VenueId,
+    SCALE, Side, SimClock, StrategyId, Timestamp, VenueId,
 };
 use qc_gateway::{Record, SimVenue, VenueAdapter, record::parse as parse_records};
 use qc_inference::features::{FeatureState, N_FEATURES, TopOfBook};
 use qc_inference::{Direction, Model, Signal};
-use qc_oms::Oms;
+use qc_oms::{Oms, OmsError, OrderState};
 use qc_orderbook::{BookStatus, OrderBook};
 use qc_risk::{KillSwitch, Limits, RiskCheck, RiskContext, RiskEngine, RiskReject};
 use serde_json::{Map, Value, json};
+
+use crate::approval::{self, OrderFields};
 
 /// The only instrument the v1 bridge trades, and its label on the wire.
 pub const INSTRUMENT: InstrumentId = InstrumentId(1);
@@ -33,8 +36,11 @@ pub fn risk_reject_code(reject: RiskReject) -> &'static str {
         RiskReject::StaleData => "stale_data",
         RiskReject::MaxDailyLoss => "max_daily_loss",
         RiskReject::PriceBand => "price_band",
+        RiskReject::SelfCross => "self_cross",
         RiskReject::MaxNotional => "max_notional",
+        RiskReject::MaxDailyNotional => "max_daily_notional",
         RiskReject::MaxPosition => "max_position",
+        RiskReject::WashTrade => "wash_trade",
         RiskReject::MaxOrderRate => "max_order_rate",
     }
 }
@@ -43,6 +49,57 @@ pub fn risk_reject_code(reject: RiskReject) -> &'static str {
 pub struct LoadedModel {
     pub model: Box<dyn Model>,
     pub sha256: String,
+}
+
+/// Protocol v1.1 `--venue` flag. `Sim` is the default and reproduces v1
+/// behaviour exactly (routes every accepted intent to [`SimVenue`]).
+/// `External` never routes: an accepted intent is recorded `PendingNew` and
+/// returned with a signed [`approval`](crate::approval), and only
+/// `report_execution` (from the TS gateway, after it talks to the real
+/// venue) may move the order forward.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum VenueMode {
+    Sim,
+    External,
+}
+
+impl VenueMode {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Sim => "sim",
+            Self::External => "external",
+        }
+    }
+}
+
+impl std::str::FromStr for VenueMode {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "sim" => Ok(Self::Sim),
+            "external" => Ok(Self::External),
+            other => Err(format!(
+                "--venue must be \"sim\" or \"external\", got {other:?}"
+            )),
+        }
+    }
+}
+
+/// Snake-case wire name for an [`OrderState`], used by `status()` so a
+/// caller (and this crate's own tests) can tell a pending-external-approval
+/// order apart from one already resting at the venue.
+#[must_use]
+const fn order_state_str(state: OrderState) -> &'static str {
+    match state {
+        OrderState::PendingNew => "pending_new",
+        OrderState::New => "new",
+        OrderState::PartiallyFilled => "partially_filled",
+        OrderState::Filled => "filled",
+        OrderState::PendingCancel => "pending_cancel",
+        OrderState::Canceled => "canceled",
+        OrderState::Rejected => "rejected",
+    }
 }
 
 pub struct BridgeEngine {
@@ -67,6 +124,11 @@ pub struct BridgeEngine {
     since_last_decision: u32,
     decision_seq: u64,
     next_client_id: u64,
+    venue_mode: VenueMode,
+    /// Fresh per process (protocol v1.1): never persisted, never reused
+    /// across a restart, so an old approval cannot outlive the process that
+    /// minted it.
+    signing_key: SigningKey,
 }
 
 impl BridgeEngine {
@@ -78,6 +140,7 @@ impl BridgeEngine {
         tick: Price,
         decide_every: u32,
         model: Option<LoadedModel>,
+        venue_mode: VenueMode,
     ) -> Self {
         Self {
             book: OrderBook::new(INSTRUMENT),
@@ -98,7 +161,26 @@ impl BridgeEngine {
             since_last_decision: 0,
             decision_seq: 0,
             next_client_id: 0,
+            venue_mode,
+            signing_key: approval::generate_signing_key(),
         }
+    }
+
+    #[must_use]
+    pub const fn venue_mode(&self) -> VenueMode {
+        self.venue_mode
+    }
+
+    /// `hello` response body (protocol v1.1): the protocol version this
+    /// binary speaks, the venue mode it was started with, and the public
+    /// key every approval it mints can be verified against.
+    #[must_use]
+    pub fn hello(&self) -> Value {
+        json!({
+            "protocol": "1.1",
+            "venue_mode": self.venue_mode.as_str(),
+            "approval_public_key": approval::encode_public_key(&self.signing_key.verifying_key()),
+        })
     }
 
     /// Parses a recording in the `tests/replay` text format (shared with `qc_replay`).
@@ -132,10 +214,21 @@ impl BridgeEngine {
 
     fn context(&self) -> RiskContext {
         let (mut open_buy, mut open_sell) = (0_i64, 0_i64);
+        let (mut own_best_bid, mut own_best_ask) = (None, None);
         for o in self.oms.open_orders() {
             match o.request.side {
-                Side::Buy => open_buy += o.open_qty().raw(),
-                Side::Sell => open_sell += o.open_qty().raw(),
+                Side::Buy => {
+                    open_buy += o.open_qty().raw();
+                    own_best_bid = Some(
+                        own_best_bid.map_or(o.request.price, |b: Price| b.max(o.request.price)),
+                    );
+                }
+                Side::Sell => {
+                    open_sell += o.open_qty().raw();
+                    own_best_ask = Some(
+                        own_best_ask.map_or(o.request.price, |a: Price| a.min(o.request.price)),
+                    );
+                }
             }
         }
         RiskContext {
@@ -149,40 +242,76 @@ impl BridgeEngine {
                 .mid()
                 .filter(|_| self.book.status() == BookStatus::Synced),
             daily_pnl: self.daily_pnl(),
+            own_best_bid,
+            own_best_ask,
         }
     }
 
-    /// Applies venue events (fills, acks) to the OMS and updates position and
-    /// cash on fills. Mirrors `qc_replay::Engine::drain`'s fill bookkeeping.
+    /// Applies one order-lifecycle event to the OMS, updating position and
+    /// cash on a fill. Shared by [`Self::drain_venue_events`] (`sim` mode,
+    /// events from `SimVenue`) and [`Self::report_execution`] (`external`
+    /// mode, events reported by the TS gateway after it talks to the real
+    /// venue) so the fill bookkeeping has exactly one implementation.
+    fn apply_order_event(&mut self, event: &OrderEvent) -> Result<OrderState, OmsError> {
+        let state = self.oms.apply(event)?;
+        if let OrderEvent::Filled {
+            client_id,
+            price,
+            qty,
+            ts,
+        } = *event
+            && let Some(order) = self.oms.get(client_id)
+        {
+            let notional = i128::from(price.raw()) * i128::from(qty.raw()) / i128::from(SCALE);
+            let (dq, dc) = match order.request.side {
+                Side::Buy => (qty.raw(), -notional),
+                Side::Sell => (-qty.raw(), notional),
+            };
+            self.position = Qty::from_raw(self.position.raw() + dq);
+            self.cash += dc;
+            // #40: a wash-trade pattern is about completed trades, not merely
+            // accepted-then-canceled quotes, so it is fed on fill (sim or
+            // gateway-reported), not on submit.
+            self.risk
+                .record_fill(order.request.instrument, order.request.side, price, qty, ts);
+        }
+        Ok(state)
+    }
+
+    /// Applies venue events (fills, acks) to the OMS. Mirrors
+    /// `qc_replay::Engine::drain`'s fill bookkeeping.
     fn drain_venue_events(&mut self) {
         while let Some(event) = self.venue.poll() {
             let Event::Order(order_event) = event else {
                 continue;
             };
-            if self.oms.apply(&order_event).is_err() {
-                // This process is the only client of this venue, so an
-                // illegal event should never happen; skip it defensively
-                // rather than letting a stdio bridge process panic.
-                continue;
-            }
-            if let OrderEvent::Filled {
-                client_id,
-                price,
-                qty,
-                ..
-            } = order_event
-                && let Some(order) = self.oms.get(client_id)
-            {
-                let notional = i128::from(price.raw()) * i128::from(qty.raw()) / i128::from(SCALE);
-                let (dq, dc) = match order.request.side {
-                    Side::Buy => (qty.raw(), -notional),
-                    Side::Sell => (-qty.raw(), notional),
-                };
-                self.position = Qty::from_raw(self.position.raw() + dq);
-                self.cash += dc;
-            }
+            // This process is the only client of this venue, so an illegal
+            // event should never happen; skip it defensively rather than
+            // letting a stdio bridge process panic.
+            let _ = self.apply_order_event(&order_event);
         }
         self.check_daily_loss();
+    }
+
+    /// `report_execution` (protocol v1.1, gateway -> bridge, `external`
+    /// mode): applies a real venue's report of what happened to one order to
+    /// the OMS. A legal transition applies exactly as a `SimVenue` event
+    /// would; an illegal one (a report that cannot follow from the order's
+    /// current state — the reconciliation failure root rule 12 asks the
+    /// bridge to fail closed on) is never applied and instead halts the
+    /// engine, since our view of position/exposure would otherwise be wrong
+    /// and nothing downstream can trust it.
+    ///
+    /// # Errors
+    /// The [`OmsError`] that made the transition illegal.
+    pub fn report_execution(&mut self, event: OrderEvent, ts_ns: u64) -> Result<(), OmsError> {
+        self.clock.advance_to(Timestamp(ts_ns));
+        let result = self.apply_order_event(&event);
+        self.check_daily_loss();
+        if result.is_err() {
+            self.risk.kill_switch().engage();
+        }
+        result.map(|_| ())
     }
 
     fn update_features_and_signal(&mut self) {
@@ -306,10 +435,17 @@ impl BridgeEngine {
     }
 
     /// Runs the same risk path `qc_replay::Engine` runs before every order,
-    /// then records to the OMS and routes to the venue. Never routes an
-    /// order that failed a check.
+    /// then records to the OMS. Never routes an order that failed a check.
+    ///
+    /// In `sim` mode (default, v1-compatible) an accepted order routes to
+    /// [`SimVenue`] exactly as before. In `external` mode it is never
+    /// routed: it is recorded `PendingNew` and the result carries a signed
+    /// `approval` (protocol v1.1, issue #34) instead, so the TS gateway can
+    /// act on this decision at a real venue without re-checking it, and
+    /// report what happened back through `report_execution`.
     pub fn submit_order_intent(
         &mut self,
+        request_id: &str,
         side: Side,
         qty: Qty,
         limit_price: Price,
@@ -346,6 +482,32 @@ impl BridgeEngine {
         if self.oms.insert(order).is_err() {
             return json!({"accepted": false, "risk_reject": "invalid_order"});
         }
+        if self.venue_mode == VenueMode::External {
+            let fields = OrderFields {
+                client_order_id: client_id.0,
+                request_id,
+                instrument: INSTRUMENT_LABEL,
+                side: match side {
+                    Side::Buy => "buy",
+                    Side::Sell => "sell",
+                },
+                qty,
+                limit_price,
+                // Mirrors `wire::WireTimeInForce`'s mapping (`Gtc` is the
+                // only source of `OrderType::Limit` on this wire path):
+                // reconstructs the wire spelling the agent originally sent.
+                time_in_force: match time_in_force {
+                    OrderType::Ioc => "ioc",
+                    OrderType::Limit | OrderType::PostOnly => "gtc",
+                },
+            };
+            let approval = approval::mint(&self.signing_key, &fields, self.clock.now().0);
+            return json!({
+                "accepted": true,
+                "client_order_id": client_id.0,
+                "approval": approval,
+            });
+        }
         if self.venue.submit(&order).is_ok() {
             self.drain_venue_events();
             return json!({"accepted": true, "client_order_id": client_id.0});
@@ -370,6 +532,7 @@ impl BridgeEngine {
                     "price": o.request.price.to_string(),
                     "qty": o.request.qty.to_string(),
                     "filled": o.filled.to_string(),
+                    "state": order_state_str(o.state),
                 })
             })
             .collect();

@@ -38,10 +38,10 @@ export async function runLoop(opts: LoopOptions): Promise<LoopCounts> {
 
     const startedAt = Date.now();
     const { decision, raw, costUsd } = await opts.decider.decide(request);
-    // Wall-clock latency is only recorded outside fake mode: fake-mode timing is noise (the
-    // decider does no real work), and including it would make the ledger hash vary run to run,
-    // breaking `just agent-sim`'s "twice must give identical hashes" determinism check.
-    const latencyMs = opts.mode === "fake" ? undefined : Date.now() - startedAt;
+    // Wall-clock latency is recorded only for live decisions. Fake and replay deciders do no
+    // real work, so their timing is noise, and recording it makes the ledger differ between two
+    // runs of the same input (replay's whole contract is that it doesn't).
+    const latencyMs = opts.mode === "live" ? Date.now() - startedAt : undefined;
     counts.decisions += 1;
 
     const intentResult = isTradeDecision(decision)

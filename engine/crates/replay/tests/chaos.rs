@@ -138,12 +138,14 @@ fn disconnect_rejects_new_orders_locally_and_trading_resumes_after_reconnect() {
 fn stale_book_blocks_new_orders_until_fresh_data_arrives() {
     let mut engine = sample_engine(limits(), KillSwitch::new());
     feed(&mut engine, &open_book(0));
-    // First market event places quotes; a sell trade 1.5 s later fills the bid,
-    // then another trade asks the quoter to replace it on a book that is now stale.
+    // First market event places quotes; a sell trade 1.5 s later fills the bid
+    // (1.0 already displayed at 100.0 is ahead of our quote in the queue, so the
+    // trade has to clear that before it reaches us), then another trade asks the
+    // quoter to replace it on a book that is now stale.
     feed(
         &mut engine,
         &parse(&format!(
-            "T,1,B,100.2,0.0001,{a},{a}\nT,1,S,100.0,0.001,{b},{b}\nT,1,S,100.0,0.0001,{c},{c}",
+            "T,1,B,100.2,0.0001,{a},{a}\nT,1,S,100.0,1.001,{b},{b}\nT,1,S,100.0,0.0001,{c},{c}",
             a = 10 * MS,
             b = 1500 * MS,
             c = 1600 * MS
@@ -167,10 +169,12 @@ fn partial_fills_accumulate_without_overfilling() {
     let mut engine = sample_engine(limits(), KillSwitch::new());
     feed(&mut engine, &open_book(0));
     let t = |ms: u64| ms * MS;
+    // 1.0 is already displayed at 100.0 ahead of our bid in the queue; the
+    // second trade clears that (1.0) and then partially fills us for 0.0004.
     feed(
         &mut engine,
         &parse(&format!(
-            "T,1,B,100.2,0.0001,{},{}\nT,1,S,100.0,0.0004,{},{}",
+            "T,1,B,100.2,0.0001,{},{}\nT,1,S,100.0,1.0004,{},{}",
             t(10),
             t(10),
             t(20),
