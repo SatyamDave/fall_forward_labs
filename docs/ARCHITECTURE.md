@@ -1,15 +1,17 @@
 # Architecture
 
-What is built on `main` at `9f39eee` (2026-09-28), then what is planned. Current status is in
+What is built on `main` at `013f3b1` (2026-09-28, after two agentic build waves, PRs #56-#61 and
+#72-#87), then what is planned. Current status is in
 [docs/reports/base-status.md](reports/base-status.md); a plain-language walkthrough with diagrams
 is [docs/guide/quant-core-guide.html](guide/quant-core-guide.html).
 
 quant-core has two halves that share files but never a process: an offline side (data, research,
 ML, reports) and an execution side (the Rust engine). Today the execution side runs only against a
-simulated venue on a synthetic recording. No code connects to any venue or reads credentials.
+simulated venue on a synthetic recording, or (in `external` venue mode) a synthetic mock Robinhood
+MCP server in tests — no code anywhere connects to a real venue or reads real credentials.
 Per [ADR-0040](adr/0040-agentic-decision.md), an agent service now exists that can call an AI API
-for the trade-decision step, but `QC_AGENT_MODE=fake` (no network, no API key) is the only mode CI
-runs; see "Agentic decision pipeline" below.
+for the trade-decision step, but `QC_AGENT_MODE=fake`/`replay` (no network, no API key) is the only
+mode CI runs; see "Agentic decision pipeline" below.
 
 The engine is the in-house `qc-*` crates under `engine/crates/`. ADR-0001 (Proposed) recommends
 building on NautilusTrader and hftbacktest; neither is a dependency, and nothing here wraps them.
@@ -56,14 +58,18 @@ flowchart LR
 | `qc-core` | `Price`, `Qty` (fixed-point `i64`, scale 1e8), IDs, `Timestamp`, `Clock`/`SimClock`, `MarketEvent`, `OrderEvent`, `OrderRequest` | No floats for money; time only through `Clock` or events |
 | `qc-orderbook` | `OrderBook::apply_snapshot`, `apply(&BookDelta)`, `status()` | Rejects crossed or locked results, sequence gaps, negative quantities; moves to `NeedsResync` until a snapshot; 256 levels a side |
 | `qc-strategy-runtime` | `Strategy::on_event(&mut self, &Event, &OrderBook, &mut Vec<Command>)`; `Command::{Submit, Cancel}` | `InsideQuoter` is a test fixture, not a strategy |
-| `qc-risk` (protected) | `RiskCheck::check(&OrderRequest, &RiskContext) -> Result<(), RiskReject>`; `RiskEngine`; `KillSwitch` | Kill switch first, then invalid order, stale data, daily loss, price band, notional, position (incl. open orders), order rate (1 s window). Limits from `config/limits/default.toml` |
+| `qc-risk` (protected) | `RiskCheck::check(&OrderRequest, &RiskContext) -> Result<(), RiskReject>`; `RiskEngine`; `KillSwitch` | 11 checks in order: kill switch, invalid order, stale data, daily loss, price band, self-cross (#40), notional, daily-notional cap (#41), position (incl. open orders), wash-trade pattern (#40, fed only by fills, never mere acceptance), order rate (1 s window). Risk never blocks a cancel. Limits from `config/limits/default.toml` (`config/limits/spy.toml` for the sample instrument) |
 | `qc-oms` | `Oms::insert`, `request_cancel`, `apply(&OrderEvent)`; `reconcile(&Oms, &[VenueOrder])` | Exhaustive 7-state machine; refuses overfills; any reconciliation discrepancy returns `halt() == true` |
-| `qc-gateway` | `VenueAdapter { submit, cancel, poll, order_snapshot }`; record parser; `SimVenue`; `TokenBucket`; `reconnect_delay_ms` | Only `SimVenue` implements the trait. It ignores queue position and does not reduce displayed size, so two aggressive orders can take the same quantity |
+| `qc-gateway` | `VenueAdapter { submit, cancel, poll, order_snapshot }`; record parser; `SimVenue`; `TokenBucket`; `reconnect_delay_ms` | Only `SimVenue` implements the trait. It models queue position and consumed liquidity (#30/#72): an aggressive order consumes size from the level it takes until the next book update replaces that level, and a resting order only fills once a recorded trade has traded through the size that was already displayed ahead of it when it arrived. Still a simplified fill model (no real order-book depth) |
 | `qc-replay` | `Engine::on_record`, `reconcile`; binary `qc-replay <recording> <log> [limits.toml]` | Runs book, strategy, risk, OMS and SimVenue; reconciles every 60 s of simulated time |
+| `qc-bridge` (`engine/crates/bridge`) | JSON Lines stdio protocol v1.2.1 (additive to v1/v1.1/v1.2): `hello`, `next_decision_request`, `submit_order_intent`, `no_trade`, `status`, `report_execution`, `kill`, `cancel_order_intent`, `reconcile`, `drain_halt_cancels`, `shutdown`; binary `qc-bridge` | The handoff between the deterministic engine and the agent service (ADR-0040). `--venue sim` (default) routes to `SimVenue`; `--venue external` mints Ed25519-signed approvals instead and waits for `report_execution`. `--kill-file <path>` is polled on every op/record *and* by a dedicated watcher thread independent of stdin, so a hung agent process can't block it. `--instrument <path.toml>` adds tick/qty-step/trading-hours validation. Every halt/kill/reject/reconcile/accepted-intent writes one structured JSON line to stderr (`scripts/ops/alerts.py`'s contract) |
 | `qc-inference` | `Model` trait; `LinearModel::load(bytes, expected_sha256)`; `FeatureState` | Loads only when the hash matches; Python/Rust parity tests on fixtures. Not wired into the replay engine |
-| `qc-telemetry`, `qc-benches` | `MetricSink`; criterion benches | Benches build; no numbers recorded |
+| `qc-telemetry`, `qc-benches` | `MetricSink`; criterion benches | Benches build; no numbers recorded. Real end-to-end decision latency is measured separately by `scripts/bench/latency.py` (`just bench-latency`), not these crates — see [docs/reports/latency.md](reports/latency.md) |
 | `data/`, `ml/` (Python) | schemas, quality checks, datasets, features, training, validation, registry, monitoring, export | Runs from `research/`'s uv environment |
 | `research/registry/` | `REGISTRY_DIR`, `TRIALS`, `record(path, entry)`, `read`, `trial_count(path, experiment)` | Append-only JSONL, one ledger at `research/registry/log/` (`QC_REGISTRY_DIR` overrides) |
+| `agent/src/broker/` (TypeScript) | `BrokerGateway` (approval verify + submit/cancel), `reconcile.ts`, `heartbeat.ts`, `robinhood.ts` (MCP tool mapping, UNVERIFIED pending #26) | Verifies every approval's signature, field match and expiry (against the bridge's own market clock, never `Date.now()`) before any call; idempotent by `client_order_id`; an unknown outcome queries status before ever resubmitting. Tested only against a mock Robinhood MCP server (`agent/src/testkit/mock-robinhood-mcp.ts`) — no real network call anywhere |
+| `agent/src/recorder/` (TypeScript) | `poll.ts`, `allowlist.ts` (read-only tool allowlist), `record-writer.ts`, `catalog.ts` | Polls quotes through the same Robinhood module interface `agent/src/broker/` uses, enforced read-only by an allowlist a test proves throws before any place/cancel/preview tool reaches the wire; writes the same CSV grammar `tests/replay/sample_day.csv` uses. Mock-only so far (`just record-quotes --dry-run`); never run unattended for a full trading day |
+| `scripts/eval/`, `evals/` | `run.py` (Tier 1), `live_agent.py` (Tier 2, paid/gated), `scenarios_from_ledger.py`, `promote.py` | Tier 1 (`just eval`) runs free on every PR: replay determinism, risk invariants (incl. black-box bridge sessions), walk-forward regression, registry integrity, study guard, `agent_sim_fake`. The learning loop turns ledger entries with known outcomes into new frozen scenarios and runs a champion/challenger promotion that never auto-promotes — it only writes a recommendation file |
 
 ## State transitions
 
@@ -111,9 +117,10 @@ process.
 
 [ADR-0040](adr/0040-agentic-decision.md) (Accepted by Satyam 2026-09-28, pending Rohit's approval)
 moves the final trade decision to an AI agent, placed after the classifier and before risk. This is
-a **current plus planned** picture: solid boxes are built by this batch of PRs (the `agentic/bridge`,
-`agentic/agent-service` and `agentic/evals` lanes); dashed boxes remain planned. Nothing here is
-live: `QC_AGENT_MODE=fake` is the only mode CI runs, and the Robinhood adapter does not exist.
+a **current plus planned** picture: solid boxes are built and tested (two build waves, PRs #56-#61
+and #72-#87); dashed boxes remain planned. Nothing here is live: `QC_AGENT_MODE=fake`/`replay` (no
+network, no API key) is the only mode CI runs, and no code anywhere holds a real Robinhood
+credential — the gateway and recorder are tested only against a synthetic mock MCP server.
 
 ```mermaid
 flowchart LR
@@ -123,28 +130,33 @@ flowchart LR
   subgraph rustengine["Rust engine (unchanged core, no network)"]
     book2[order book] --> classifier[qc-inference classifier]
   end
-  classifier --> bridge["qc-bridge<br/>(Rust, JSON Lines v1)"]
+  classifier --> bridge["qc-bridge v1.2.1<br/>(Rust, JSON Lines)<br/>kill-file watcher, reconcile gate"]
   bridge -- DecisionRequest --> agentsvc["agent service<br/>(TypeScript, Claude Agent SDK)"]
-  agentsvc -- "submit_order_intent<br/>(only callable tool)" --> bridge
-  bridge --> risk["qc-risk + kill switch<br/>(unchanged, authoritative)"]
+  agentsvc -- "submit_order_intent / no_trade<br/>(only callable tools)" --> bridge
+  bridge --> risk["qc-risk + kill switch<br/>(unchanged, authoritative;<br/>+self-cross/wash-trade/daily-notional)"]
   risk --> oms2[qc-oms]
-  oms2 --> gateway["gateway<br/>(approval-token check)"]
+  oms2 --> gateway["gateway<br/>(approval-token verify,<br/>cancel, reconcile, heartbeat)"]:::built
   gateway --> simvenue[SimVenue]:::built
-  gateway -.-> rhmcp["Robinhood Agentic MCP<br/>(planned, not built)"]:::planned
+  gateway --> mockrh["mock Robinhood MCP<br/>(tests only)"]:::built
+  gateway -.-> rhmcp["real Robinhood connection<br/>(planned; blocked on #26)"]:::planned
+  recorder["recorder<br/>(mock-tested)"]:::built -. read-only quotes .-> gateway
   wf2 -.-> classifier
   classDef built fill:#e3f3ea,stroke:#1f7a4d
   classDef planned stroke-dasharray: 5 5,fill:#f0f1f4,stroke:#7a7f8c
   class bridge,agentsvc,risk,oms2 built
-  class gateway,rhmcp planned
+  class rhmcp planned
 ```
 
-**The wall still holds.** The agent service's only registered tool is `submit_order_intent`; the
-Robinhood MCP client is never in its process (`options.mcpServers` never names it), only in the
-gateway, which executes an order only after the bridge returns an approval token bound to the
-intent's hash. Risk and the kill switch run identically whether an intent came from the agent or
-from any other source — the agent proposes, risk and the kill switch dispose. See
-[section 9 of the project guide](guide/quant-core-guide.html#agents) for the plain-language version
-and ADR-0040's Challenges section for the evidence behind each limit below.
+**The wall still holds.** The agent service's only registered tools are `submit_order_intent` and
+`no_trade`; the Robinhood MCP client is never in its process (`options.mcpServers` never names it),
+only in the gateway, which executes an order only after the bridge returns an approval token bound
+to the intent's hash. Risk and the kill switch run identically whether an intent came from the
+agent or from any other source — the agent proposes, risk and the kill switch dispose. An external
+`--kill-file`, observed by a dedicated watcher thread independent of stdin, and a gateway heartbeat
+that drains halt-cancels at the broker, mean the kill switch works even if the agent process is
+completely wedged, not merely wrong. See [section 9 of the project guide](guide/quant-core-guide.html#agents)
+for the plain-language version and ADR-0040's Challenges section for the evidence behind each limit
+below.
 
 | Failure | What happens | What does not happen |
 |---|---|---|
@@ -154,6 +166,14 @@ and ADR-0040's Challenges section for the evidence behind each limit below.
 | Gateway error (Robinhood MCP unreachable, rejected, or disconnected) | `intent_result` carries the error; OMS treats the order as never sent; reconciliation on the next cycle confirms no position changed | The bridge does not assume the order went through |
 | Human revokes the agent's Robinhood connection | New orders stop at the gateway on the next attempt | Already-received instructions are **not** cancelled retroactively (Robinhood §29.8) — this is why the gateway's own per-order/day caps and kill switch matter, not just the in-app disconnect |
 | Risk rejects the agent's proposed order | `intent_result.risk_reject` is set; recorded in the ledger; no order reaches OMS | The agent is never told to "try a smaller size" automatically — the next `DecisionRequest` carries the updated (unchanged) risk budget |
+| `--kill-file` appears (operator- or heartbeat-touched) | A dedicated watcher thread polls it every 50ms, independent of stdin traffic, and engages the kill switch directly — no op or record has to arrive first | The agent process's cooperation is never required; a hung (not merely silent) agent doesn't block it |
+| Kill switch engaged, `external` venue mode | Every open order moves to `PendingCancel`; `status`/`drain_halt_cancels` expose a fresh, unexpired signed cancel approval per order (tagged `"reason":"halt"`) | Cancellation is never left as an unauthenticated/unsigned action; no separate `cancel_order_intent` round trip is required per order |
+| Gateway heartbeat (its own `setInterval`, independent of the decision loop's await chain) sees `halted` | It reads `pending_cancels` and calls `cancelOrder` for each, retrying every tick until nothing is left open at the broker | It does not wait on, or depend on, whatever the decision loop is currently doing |
+| `reconcile` finds a discrepancy (unknown venue order, state mismatch, position mismatch) | Engine halts with reason `reconciliation`, returns the diff | Neither side is trusted by default; `external` mode also refuses new intents until the *first* clean reconcile |
+| Broker response is ambiguous (a `report_execution`-worthy call throws — timeout or otherwise) | The gateway never blind-resubmits; it queries order status first, and (wave 2) can trigger a wider reconcile | An order is never sent twice on an unknown outcome |
+| Bridge process dies while the agent service is running it as a child | The agent service's own process exits non-zero (`agent/tests/cli-exit.test.ts`) | The loop does not silently stop while reporting success |
+| Restart after a crash (no journal beyond the OMS's own in-memory state and the append-only decision ledger) | A fresh `qc-bridge` process starts with an empty OMS and no memory of prior orders; `external` mode's reconcile-gate then compares against the broker's real state before allowing a new intent | Nothing is guessed or replayed automatically; there is no separate durable order journal today |
+| Trading-hours gate (`--instrument`, e.g. `config/instruments/spy.toml`) | Outside configured hours, `allowed_actions` narrows to `["no_trade"]` only, and any `buy`/`sell` intent is rejected | No market-holiday or early-close calendar exists yet (UTC/America-New-York DST only) — a real deployment needs one added before this gap stops being acceptable |
 
 ## Boundaries
 
@@ -173,5 +193,7 @@ and ADR-0040's Challenges section for the evidence behind each limit below.
 | Slow-signal store with staleness and influence bounds | Final base spec | Vertical |
 | Decision layer (`platform/decide`) | ADR-0010, ADR-0011 | Measured need; distillation blocked |
 | L0-L3 learning, autonomy loops B-H, agent swarm | ADR-0013, ADR-0006, POLICY.yaml | A validated signal; enforced review |
-| Robinhood Agentic MCP gateway adapter, external kill switch, reconciliation | ADR-0040 (A3) | Recorded-response tests; risk-wrapper proven end to end |
+| Real Robinhood network adapter (the gateway itself, external kill switch, and reconciliation are built and mock-tested; only the live network call remains) | ADR-0040 (A3) | Issue #26 (a real account to learn tool schemas from) |
 | Live (`QC_AGENT_MODE=live`) agent decisions, shadow, first agentic trade | ADR-0040 (A5, A6) | Counsel review, `loop-agent-eval` enabled with a real budget, both founders' sign-off |
+| Market-holiday / early-close calendar in `qc-bridge`'s trading-hours gate | `instrument.rs` (hand-rolled US DST only) | A real deployment; not needed while every run is against a synthetic recording or mock broker |
+| Real (non-decision-ledger-estimate) P&L, reconciled against a real venue | `scripts/reports/pnl_report.py` | Issue #45 (real daily reconciliation) |

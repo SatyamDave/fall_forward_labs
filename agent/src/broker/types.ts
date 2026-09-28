@@ -22,6 +22,14 @@ export interface ApprovedOrder {
 
 export type AssetClass = "equity" | "crypto";
 
+/** One resting price level on one side of a venue's order book: a real Level 2 level (real
+ *  size) from `get_equity_price_book`, or a single top-of-book level built from a quote when no
+ *  L2 tool exists for the asset class (agent/src/recorder/poll.ts's `pollBook` fallback). */
+export interface BookLevel {
+  price: DecimalString;
+  qty: DecimalString;
+}
+
 export type ExecutionEvent =
   | "accepted"
   | "rejected"

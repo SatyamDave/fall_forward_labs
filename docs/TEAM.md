@@ -79,6 +79,18 @@ rule 1 (the agent may make the final trade decision), protected workflow files a
 required by the decision protocol above and is tracked in issue #20. Until he approves, treat
 ADR-0040 as accepted by Satyam only; nothing beyond fake-mode and simulated trading may run.
 
+Dated exception, 2026-09-28 (third batch, two build waves): on the owner's explicit instruction,
+PRs #72-#87 were merged the same day — risk additions (self-cross, wash-trade, daily-notional
+caps, a protected-zone change per root rule 3), a realistic SimVenue, protocol v1.2/v1.2.1 for
+`qc-bridge` (approval stamps, external kill switch, cancel, reconcile), the TypeScript broker
+gateway and a mock Robinhood MCP server, evals/reports/the learning loop, ops (supervisor,
+alerting), a latency measurement, and a price recorder. As with the first two batches, Rohit
+(@rovivek) had not reviewed any of them at merge time, and his approval of ADR-0040 (issue #20)
+remains outstanding. This is a third instance of the same recorded exception, not a new precedent:
+every protected-zone change in this batch tightens a limit or adds a check, never loosens one.
+Nothing here calls a real broker, a real venue, or a live model; every network call in tests is to
+a synthetic mock server. Details: [base-status](reports/base-status.md#how-the-prs-were-merged).
+
 Proposed policy, for both founders to accept or change (nothing here is applied):
 
 1. Until a second founder is a collaborator, no PR touching a protected zone merges. The owner
@@ -101,7 +113,7 @@ Proposed policy, for both founders to accept or change (nothing here is applied)
 | Accept or revise ADRs 0001-0005 (merged, still Proposed) | Toolchain pin (patch 0001), registry, engine dependency | `docs/adr/` |
 | GitHub plan or organization for rulesets | Any enforced review or required check | this file |
 | Whether to add `ANTHROPIC_API_KEY` and enable a loop in `autonomy/POLICY.yaml` | AI review and knowledge-loop workflows (paid calls, gated by `scripts/ci/ai_gate.py`) | `autonomy/POLICY.yaml` |
-| Rohit's approval of ADR-0040 and the root CLAUDE.md rule 1 amendment | A2 onward; enabling `loop-agent-eval` | `docs/adr/0040-agentic-decision.md` |
+| Rohit's approval of ADR-0040 and the root CLAUDE.md rule 1 amendment | Ratifying A1-A3 (built as an authorized exception, not yet reviewed); enabling `loop-agent-eval` | `docs/adr/0040-agentic-decision.md` |
 | Counsel review: Robinhood consent/personal-use clauses; Anthropic's high-risk-use and no-training-on-outputs clauses | A0 closing; A6 first agentic trade | ADR-0040 Challenges 8-9 |
 | First asset for the agentic account (ADR-0040 recommends a liquid ETF; not yet decided) | A0 closing, A4 data capture | ADR-0040 Challenges 5 |
 | Founders' agreement (IP, roles) | Anything beyond research; outside the repo | team spec, human checklist |

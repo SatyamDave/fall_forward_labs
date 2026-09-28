@@ -1,10 +1,10 @@
-// The poll loop: pulls one quote every pollIntervalMs, up to requestBudget requests total, and
+// The poll loop: pulls one book every pollIntervalMs, up to requestBudget requests total, and
 // writes each as a Snapshot record. Rate limits for the real Agentic MCP endpoint are UNVERIFIED
 // (robinhood-agentic-mcp.md §4, issue #27) -- requestBudget is the recorder's own conservative
 // cap until a real limit is confirmed, not a measured one.
 import type { McpClient } from "../broker/mcp-client.js";
 import type { AssetClass, DecimalString } from "../broker/types.js";
-import { pollQuote } from "./poll.js";
+import { pollBook } from "./poll.js";
 import { toSnapshotRecord, type RecordWriter } from "./record-writer.js";
 
 export interface SessionOptions {
@@ -24,6 +24,11 @@ export interface SessionOptions {
 
 export interface SessionResult {
   requestsMade: number;
+  /** How many polls got real Level 2 depth vs. fell back to a top-of-book quote (BookSample's
+   *  own `depth` flag, tallied) -- the catalog manifest's own record of that flag, so a run that
+   *  silently degraded to top-of-book for its whole session is visible after the fact, not just
+   *  in a transient in-process value. */
+  depthCounts: { l2: number; top_of_book: number };
 }
 
 const defaultSleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
@@ -33,14 +38,16 @@ export async function runSession(opts: SessionOptions): Promise<SessionResult> {
   const sleep = opts.sleep ?? defaultSleep;
   let seq = 0;
   let requestsMade = 0;
+  const depthCounts = { l2: 0, top_of_book: 0 };
   while (requestsMade < opts.requestBudget) {
     if (opts.signal?.aborted) break;
     requestsMade++;
-    const sample = await pollQuote(opts.client, opts.assetClass, opts.symbol);
+    const sample = await pollBook(opts.client, opts.assetClass, opts.symbol);
+    depthCounts[sample.depth]++;
     seq++;
     opts.writer.writeSnapshot(toSnapshotRecord(sample, opts.instrumentId, seq, opts.placeholderQty));
     if (requestsMade >= opts.requestBudget || opts.signal?.aborted) break;
     await sleep(opts.pollIntervalMs);
   }
-  return { requestsMade };
+  return { requestsMade, depthCounts };
 }
