@@ -8,7 +8,7 @@ agent := "agent"
 # Python outside research/ and ml/ that ruff also checks, relative to research/. Not listed:
 # autonomy/ and tests/autonomy/ (protected paths that fail ruff today; fixing them needs a T3 PR),
 # and tests/replay/generate_sample_day.py (S311, PTH123; the fixture it wrote must stay identical).
-py_extra := "../data ../scripts ../tests/knowledge ../tests/hooks ../tests/ci ../tests/evals ../tests/ops ../ops/live ../.claude/hooks"
+py_extra := "../data ../scripts ../tests/knowledge ../tests/hooks ../tests/ci ../tests/evals ../tests/ops ../tests/shadow ../ops/live ../.claude/hooks"
 
 default:
     @just --list
@@ -45,6 +45,7 @@ test:
     cd {{research}} && uv run pytest -q ../tests/ci
     cd {{research}} && uv run pytest -q ../tests/evals
     cd {{research}} && uv run pytest -q ../tests/ops
+    cd {{research}} && uv run pytest -q ../tests/shadow
     cd {{research}} && uv run pytest -q studies/0001-favorite-longshot/tests
     cd {{research}} && uv run pytest -q studies/0002-favorite-longshot-v2/tests
 
@@ -245,3 +246,14 @@ record-quotes *args:
 # recorded run and the "first HFAT" definition it supports.
 bench-latency *args:
     python3 scripts/bench/latency.py {{args}}
+
+# Issue #48 (A5 Shadow, infrastructure): recorder -> qc-bridge --follow (sim venue only) -> agent
+# (fake unless --live, gated by scripts/ci/ai_gate.py) -> daily report, all as one command for
+# one calendar day (`--date`, default today UTC). `--dry-run` runs the whole pipeline against
+# the mock Robinhood MCP server with a small, fast budget; a real run needs real credentials
+# this build never has (hard limit: no real Robinhood connection) plus an explicit
+# --request-budget (scripts/shadow/run.py refuses to guess one). Writes
+# out/shadow/<date>/{ledger.jsonl,heartbeat.jsonl,report/} (gitignored, never
+# fund/track-record/daily/ -- that path is the real broker-sourced track record).
+shadow *args:
+    python3 scripts/shadow/run.py {{args}}

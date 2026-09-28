@@ -6,7 +6,9 @@
   `SimVenue`/`report_execution`), approval minting (`src/approval.rs`, order
   + cancel, issue #34/#66), the structured stderr event log
   (`src/eventlog.rs`, issue #64/#44), instrument/trading-hours config
-  (`src/instrument.rs`, issue #66). Binary `qc-bridge`.
+  (`src/instrument.rs`, issue #66), the CLI entry point and `--follow`
+  tailing reader (`src/main.rs`, `src/feed.rs`, issue #48/shadow lane).
+  Binary `qc-bridge`.
 - Does not own: the schemas (`schemas/decision/v1/`, ADR-0040), the TS agent
   service and its `agent/src/broker/` gateway (the approval *verifier* and
   the piece that finishes a real-venue cancel/reconcile), risk limit
@@ -20,6 +22,14 @@
 - `qc-bridge <recording> [--venue sim|external] [--kill-file <path>] [--instrument <path.toml>] ...`
   — no `--kill-file`/`--instrument` is byte-for-byte v1.1 (`schemas/decision/v1/README.md`).
   `--kill-file` also spawns the watcher thread above (issue #44 reopened).
+- `--follow [--stop-after-idle-ms <n>]` (issue #48/shadow lane): `<recording>`
+  is a file that keeps growing (`src/feed.rs`'s `FollowReader` tails it from
+  byte 0, only ever parsing complete lines) instead of one already finished;
+  `next_decision_request` blocks (poll every 20ms, never busy-spins) instead
+  of reporting the feed exhausted the moment nothing new is visible *yet*.
+  `--stop-after-idle-ms` is for tests only — a real run omits it and follows
+  forever (`tests/follow.rs`). `BridgeEngine::feed_records` (in
+  `src/engine.rs`, additive) is the one hook this needed outside `main.rs`/`feed.rs`.
 
 ## MUST
 - Every response validates against `schemas/decision/v1/*.schema.json` (`tests/schema_conformance.rs`).

@@ -1,18 +1,29 @@
 //! `qc-bridge <recording> [--limits <path>] [--decide-every <n>] [--tick <decimal>]
 //!            [--model <path> --model-sha256 <hex>] [--venue sim|external]
-//!            [--kill-file <path>] [--instrument <path.toml>]`
+//!            [--kill-file <path>] [--instrument <path.toml>]
+//!            [--follow [--stop-after-idle-ms <n>]]`
 //!
 //! Reads protocol v1 requests as JSON Lines on stdin, writes one JSON Lines
 //! response per request on stdout, and exits after `shutdown` or end of
 //! input. Stdout carries only protocol lines (root rule: money is never a
 //! float, and every response is schema-checked in tests); logs go to stderr.
+//!
+//! `--follow` (issue #48/shadow lane): `<recording>` is a file that keeps
+//! growing (a live/simulated recorder still writing to it) instead of a
+//! finished file. `next_decision_request` blocks (poll + sleep, see
+//! `feed.rs`) instead of returning "exhausted" the moment it runs out of
+//! records that are visible *yet*. `--stop-after-idle-ms` bounds that wait
+//! for tests; a real run omits it and follows forever.
 
 use std::io::{BufRead, Write as _};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Duration;
 
+use serde_json::Value;
+
 use qc_bridge::engine::{BridgeEngine, LoadedModel, VenueMode};
+use qc_bridge::feed::FollowReader;
 use qc_bridge::instrument::Instrument;
 use qc_inference::linear::LinearModel;
 use qc_risk::{KillSwitch, Limits};
@@ -73,6 +84,8 @@ struct Args {
     venue: VenueMode,
     kill_file: Option<PathBuf>,
     instrument: Option<String>,
+    follow: bool,
+    stop_after_idle_ms: Option<u64>,
 }
 
 const DEFAULT_LIMITS: &str = "../config/limits/default.toml";
@@ -91,6 +104,8 @@ fn parse_args(mut rest: impl Iterator<Item = String>) -> Result<Args, String> {
         venue: VenueMode::Sim,
         kill_file: None,
         instrument: None,
+        follow: false,
+        stop_after_idle_ms: None,
     };
     while let Some(flag) = rest.next() {
         let mut value = || rest.next().ok_or(format!("{flag} needs a value"));
@@ -107,8 +122,17 @@ fn parse_args(mut rest: impl Iterator<Item = String>) -> Result<Args, String> {
             "--venue" => args.venue = value()?.parse()?,
             "--kill-file" => args.kill_file = Some(PathBuf::from(value()?)),
             "--instrument" => args.instrument = Some(value()?),
+            "--follow" => args.follow = true,
+            "--stop-after-idle-ms" => {
+                args.stop_after_idle_ms = Some(value()?.parse().map_err(|_| {
+                    "--stop-after-idle-ms must be a non-negative integer".to_owned()
+                })?);
+            }
             other => return Err(format!("unknown flag {other}")),
         }
+    }
+    if args.stop_after_idle_ms.is_some() && !args.follow {
+        return Err("--stop-after-idle-ms requires --follow".to_owned());
     }
     Ok(args)
 }
@@ -136,12 +160,35 @@ fn load_instrument(path: &str) -> Result<Instrument, Box<dyn std::error::Error>>
     Instrument::parse(&text, dir).map_err(Into::into)
 }
 
+/// Whether `line` (a raw wire request) is a `next_decision_request` op —
+/// the only op `--follow` ever blocks a response for.
+fn is_next_decision_request(line: &str) -> bool {
+    serde_json::from_str::<Value>(line)
+        .ok()
+        .and_then(|v| v.get("op").and_then(Value::as_str).map(str::to_owned))
+        .as_deref()
+        == Some("next_decision_request")
+}
+
+/// Whether `response` (already dispatched) is a successful
+/// `next_decision_request` reply that came back empty -- "not ready yet",
+/// as opposed to a protocol error (missing `id`, bad JSON), which must never
+/// be retried since retrying it would just reproduce the same error forever.
+fn is_pending_decision(response: &str) -> bool {
+    let Ok(v) = serde_json::from_str::<Value>(response) else {
+        return false;
+    };
+    v.get("ok").and_then(Value::as_bool) == Some(true)
+        && v.get("decision_request").is_none_or(Value::is_null)
+}
+
 fn run() -> Result<(), Box<dyn std::error::Error>> {
     let args = parse_args(std::env::args().skip(1)).map_err(|e| {
         format!(
             "{e}\nusage: qc-bridge <recording> [--limits <path>] [--decide-every <n>] \
              [--tick <decimal>] [--model <path> --model-sha256 <hex>] [--venue sim|external] \
-             [--kill-file <path>] [--instrument <path.toml>]"
+             [--kill-file <path>] [--instrument <path.toml>] \
+             [--follow [--stop-after-idle-ms <n>]]"
         )
     })?;
     let instrument = args
@@ -154,7 +201,21 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         .map_or_else(|| PathBuf::from(&args.limits), |i| i.limits_path.clone());
     let limits: Limits = toml::from_str(&std::fs::read_to_string(&limits_path)?)?;
     let tick = args.tick.parse().map_err(|e| format!("bad --tick: {e}"))?;
-    let records = BridgeEngine::load_recording(&std::fs::read_to_string(&args.recording)?)?;
+    // `--follow`: `feed::FollowReader` owns reading `<recording>` from byte 0,
+    // including whatever is already there -- so the engine starts empty and
+    // is fed exclusively through `BridgeEngine::feed_records` below, instead
+    // of the one-shot `load_recording` a finished file uses.
+    let mut follow_reader = args.follow.then(|| {
+        FollowReader::new(
+            PathBuf::from(&args.recording),
+            args.stop_after_idle_ms.map(Duration::from_millis),
+        )
+    });
+    let records = if follow_reader.is_some() {
+        Vec::new()
+    } else {
+        BridgeEngine::load_recording(&std::fs::read_to_string(&args.recording)?)?
+    };
     let model = load_model(&args)?;
     let kill_switch = KillSwitch::new();
     // Issue #44 reopened: a clone handed to a dedicated watcher thread, spawned
@@ -185,7 +246,28 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         if line.trim().is_empty() {
             continue;
         }
-        let (response, shutdown) = qc_bridge::handle_line(&mut engine, &line);
+        let (mut response, mut shutdown) = qc_bridge::handle_line(&mut engine, &line);
+        // `--follow`: a `next_decision_request` that came back empty means
+        // "nothing visible yet", not "feed exhausted" -- block for more
+        // (feed.rs, never busy-spins) and retry the same request until a
+        // decision arrives or the feed is judged over (idle timeout, tests
+        // only; a real run has none and blocks as long as it takes).
+        if let Some(reader) = follow_reader.as_mut() {
+            if is_next_decision_request(&line) {
+                while is_pending_decision(&response) {
+                    let more = reader
+                        .wait_for_more()
+                        .map_err(|e| format!("--follow: {e}"))?;
+                    if more.is_empty() {
+                        break;
+                    }
+                    engine.feed_records(more);
+                    let (r2, s2) = qc_bridge::handle_line(&mut engine, &line);
+                    response = r2;
+                    shutdown = s2;
+                }
+            }
+        }
         writeln!(out, "{response}")?;
         out.flush()?;
         if shutdown {
