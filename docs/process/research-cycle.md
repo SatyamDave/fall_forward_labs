@@ -12,8 +12,8 @@ A cycle may end in REJECT or INSUFFICIENT EVIDENCE. Never manufacture a winner.
 - Registry: `research/registry/` (append-only JSONL; `record()`, `trial_count()`). Every trial,
   failures included (root rule 6).
 - Graveyard: `docs/research/graveyard.md`. Check it before step A; add a row at step I on rejection.
-- Checks: `just check` before every push. `just walkforward`, `just backtest` and `just replay` are
-  placeholders until phases 6 and 8 land; a study records its own exact command in its manifest.
+- Checks: `just check` before every push. `just replay` (synthetic fixture, committed hash) and
+  `just walkforward demo` (scratch output in `out/`) run; `just backtest` is not implemented and exits 2. A study records its own exact command in its manifest.
 
 ## Checklist
 
