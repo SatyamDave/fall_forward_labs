@@ -4,6 +4,9 @@ set shell := ["bash", "-euo", "pipefail", "-c"]
 
 engine := "engine"
 research := "research"
+# Python outside research/ and ml/ that ruff also checks, relative to research/. Not listed:
+# autonomy/ and tests/autonomy/ (protected paths that fail ruff today; fixing them needs a T3 PR).
+py_extra := "../data ../scripts ../tests/knowledge ../tests/hooks ../.claude/hooks"
 
 default:
     @just --list
@@ -19,20 +22,25 @@ check: fmt-check lint test audit
 # Rewrite files into canonical format
 fmt:
     cd {{engine}} && cargo fmt --all
-    cd {{research}} && uv run ruff format . ../ml
+    cd {{research}} && uv run ruff format . ../ml {{py_extra}}
 
 fmt-check:
     cd {{engine}} && cargo fmt --all --check
-    cd {{research}} && uv run ruff format --check . ../ml
+    cd {{research}} && uv run ruff format --check . ../ml {{py_extra}}
 
 lint:
     cd {{engine}} && cargo clippy --workspace --all-targets --locked -- -D warnings
-    cd {{research}} && uv run ruff check . ../ml
+    cd {{research}} && uv run ruff check . ../ml {{py_extra}}
     cd {{research}} && uv run mypy registry ../ml
 
+# One pytest run per suite so the log shows each suite's own pass count.
 test:
     cd {{engine}} && cargo test --workspace --locked
-    cd {{research}} && uv run pytest
+    cd {{research}} && uv run pytest -q
+    cd {{research}} && uv run pytest -q ../tests/hooks
+    cd {{research}} && uv run pytest -q ../tests/knowledge
+    cd {{research}} && uv run pytest -q ../tests/autonomy
+    cd {{research}} && uv run pytest -q studies/0001-favorite-longshot/tests
 
 # Known-vulnerability and license checks; each tool is skipped with a message if it is not installed
 audit:
@@ -93,7 +101,7 @@ learnings:
     echo "${#items[@]} untriaged learning(s) in .claude/learnings/inbox"
     for f in ${items[@]+"${items[@]}"}; do echo "  $f: $(head -1 "$f" | sed 's/^# //')"; done
 
-# Tests for the Claude Code hooks in .claude/hooks (not part of `test`, which other phases own)
+# Tests for the Claude Code hooks in .claude/hooks alone (also part of `test`)
 test-hooks:
     cd {{research}} && uv run pytest ../tests/hooks -q
 

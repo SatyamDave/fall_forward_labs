@@ -39,6 +39,7 @@ select = ["E", "F", "W", "I", "B", "UP", "S", "PTH", "RUF"]
 "**/tests/**" = ["S101", "S311"]
 "../ml/tests/**" = ["S101", "S311"]
 "../data/**/tests/**" = ["S101", "S311"]
+"../tests/**" = ["S101"]
 # Seeded, deterministic simulation; not a security use of randomness.
 "../data/recorders/synthetic.py" = ["S311"]
 
