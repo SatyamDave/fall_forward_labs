@@ -9,16 +9,16 @@
 - `QC_AGENT_MODE=fake ...`: no network, no key, what CI runs. `QC_AGENT_MODE=live ...`: needs `ANTHROPIC_API_KEY` and `scripts/ci/ai_gate.py loop-agent-eval` to allow it.
 
 ## MUST
-- Exactly two SDK tools are registered, both from one in-process `createSdkMcpServer()`/`tool()` wrapper over `qc-bridge`: `get_decision_request` and `submit_decision` (`no_trade` is a `Decision` value, not a separate tool). `tools: []`; `allowedTools` names only these two; `permissionMode: "dontAsk"`.
+- Exactly two SDK tools are registered, both from one in-process `createSdkMcpServer()`/`tool()` wrapper over `qc-bridge`: `submit_order_intent` and `no_trade`. `tools: []`; `allowedTools` names only these two; `permissionMode: "dontAsk"`.
 - A `PreToolUse` hook denies any tool name other than the two above — defense in depth in case a future tool is added without updating the allowlist; `canUseTool` alone is not enough.
-- `submit_decision` only ever calls the bridge's `submit_order_intent` (buy/sell) or `no_trade`; it never talks to a venue or broker directly.
+- Both tools only forward to the bridge's `submit_order_intent` / `no_trade` ops; neither talks to a venue or broker directly. The loop fetches `next_decision_request` itself; the model never pulls market data through a tool.
 - Every prompt has a version string; every ledger entry records that version plus the model id.
 - Every `DecisionRequest`, prompt version, model id, full SDK request/response (or `"fake"` marker), `Decision`, and `IntentResult` is appended to `out/agent/ledger.jsonl` (gitignored, append-only; root rule 6).
 - Live mode needs `ANTHROPIC_API_KEY` (secret manager, never in git — root rule 2) and a true result from `scripts/ci/ai_gate.py loop-agent-eval`; fake mode needs neither.
 - `src/broker/` executes only an order `qc-bridge` already approved (an approval token bound to the intent hash); it is never one of the two SDK tools above.
 
 ## NEVER
-- Never register the Robinhood MCP server, or any tool beyond the two above, as an agent tool. Check: `grep -rn 'allowedTools' src` lists only `get_decision_request` and `submit_decision`.
+- Never register the Robinhood MCP server, or any tool beyond the two above, as an agent tool. Check: `grep -rn 'allowedTools' src` lists only `submit_order_intent` and `no_trade`.
 - Never let the agent hold, read, or forward a broker credential; `src/broker/` gets its session from the caller, not from environment variables the agent process can read.
 - Never edit or skip a ledger line; corrections are new entries.
 - Never train `ml/`'s classifier on this agent's decisions or outputs as labels (ADR-0040; Anthropic Commercial Terms and Usage Policy bar training on Claude outputs).

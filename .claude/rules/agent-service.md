@@ -5,7 +5,7 @@ paths:
 
 # Agent service (ADR-0040)
 
-- Exactly two SDK tools, both from one in-process `createSdkMcpServer()`/`tool()` wrapper over `qc-bridge`: `get_decision_request` and `submit_decision`. `tools: []`, `allowedTools` names only these two, `permissionMode: "dontAsk"`.
+- Exactly two SDK tools, both from one in-process `createSdkMcpServer()`/`tool()` wrapper over `qc-bridge`: `submit_order_intent` and `no_trade`. `tools: []`, `allowedTools` names only these two, `permissionMode: "dontAsk"`.
 - A `PreToolUse` hook denies any tool name other than the two above; `canUseTool` alone is not enough.
 - Never register the Robinhood Agentic MCP server, or any other MCP server, as an agent tool. `src/broker/` calls it directly, outside the SDK's tool loop, and only to execute an order `qc-bridge` already approved (an approval token bound to the intent hash).
 - `QC_AGENT_MODE=fake` (what CI runs): a deterministic rule-based decider, no network, no API key.

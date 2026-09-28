@@ -164,3 +164,18 @@ def test_is_bot(actor: str) -> None:
 
 def test_is_not_bot() -> None:
     assert not arch_check.is_bot("SatyamDave")
+
+
+def test_citing_an_existing_adr_satisfies_the_doc_requirement(tmp_path: Path) -> None:
+    (tmp_path / "docs" / "adr").mkdir(parents=True)
+    (tmp_path / "docs" / "adr" / "0040-agentic-decision.md").write_text("# ADR-0040\n")
+    body = NORTH_STAR + "Architecture impact: implements ADR-0040's handoff contract.\n"
+    code, summary = run(tmp_path, ["schemas/decision/v1/decision.schema.json"], body)
+    assert code == 0, summary
+
+
+def test_citing_a_missing_adr_does_not_count(tmp_path: Path) -> None:
+    body = NORTH_STAR + "Architecture impact: implements ADR-0999.\n"
+    code, summary = run(tmp_path, ["schemas/decision/v1/decision.schema.json"], body)
+    assert code == 1
+    assert "cite an existing ADR" in summary

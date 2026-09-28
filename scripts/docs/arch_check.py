@@ -151,6 +151,19 @@ def flagged_engine_crates(files: list[str], diff_text: str) -> set[str]:
     return crates
 
 
+def cited_existing_adrs(impact: str, adr_dir: Path) -> list[str]:
+    """ADR numbers cited as ADR-NNNN in the impact section that exist in docs/adr/.
+
+    Implementing an already-recorded decision needs no new ADR; citing one that does not
+    exist does not count.
+    """
+    return [
+        n
+        for n in sorted(set(re.findall(r"\bADR-(\d{4})\b", impact)))
+        if any(adr_dir.glob(f"{n}-*.md"))
+    ]
+
+
 def check(
     files: list[str], body: str, diff_text: str, actor: str, claude_md: Path
 ) -> tuple[bool, str]:
@@ -173,8 +186,12 @@ def check(
                 '("none" is only valid for a non-major change).'
             )
         touches_adr = any(f.startswith("docs/adr/") for f in files)
-        if "docs/ARCHITECTURE.md" not in files and not touches_adr:
-            missing.append("Major change: PR must touch docs/ARCHITECTURE.md or a docs/adr/ file.")
+        cited = cited_existing_adrs(impact or "", claude_md.parent / "docs" / "adr")
+        if "docs/ARCHITECTURE.md" not in files and not touches_adr and not cited:
+            missing.append(
+                "Major change: PR must touch docs/ARCHITECTURE.md or a docs/adr/ file, "
+                "or cite an existing ADR (e.g. ADR-0040) in its Architecture impact section."
+            )
         for crate in sorted(flagged_engine_crates(files, diff_text)):
             crate_doc = f"engine/crates/{crate}/CLAUDE.md"
             if crate_doc not in files:
