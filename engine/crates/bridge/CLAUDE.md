@@ -1,59 +1,60 @@
 # engine/crates/bridge — qc-bridge: JSON Lines stdio bridge to an external decision agent
 
 ## Owns / does not own
-- Owns: protocol v1.1 wire parsing and dispatch (`src/wire.rs`), the bridge's
-  own engine loop (`src/engine.rs`): feed → book → features → signal on one
-  side, risk → OMS → `SimVenue`/`report_execution` on the other, and approval
-  token minting/verification (`src/approval.rs`, issue #34). Binary `qc-bridge`.
-- Does not own: the schemas (`schemas/decision/v1/`, ADR-0040, versioned separately),
-  the TypeScript agent service (`agent/`, not yet built) and its
-  `agent/src/broker/` gateway (the approval-token *verifier*: this crate only
-  mints), risk limit values (`config/limits/`), the venue adapter itself (`qc-gateway`),
-  `RiskContext` construction (owned by the risk lane; only changes where the
-  context struct itself changes).
+- Owns: protocol v1.2 wire parsing and dispatch (`src/wire.rs`), the engine
+  loop (`src/engine.rs`: feed → book → features → signal; risk → OMS →
+  `SimVenue`/`report_execution`), approval minting (`src/approval.rs`, order
+  + cancel, issue #34/#66), the structured stderr event log
+  (`src/eventlog.rs`, issue #64/#44), instrument/trading-hours config
+  (`src/instrument.rs`, issue #66). Binary `qc-bridge`.
+- Does not own: the schemas (`schemas/decision/v1/`, ADR-0040), the TS agent
+  service and its `agent/src/broker/` gateway (the approval *verifier* and
+  the piece that finishes a real-venue cancel/reconcile), risk limit
+  *values* (`config/limits/`, `config/instruments/`), the venue adapter
+  (`qc-gateway`), `RiskContext` construction (risk lane).
 
 ## Commands
-- `cargo test -p qc-bridge --locked`
-- `cargo clippy -p qc-bridge --all-targets --locked -- -D warnings`
+- `cargo test -p qc-bridge --locked`; `cargo clippy -p qc-bridge --all-targets --locked -- -D warnings`
 - `cargo deny check` (workspace-wide; required whenever a dependency changes)
 - `just bridge` (release binary), `just check`
-- `qc-bridge <recording> [--venue sim|external] ...` — `sim` (default) is v1-compatible; `external` never routes to `SimVenue` (see `schemas/decision/v1/README.md`).
+- `qc-bridge <recording> [--venue sim|external] [--kill-file <path>] [--instrument <path.toml>] ...`
+  — no `--kill-file`/`--instrument` is byte-for-byte v1.1 (`schemas/decision/v1/README.md`).
 
 ## MUST
-- Every response line echoes the request's `v`/`id` and validates against
-  `schemas/decision/v1/*.schema.json` (tested in `tests/schema_conformance.rs`
-  with the `jsonschema` crate, pinned exact, dev-dependency only).
-- `submit_order_intent` runs kill switch → the same `qc_risk::RiskEngine`
-  checks `qc_replay::Engine` runs → OMS → `SimVenue` (`sim` mode) or a signed
-  `approval` and no routing (`external` mode); an order that fails any check
-  never reaches the OMS or the venue (`tests/risk_rejection.rs`).
-- `report_execution` (`external` mode only) applies a gateway-reported event
-  to the OMS through the same `apply_order_event` fill bookkeeping
-  `drain_venue_events` uses; an illegal transition is never applied and
-  engages the kill switch instead of being silently skipped
-  (`tests/external_mode.rs`).
-- No wall clock: time comes only from recorded timestamps via `qc_core::SimClock`,
-  including `report_execution`'s `ts_ns` (`SimClock::advance_to` is monotonic-safe).
-  Two scripted runs over the same recording give byte-identical stdout in
-  `sim` mode (`tests/determinism.rs`); a fresh Ed25519 keypair per process
-  means an `external`/`hello` session is deliberately *not* held to that bar.
-- Stdout carries only protocol response lines; every log goes to stderr.
-- `ed25519-dalek` stays pinned exact (`=X.Y.Z`); any bump needs a fresh
-  `cargo deny check` pass, not just a build.
+- Every response validates against `schemas/decision/v1/*.schema.json` (`tests/schema_conformance.rs`).
+- `submit_order_intent` order: kill switch → reconcile gate (`external`) →
+  instrument checks (tick/qty-step/trading-hours) → `qc_risk::RiskEngine` →
+  OMS → `SimVenue` or a signed approval; any failed check never reaches the
+  OMS/venue (`tests/risk_rejection.rs`, `instrument.rs`, `reconcile.rs`).
+- `report_execution` applies a gateway event through `apply_order_event`; an
+  illegal transition halts with reason `illegal_order_event`, never applied (`tests/external_mode.rs`).
+- Halting (`BridgeEngine::halt`, one-way) always cancels every open order:
+  routed to `SimVenue` in `sim`, `PendingCancel` in `external` for the
+  gateway to finish (`tests/kill_and_cancel.rs`, `chaos.rs`).
+- `--kill-file` is polled on every record *and* op (`process_record`, top of
+  `wire::handle_line`), so it works even if the agent never sends another
+  line — `tests/chaos.rs` proves the 1-second budget.
+- `external` mode refuses `submit_order_intent` until a `reconcile` finds no
+  discrepancy (`"unreconciled"`); a discrepancy halts as `reconciliation` (`tests/reconcile.rs`).
+- `cancel_order_intent` never checks `self.halted` (risk never blocks a
+  cancel); unknown/terminal id is `invalid_cancel`, never a silent no-op.
+- No wall clock: time comes only from recorded timestamps via `SimClock`
+  (incl. `report_execution.ts_ns`). Two scripted runs give byte-identical
+  stdout in `sim` mode (`tests/determinism.rs`); a fresh Ed25519 keypair per
+  process means `external`/`hello` is deliberately not held to that bar.
+- Stdout is protocol-only; every log (incl. the new structured event log)
+  goes to stderr, matching `scripts/ops/alerts.py`'s one vocabulary.
+- `ed25519-dalek` stays pinned exact; any bump needs a fresh `cargo deny check`.
 
 ## NEVER
 - No `HashMap`/`HashSet` (clippy.toml bans them; record order must stay deterministic).
-- Never route an order that failed a risk check, even when the bridge itself
-  is otherwise a thin pass-through to the agent's decision.
-- Never route an order in `external` venue mode; only `report_execution`
-  (from the gateway, after it talks to the real venue) may move it forward.
-- The `jsonschema` dev-dependency stays a dev-dependency and keeps
-  `default-features = false`: schemas resolve `$ref`s from an in-memory
-  `Registry` built from the committed files, never HTTP or filesystem resolution.
-- `venue_order_id` on the `report_execution` wire is a decimal-integer string
-  (`qc_core::VenueOrderId` is a `u64` newtype) — this is UNVERIFIED against a
-  real broker's actual order-id format until #26; the assumption lives in
-  exactly one place, `wire::parse_venue_order_id`.
+- Never route an order that failed a risk check.
+- Never route an order in `external` mode; only `report_execution` may move it forward.
+- `jsonschema` stays a dev-dependency, `default-features = false` (in-memory `Registry` only).
+- `venue_order_id` (`report_execution`/`reconcile`) is a decimal-integer
+  string (UNVERIFIED until #26; one place, `wire::parse_venue_order_id`).
+- `instrument::Tz` never grows a hand-rolled DST rule for a zone this repo
+  doesn't need — a third zone needs a real tz crate, not another `match` arm.
 
 ## Gotchas
 _None yet. Each entry links to the PR or postmortem where it bit us._
@@ -62,9 +63,9 @@ _None yet. Each entry links to the PR or postmortem where it bit us._
 <!-- None yet. Entries arrive only through knowledge-sync PRs, newest first, max 15, format: - YYYY-MM-DD: <lesson> ([#N](https://github.com/SatyamDave/fall_forward_labs/pull/N)) -->
 
 ## See also
-- `schemas/decision/v1/README.md` (protocol v1.1: `hello`, `--venue`,
-  approval tokens, `report_execution`), `docs/adr/0040-*.md` (agentic trading
-  handoff), `../replay/src/lib.rs` (the risk/OMS/venue path this crate's
-  `submit_order_intent` mirrors), `src/approval.rs` (the one approval-token
-  implementation, also exported as `schemas/decision/v1/approval-test-vector.json`
-  for the TS gateway).
+- `schemas/decision/v1/README.md` (v1.2: `market_ts_ns`, `kill`,
+  `cancel_order_intent`, `reconcile`, `--kill-file`, `--instrument`),
+  `docs/adr/0040-*.md`, `docs/runbooks/kill-switch.md` (trigger + alerting),
+  `../replay/src/lib.rs` (`HaltReason` this crate mirrors), `src/approval.rs`
+  (also exported as `approval-test-vector.json`), `scripts/ops/alerts.py`
+  (the structured-log contract).

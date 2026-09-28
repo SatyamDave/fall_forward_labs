@@ -4,6 +4,7 @@
 //! `IntentResult`), which is exactly what schema conformance tests check.
 
 use qc_core::{ClientOrderId, OrderEvent, OrderType, Price, Qty, Side, Timestamp, VenueOrderId};
+use qc_oms::VenueOrder;
 use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
@@ -135,6 +136,44 @@ struct WireNoTrade {
     reason: String,
 }
 
+/// `reconcile.schema.json`'s `venue.orders[]` (protocol v1.2): what the
+/// gateway saw at the real venue, in the same shape `qc_oms::VenueOrder`
+/// wants, plus the wire's own decimal-string quantity/state spellings.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum WireVenueOrderState {
+    Open,
+    Filled,
+    Canceled,
+    Rejected,
+}
+
+#[derive(Debug, Deserialize)]
+struct WireVenueOrder {
+    client_order_id: Option<u64>,
+    venue_order_id: String,
+    state: WireVenueOrderState,
+    filled_qty: Qty,
+}
+
+#[derive(Debug, Deserialize)]
+struct WireVenue {
+    orders: Vec<WireVenueOrder>,
+    position: Qty,
+    #[allow(dead_code)]
+    // accepted but not (yet) compared -- see `BridgeEngine::reconcile_with_venue`
+    cash: Option<Price>,
+}
+
+fn wire_venue_order_to_oms(v: &WireVenueOrder) -> Result<VenueOrder, String> {
+    Ok(VenueOrder {
+        venue_id: parse_venue_order_id(&v.venue_order_id)?,
+        client_id: v.client_order_id.map(ClientOrderId),
+        open: matches!(v.state, WireVenueOrderState::Open),
+        filled: v.filled_qty,
+    })
+}
+
 fn ok_response(id: &str, extra: Map<String, Value>) -> String {
     let mut obj = Map::new();
     obj.insert("v".to_owned(), json!(PROTOCOL_VERSION));
@@ -191,6 +230,11 @@ pub fn handle_line(engine: &mut BridgeEngine, line: &str) -> (String, bool) {
             false,
         );
     };
+    // Protocol v1.2, issue #44: polled on every op (not just every record),
+    // so an out-of-band trigger (`--kill-file`) or an externally-engaged
+    // `KillSwitch` is observed even by a bare `status`/`hello` call.
+    engine.poll_kill_file();
+    engine.check_kill_switch();
     match op {
         "next_decision_request" => {
             let dr = engine.next_decision_request().unwrap_or(Value::Null);
@@ -207,12 +251,73 @@ pub fn handle_line(engine: &mut BridgeEngine, line: &str) -> (String, bool) {
         ),
         "hello" => (ok_response(&id, extra([("hello", engine.hello())])), false),
         "report_execution" => (report_execution(engine, &id, &value), false),
+        "kill" => (kill(engine, &id, &value), false),
+        "cancel_order_intent" => (cancel_order_intent(engine, &id, &value), false),
+        "reconcile" => (reconcile(engine, &id, &value), false),
         "shutdown" => (ok_response(&id, Map::new()), true),
         other => (
             error_response(&id, "unknown_op", format!("unknown op {other:?}")),
             false,
         ),
     }
+}
+
+#[derive(Debug, Deserialize)]
+struct WireKill {
+    reason: String,
+}
+
+/// `kill` (protocol v1.2, issue #44): always succeeds — engaging an
+/// already-engaged switch is a no-op, not an error.
+fn kill(engine: &mut BridgeEngine, id: &str, value: &Value) -> String {
+    let kill: WireKill = match serde_json::from_value(value.clone()) {
+        Ok(k) => k,
+        Err(e) => return error_response(id, "invalid_fields", e.to_string()),
+    };
+    engine.kill(&kill.reason);
+    ok_response(id, Map::new())
+}
+
+#[derive(Debug, Deserialize)]
+struct WireCancelOrderIntent {
+    client_order_id: u64,
+    #[allow(dead_code)]
+    reason: String,
+}
+
+/// `cancel_order_intent` (protocol v1.2): an unknown or already-terminal id
+/// is a protocol error, not a business rejection — root rule 12, fail
+/// closed on anything unclear rather than silently no-op.
+fn cancel_order_intent(engine: &mut BridgeEngine, id: &str, value: &Value) -> String {
+    let req: WireCancelOrderIntent = match serde_json::from_value(value.clone()) {
+        Ok(r) => r,
+        Err(e) => return error_response(id, "invalid_fields", e.to_string()),
+    };
+    match engine.cancel_order_intent(req.client_order_id, &req.reason) {
+        Ok(result) => ok_response(id, extra([("result", result)])),
+        Err(message) => error_response(id, "invalid_cancel", message),
+    }
+}
+
+/// `reconcile` (protocol v1.2, issue #45): the gateway's view of venue
+/// orders/position/cash, compared against the OMS.
+fn reconcile(engine: &mut BridgeEngine, id: &str, value: &Value) -> String {
+    let Some(venue) = value.get("venue") else {
+        return error_response(id, "invalid_fields", "\"venue\" is required");
+    };
+    let venue: WireVenue = match serde_json::from_value(venue.clone()) {
+        Ok(v) => v,
+        Err(e) => return error_response(id, "invalid_fields", e.to_string()),
+    };
+    let mut venue_orders = Vec::with_capacity(venue.orders.len());
+    for o in &venue.orders {
+        match wire_venue_order_to_oms(o) {
+            Ok(v) => venue_orders.push(v),
+            Err(message) => return error_response(id, "invalid_fields", message),
+        }
+    }
+    let result = engine.reconcile_with_venue(&venue_orders, venue.position);
+    ok_response(id, extra([("reconcile", result)]))
 }
 
 fn submit_order_intent(engine: &mut BridgeEngine, id: &str, value: &Value) -> String {
@@ -223,7 +328,7 @@ fn submit_order_intent(engine: &mut BridgeEngine, id: &str, value: &Value) -> St
         Ok(i) => i,
         Err(e) => return error_response(id, "invalid_fields", e.to_string()),
     };
-    if intent.instrument != crate::engine::INSTRUMENT_LABEL {
+    if intent.instrument != engine.instrument_label() {
         return error_response(
             id,
             "invalid_fields",

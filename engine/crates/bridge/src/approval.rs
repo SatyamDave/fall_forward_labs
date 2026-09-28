@@ -192,6 +192,84 @@ pub fn verify(
     Ok(())
 }
 
+/// `cancel_order_intent`'s approval fields (protocol v1.2): just the id, the
+/// rest of the cancel is implicit (there is nothing to tamper with beyond
+/// which order gets canceled).
+#[derive(Debug, Clone, Copy)]
+pub struct CancelFields {
+    pub client_order_id: u64,
+}
+
+/// The canonical cancel-approval payload. Field order here **is** the
+/// canonical wire order (already alphabetical: a < c < e), matching
+/// `schemas/decision/v1/README.md`'s v1.2 section.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct CancelApprovalPayload {
+    action: String,
+    client_order_id: u64,
+    expires_ts_ns: u64,
+}
+
+/// Signs a cancel (protocol v1.2), same key and TTL as [`mint`].
+///
+/// # Panics
+/// Never in practice, for the same reason as [`mint`].
+#[must_use]
+pub fn mint_cancel(key: &SigningKey, cancel: &CancelFields, decision_ts_ns: u64) -> Value {
+    let payload = CancelApprovalPayload {
+        action: "cancel".to_owned(),
+        client_order_id: cancel.client_order_id,
+        expires_ts_ns: decision_ts_ns + APPROVAL_TTL_NS,
+    };
+    let payload_json =
+        serde_json::to_string(&payload).expect("CancelApprovalPayload always serializes");
+    let signature = key.sign(payload_json.as_bytes());
+    json!({
+        "payload": payload_json,
+        "signature": BASE64.encode(signature.to_bytes()),
+    })
+}
+
+/// The TS gateway's own cancel-approval check, mirrored here for the same
+/// reason as [`verify`]: one tested implementation, one shared test vector.
+///
+/// # Errors
+/// See [`VerifyError`].
+pub fn verify_cancel(
+    public_key: &VerifyingKey,
+    approval: &Value,
+    cancel: &CancelFields,
+    now_ns: u64,
+) -> Result<(), VerifyError> {
+    let payload_json = approval
+        .get("payload")
+        .and_then(Value::as_str)
+        .ok_or(VerifyError::Malformed)?;
+    let signature_b64 = approval
+        .get("signature")
+        .and_then(Value::as_str)
+        .ok_or(VerifyError::Malformed)?;
+    let signature_bytes: [u8; 64] = BASE64
+        .decode(signature_b64)
+        .map_err(|_| VerifyError::Malformed)?
+        .try_into()
+        .map_err(|_| VerifyError::Malformed)?;
+    let signature = Signature::from_bytes(&signature_bytes);
+    public_key
+        .verify(payload_json.as_bytes(), &signature)
+        .map_err(|_| VerifyError::BadSignature)?;
+
+    let payload: CancelApprovalPayload =
+        serde_json::from_str(payload_json).map_err(|_| VerifyError::BadPayloadJson)?;
+    if payload.action != "cancel" || payload.client_order_id != cancel.client_order_id {
+        return Err(VerifyError::FieldMismatch("client_order_id"));
+    }
+    if now_ns >= payload.expires_ts_ns {
+        return Err(VerifyError::Expired);
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -261,6 +339,39 @@ mod tests {
         let expires_ts_ns = decision_ts_ns + APPROVAL_TTL_NS;
         assert_eq!(
             verify(&key.verifying_key(), &approval, &order, expires_ts_ns),
+            Err(VerifyError::Expired)
+        );
+    }
+
+    #[test]
+    fn mints_and_verifies_a_matching_cancel() {
+        let key = fixed_key();
+        let cancel = CancelFields { client_order_id: 7 };
+        let approval = mint_cancel(&key, &cancel, 1_000_000_000);
+        assert!(verify_cancel(&key.verifying_key(), &approval, &cancel, 1_000_000_001).is_ok());
+    }
+
+    #[test]
+    fn a_cancel_stamp_does_not_verify_against_a_different_order_id() {
+        let key = fixed_key();
+        let cancel = CancelFields { client_order_id: 7 };
+        let approval = mint_cancel(&key, &cancel, 1_000_000_000);
+        let other = CancelFields { client_order_id: 8 };
+        assert_eq!(
+            verify_cancel(&key.verifying_key(), &approval, &other, 1_000_000_001),
+            Err(VerifyError::FieldMismatch("client_order_id"))
+        );
+    }
+
+    #[test]
+    fn an_expired_cancel_stamp_is_rejected() {
+        let key = fixed_key();
+        let cancel = CancelFields { client_order_id: 7 };
+        let decision_ts_ns = 1_000_000_000;
+        let approval = mint_cancel(&key, &cancel, decision_ts_ns);
+        let expires_ts_ns = decision_ts_ns + APPROVAL_TTL_NS;
+        assert_eq!(
+            verify_cancel(&key.verifying_key(), &approval, &cancel, expires_ts_ns),
             Err(VerifyError::Expired)
         );
     }

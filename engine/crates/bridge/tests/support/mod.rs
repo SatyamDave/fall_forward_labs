@@ -3,7 +3,9 @@
 //! some of these functions is not dead code.
 #![allow(dead_code)]
 
+use qc_bridge::instrument::Instrument;
 use qc_bridge::{BridgeEngine, VenueMode};
+use qc_core::Qty;
 use qc_risk::{KillSwitch, Limits};
 
 /// The workspace's default limits, same file `qc_risk`'s own tests load. Deliberately tiny
@@ -62,6 +64,38 @@ pub fn engine_from_with_limits(csv: &str, decide_every: u32, limits: Limits) -> 
     )
 }
 
+/// The committed sample instrument (issue #66): parses the real
+/// `config/instruments/spy.toml` and `config/limits/spy.toml`, so this test
+/// helper also proves those committed files parse.
+#[must_use]
+pub fn spy_instrument() -> Instrument {
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../config/instruments");
+    let text = std::fs::read_to_string(format!("{dir}/spy.toml")).expect("spy.toml is committed");
+    Instrument::parse(&text, std::path::Path::new(dir)).expect("spy.toml parses")
+}
+
+#[must_use]
+pub fn spy_limits() -> Limits {
+    toml::from_str(include_str!("../../../../../config/limits/spy.toml")).unwrap()
+}
+
+/// An engine configured with `--instrument` (protocol v1.2, issue #66).
+#[must_use]
+pub fn engine_with_instrument(csv: &str, decide_every: u32) -> BridgeEngine {
+    let records = BridgeEngine::load_recording(csv).expect("fixture csv parses");
+    BridgeEngine::with_instrument(
+        records,
+        spy_limits(),
+        KillSwitch::new(),
+        "0.01".parse().unwrap(),
+        decide_every,
+        None,
+        VenueMode::Sim,
+        None,
+        Some(spy_instrument()),
+    )
+}
+
 #[must_use]
 pub fn engine_with_kill_switch(
     csv: &str,
@@ -95,4 +129,19 @@ pub fn engine_external(csv: &str, decide_every: u32) -> BridgeEngine {
         None,
         VenueMode::External,
     )
+}
+
+/// Same as [`engine_external`] but with the protocol v1.2 `reconcile` gate
+/// (issue #45) already satisfied with an empty, matching venue snapshot, so
+/// a test about approvals/`report_execution` is not also a test of the
+/// unreconciled gate (that gate has its own test: `tests/reconcile.rs`).
+#[must_use]
+pub fn engine_external_reconciled(csv: &str, decide_every: u32) -> BridgeEngine {
+    let mut engine = engine_external(csv, decide_every);
+    let result = engine.reconcile_with_venue(&[], Qty::ZERO);
+    assert_eq!(
+        result["ok"], true,
+        "empty venue snapshot must reconcile cleanly"
+    );
+    engine
 }

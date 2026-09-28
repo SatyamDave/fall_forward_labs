@@ -6,7 +6,9 @@
 
 pub mod approval;
 pub mod engine;
+pub mod eventlog;
+pub mod instrument;
 pub mod wire;
 
-pub use engine::{BridgeEngine, LoadedModel, VenueMode};
+pub use engine::{BridgeEngine, HaltReason, LoadedModel, VenueMode};
 pub use wire::handle_line;
