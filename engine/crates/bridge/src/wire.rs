@@ -103,6 +103,17 @@ fn execution_to_order_event(exec: &WireExecution) -> Result<(OrderEvent, u64), S
             let (Some(qty), Some(price)) = (exec.qty, exec.price) else {
                 return Err("\"qty\" and \"price\" are required for a fill execution".into());
             };
+            // A fill qty/price is a magnitude, never signed: `Qty`/`Price`
+            // parse a leading '-' without complaint (it means something else
+            // in other contexts, e.g. a short position), so this is the one
+            // place that must refuse it. The OMS's own overfill check already
+            // happens to reject a non-positive qty, but nothing upstream
+            // guards price, and an unchecked negative price flips the sign of
+            // the cash delta `apply_order_event` computes -- corrupting the
+            // exact bookkeeping the max-daily-loss kill switch reads.
+            if qty <= Qty::ZERO || price <= Price::ZERO {
+                return Err("\"qty\" and \"price\" must be positive for a fill execution".into());
+            }
             OrderEvent::Filled {
                 client_id,
                 price,

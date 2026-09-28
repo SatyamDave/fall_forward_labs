@@ -197,3 +197,39 @@ fn report_execution_in_sim_mode_is_a_protocol_error_with_no_state_change() {
         "sim mode must reject, not apply, the report"
     );
 }
+
+#[test]
+fn report_execution_rejects_a_negative_fill_price_instead_of_corrupting_cash() {
+    // A fill price is a magnitude, never a signed value; nothing upstream
+    // (the JSON-Schema pattern, `Price`'s own parser) rejects a leading '-',
+    // so this is the one place that must. Before the fix this silently
+    // flipped the sign of the cash delta a buy produces (cash should fall on
+    // a buy; a negative price makes it rise instead) -- exactly the
+    // bookkeeping the max-daily-loss kill switch reads.
+    let mut engine = support::engine_external(&support::small_book_csv(), 1);
+    assert!(engine.next_decision_request().is_some());
+
+    let submit = r#"{"v":1,"id":"1","op":"submit_order_intent","intent":
+        {"request_id":"dr-1","instrument":"1","side":"buy","qty":"0.001",
+         "limit_price":"99.8","time_in_force":"gtc","reason":"test"}}"#;
+    call(&mut engine, submit);
+    call(
+        &mut engine,
+        r#"{"v":1,"id":"2","op":"report_execution","execution":
+            {"client_order_id":1,"event":"accepted","venue_order_id":"555","ts_ns":10}}"#,
+    );
+    let before = engine.status();
+
+    let resp = call(
+        &mut engine,
+        r#"{"v":1,"id":"3","op":"report_execution","execution":
+            {"client_order_id":1,"event":"filled","qty":"0.001","price":"-99.8","ts_ns":20}}"#,
+    );
+    assert_eq!(resp["ok"], false, "a negative price must be refused: {resp:#}");
+    assert_eq!(resp["error"]["code"], "invalid_fields");
+    assert_eq!(
+        engine.status(),
+        before,
+        "a refused report must not move cash or position"
+    );
+}
