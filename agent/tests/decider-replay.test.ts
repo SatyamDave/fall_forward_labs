@@ -135,6 +135,8 @@ describe("replay through the full loop -> ledger path (what cli.ts QC_AGENT_MODE
     expect(first.entries).toHaveLength(3);
     for (const entry of first.entries) {
       expect(entry.mode).toBe("replay");
+      // Wall-clock latency would make two replays of the same recording differ.
+      expect(entry.latency_ms).toBeUndefined();
     }
     const byRequestId = new Map(first.entries.map((e) => [e.request.request_id, e]));
     expect(byRequestId.get("fixture-clean-buy-001")?.decision.action).toBe("buy");
