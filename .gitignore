@@ -30,3 +30,6 @@ evals/ledger/*.jsonl
 agent/node_modules/
 agent/dist/
 out/agent/
+# ops/live (#63): runtime-only halt marker, alert-dedup state and process logs -- never committed.
+ops/live/state/
+ops/live/logs/
