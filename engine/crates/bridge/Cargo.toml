@@ -1,0 +1,32 @@
+[package]
+name = "qc-bridge"
+description = "JSON Lines stdio bridge between the deterministic engine and an external decision agent"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "qc-bridge"
+path = "src/main.rs"
+
+[lints]
+workspace = true
+
+[dependencies]
+qc-core.workspace = true
+qc-orderbook.workspace = true
+qc-gateway.workspace = true
+qc-oms.workspace = true
+qc-risk.workspace = true
+qc-inference.workspace = true
+serde.workspace = true
+serde_json = { version = "1.0.151", features = ["float_roundtrip"] }
+toml.workspace = true
+
+[dev-dependencies]
+# Pinned exact: only used to validate emitted JSON against schemas/decision/v1
+# in tests. MIT license, no default features (no HTTP/file resolvers; every
+# $ref is resolved from an in-memory registry, so tests stay offline).
+jsonschema = { version = "=0.58.1", default-features = false }
