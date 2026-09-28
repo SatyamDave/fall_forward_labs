@@ -12,3 +12,5 @@ workspace = true
 
 [dependencies]
 qc-core.workspace = true
+qc-oms.workspace = true
+qc-orderbook.workspace = true

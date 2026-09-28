@@ -53,9 +53,22 @@ precommit:
 bench:
     cd {{engine}} && cargo bench --workspace --locked
 
-# Replay a recorded market day and check the order log is reproduced exactly
+# Replay a recorded market day twice and check both order logs match the committed sha256
 replay:
-    @echo "not implemented yet: engine-core phase (replay of a recorded day)"
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cd {{engine}}
+    sha() { if command -v sha256sum >/dev/null; then sha256sum "$1"; else shasum -a 256 "$1"; fi | cut -d' ' -f1; }
+    out=$(mktemp -d)
+    cargo build --release --locked -q -p qc-replay
+    for run in 1 2; do ./target/release/qc-replay ../tests/replay/sample_day.csv "$out/orders-$run.log"; done
+    first=$(sha "$out/orders-1.log"); second=$(sha "$out/orders-2.log")
+    echo "run 1 order-log sha256: $first"
+    echo "run 2 order-log sha256: $second"
+    if [ "$first" != "$second" ]; then echo "FAIL: replay is not deterministic"; exit 1; fi
+    expected=$(tr -d '[:space:]' < ../tests/replay/expected_order_log.sha256)
+    if [ "$first" != "$expected" ]; then echo "FAIL: order log does not match tests/replay/expected_order_log.sha256 ($expected)"; exit 1; fi
+    echo "replay deterministic and matches the committed order log"
 
 # Run a backtest from backtest/configs/<cfg>.yaml
 backtest cfg:
@@ -63,7 +76,8 @@ backtest cfg:
 
 # Run a strategy against live data with simulated fills
 paper strategy:
-    @echo "not implemented yet: paper-trading phase ({{strategy}})"
+    @echo "refused: paper trading needs live market data, and bootstrap allows no venue connections ({{strategy}})" >&2
+    @exit 1
 
 # Purged, embargoed walk-forward validation for a strategy or model
 # Writes backtest/reports/<name>/<date>.md and appends trials + a challenger to the registry.
