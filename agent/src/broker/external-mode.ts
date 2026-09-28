@@ -20,6 +20,8 @@ export interface ExternalModeDeps {
   assetClass: AssetClass;
   instrument: string;
   journalPath?: string;
+  /** Passed through to reconcileWithBroker's statusPath (preflight's reconcile_recent gate). */
+  reconcileStatusPath?: string;
   requestTimeoutMs?: number;
   logPreview?: GatewayConfig["logPreview"];
   /** Issue #44 reopened: overrides the heartbeat's own status-poll cadence (default 1s). Tests
@@ -68,6 +70,7 @@ export async function createExternalModeGateway(deps: ExternalModeDeps): Promise
       assetClass: deps.assetClass,
       instrument: deps.instrument,
       callOpts: { timeoutMs: deps.requestTimeoutMs },
+      statusPath: deps.reconcileStatusPath,
     });
 
   const gateway = new BrokerGateway({

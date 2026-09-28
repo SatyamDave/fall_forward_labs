@@ -87,6 +87,8 @@ CAP_KEYS = (
 # that file's `case` statement, not invent a second list.
 REQUIRED_SECRET_NAMES = ("ROBINHOOD_SESSION_TOKEN", "ANTHROPIC_API_KEY")
 
+# Written after every reconcile pass by agent/src/broker/reconcile.ts (default path in
+# agent/src/paths.ts's reconcileStatusPath(), overridable with QC_RECONCILE_STATUS_PATH).
 DEFAULT_RECONCILE_STATUS = Path("ops/live/state/reconcile-status.json")
 DEFAULT_LATENCY_RESULTS = Path("out/bench/latency-results.json")
 DEFAULT_MAX_RECONCILE_AGE_MIN = 60.0

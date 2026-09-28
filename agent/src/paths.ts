@@ -37,3 +37,9 @@ export function ledgerPath(): string {
 export function brokerJournalPath(): string {
   return process.env.QC_AGENT_BROKER_JOURNAL_PATH ?? path.join(repoRoot(), "out", "agent", "broker-journal.jsonl");
 }
+
+/** Latest reconcile verdict (agent/src/broker/reconcile.ts); must match
+ *  scripts/ops/preflight.py's DEFAULT_RECONCILE_STATUS. Gitignored via ops/live/state/. */
+export function reconcileStatusPath(): string {
+  return process.env.QC_RECONCILE_STATUS_PATH ?? path.join(repoRoot(), "ops", "live", "state", "reconcile-status.json");
+}

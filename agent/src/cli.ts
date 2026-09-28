@@ -24,7 +24,7 @@ import { loadReplayFixtures, ReplayDecider } from "./decider/replay.js";
 import type { Decider } from "./decider/types.js";
 import { ledgerSha256 } from "./ledger.js";
 import { type ExternalModeLoopOptions, runLoop } from "./loop.js";
-import { repoRoot } from "./paths.js";
+import { reconcileStatusPath, repoRoot } from "./paths.js";
 import type { LedgerMode } from "./types.js";
 
 function resolveAssetClass(raw: string | undefined): AssetClass {
@@ -57,6 +57,7 @@ async function maybeBuildExternalMode(bridge: BridgeClient): Promise<ExternalMod
     mcp,
     assetClass,
     instrument,
+    reconcileStatusPath: reconcileStatusPath(),
     onHalted: (reason) => {
       // No logging convention exists in agent/ yet (cli.ts's own broker/gateway.ts precedent);
       // stderr is the best available signal until one does.
