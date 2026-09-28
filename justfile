@@ -147,6 +147,21 @@ report-ledger *args:
 report-pnl *args:
     python3 scripts/reports/pnl_report.py {{args}}
 
+# Issue #52: turn decision-ledger entries with known outcomes into new frozen scenarios under
+# evals/scenarios/from_ledger/ (provenance sidecar, synthetic/real label; never leaks the
+# outcome into the generated scenario's decision inputs). No-op, exit 0, if no ledger exists yet.
+scenarios-from-ledger *args:
+    python3 scripts/eval/scenarios_from_ledger.py {{args}}
+
+# Issue #53: champion/challenger promotion for agent prompt/tool-config versions. Runs the
+# frozen suite (fake mode; --live only when scripts/ci/ai_gate.py allows) and, if given
+# --champion-forward-ledger/--challenger-forward-ledger, a forward/shadow comparison; promotes
+# only when both tiers pass. Never edits agent/src/prompts/*.md or any decider default — writes
+# an append-only record to evals/promotions/ and, on PROMOTED, a recommendation file for
+# founders to act on by hand.
+promote *args:
+    python3 scripts/eval/promote.py {{args}}
+
 # ADR-0040 agent service (agent/): install pinned dependencies (npm ci, committed lockfile)
 agent-setup:
     cd {{agent}} && npm ci
@@ -190,12 +205,28 @@ agent-sim:
     if [ "$hash1" != "$hash2" ]; then echo "FAIL: agent-sim ledger is not deterministic"; exit 1; fi
     echo "agent-sim deterministic across two runs"
 
-# Protocol v1.2 (wave2-spec.md, issue #45 + gateway-integration): agent (fake decider) -> bridge
-# --venue external -> gateway -> mock Robinhood MCP -> report_execution, run twice with identical
-# ledger AND broker-journal hashes, exercising a partial fill, a reject, and a cancel. Runs
-# against agent/src/testkit/fake-bridge-v12.ts (protocol v1.2) until the bridge-control lane's
-# real qc-bridge binary supports `--venue external`/hello/cancel_order_intent/reconcile -- point
-# QC_BRIDGE_BIN at that binary and adjust agent/src/testkit/run-external-sim.ts once it lands
-# (see the PR body's integration notes for wave2/bridge-control).
+# Protocol v1.2 (wave2-spec.md, issue #45 + gateway-integration): agent (fake decider) -> the
+# real qc-bridge --venue external -> gateway -> mock Robinhood MCP -> report_execution, run twice
+# with identical ledger AND broker-journal hashes, exercising a partial fill, a reject, and a
+# cancel. Set QC_BRIDGE_BIN to point at a different binary (e.g. the fake, for a unit-test-only
+# run); the default is the real release binary built from engine/crates/bridge.
 agent-sim-external:
     cd {{agent}} && node_modules/.bin/tsx src/testkit/run-external-sim.ts
+
+# Issue #46: polls Robinhood quotes for one instrument, writes a replay-store CSV under
+# data/raw/ (gitignored) and a data/catalog/<dataset>.json manifest (agent/src/recorder/).
+# Read-only: never calls a place/cancel/preview tool -- agent/src/recorder/allowlist.ts enforces
+# it, agent/tests/recorder/allowlist*.test.ts proves it. `--dry-run` runs entirely against the
+# in-process mock Robinhood MCP server (no network); without it, connects to ROBINHOOD_MCP_URL
+# like every other broker call in this repo. `just record-quotes --dry-run` alone writes a small
+# default-budget file; agent/tests/recorder/replay-integration.test.ts is what proves the output
+# actually replays through qc-replay.
+record-quotes *args:
+    cd {{agent}} && node_modules/.bin/tsx src/recorder/cli.ts {{args}}
+
+# Issues #31/#55: per-decision latency (raw bridge round trip, agent decide step, full loop) in
+# fake and replay mode, N decisions each (default 1000). Prints p50/p95/p99/max/throughput and
+# writes out/bench/latency-results.json (gitignored). See docs/reports/latency.md for the last
+# recorded run and the "first HFAT" definition it supports.
+bench-latency *args:
+    python3 scripts/bench/latency.py {{args}}

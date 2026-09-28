@@ -1,7 +1,7 @@
 # agent/ — TypeScript agent service: makes the final trade decision through qc-bridge (ADR-0040)
 
 ## Owns / does not own
-- Owns: the Claude Agent SDK harness (`src/`), `prompts/` (versioned), the decider that turns a `DecisionRequest` into a `Decision`, the append-only decision ledger writer, `src/broker/` (Robinhood Agentic MCP client — never registered as an agent tool; it only executes an intent `qc-bridge` already approved).
+- Owns: the Claude Agent SDK harness (`src/`), `prompts/` (versioned), the decider that turns a `DecisionRequest` into a `Decision`, the append-only decision ledger writer, `src/broker/` (Robinhood Agentic MCP client — never registered as an agent tool; it only executes an intent `qc-bridge` already approved), `src/recorder/` (issue #46: polls read-only Robinhood quote tools through `src/broker/`'s own mapping and writes `data/raw/`+`data/catalog/`; a separate concern from `src/broker/`'s order-execution role, gated by its own tool allowlist, not part of the decider/bridge path at all).
 - Does not own: whether an intent is accepted (qc-risk, qc-bridge), order state (qc-oms), the classifier signal (qc-inference), limits and the kill switch (config/limits/, qc-risk) — the agent proposes, `qc-bridge` disposes.
 
 ## Commands
@@ -17,6 +17,7 @@
 - Every `DecisionRequest`, prompt version, model id, full SDK request/response (or `"fake"` marker), `Decision`, and `IntentResult` is appended to `out/agent/ledger.jsonl` (gitignored, append-only; root rule 6).
 - Live mode needs `ANTHROPIC_API_KEY` (secret manager, never in git — root rule 2) and a true result from `scripts/ci/ai_gate.py loop-agent-eval`; fake mode needs neither.
 - `src/broker/` executes only an order `qc-bridge` already approved (an approval token bound to the intent hash); it is never one of the two SDK tools above.
+- `src/recorder/` calls Robinhood only through `src/recorder/allowlist.ts`'s `readOnly()` wrapper, whose allowlist holds only quote/book tool names; `agent/tests/recorder/allowlist*.test.ts` proves a place/cancel/preview call throws before it reaches the wire.
 
 ## NEVER
 - Never register the Robinhood MCP server, or any tool beyond the two above, as an agent tool. Check: `grep -rn 'allowedTools' src` lists only `submit_order_intent` and `no_trade`.
@@ -24,6 +25,7 @@
 - Never edit or skip a ledger line; corrections are new entries.
 - Never train `ml/`'s classifier on this agent's decisions or outputs as labels (ADR-0040; Anthropic Commercial Terms and Usage Policy bar training on Claude outputs).
 - Never call this service from `engine/`, and never let `engine/` make a network or AI call itself (root rule 1); the only channel between them is `qc-bridge`'s stdin/stdout.
+- Never let `src/recorder/` call a place/cancel/preview tool, or hold any credential beyond the same read-only MCP session `src/broker/` uses; it never touches `qc-bridge`, the OMS, or the decision ledger (issue #46: "holds no credential that could place a trade").
 
 ## Gotchas
 _None yet. Each entry links to the PR or postmortem where it bit us._

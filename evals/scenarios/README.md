@@ -43,6 +43,19 @@ claim about any market.
 | `worldline-03.csv` | seq 3856-5260 | closing window, includes one trade record |
 | `worldline-04-shock.csv` | hand-constructed, not sliced | **adversarial**: a quiet ~50-record opening, a 10-step ~5% price-shock gap (both sides of the book stepped down together, spread held at one tick), then a ~50-record quiet recovery — issue #37's "at least one deliberately hard case" |
 
+## `from_ledger/` (issue #52)
+
+A second, sibling source of scenarios: `scripts/eval/scenarios_from_ledger.py` generates
+`from_ledger/*.csv` from real decision-ledger entries whose outcome is now known (a blocked
+trade, a confident loss, or a declined trade that would have made money), each paired with a
+`.provenance.json` sidecar (source ledger hash, entry index, selection reason, recorded outcome).
+Unlike the four worldlines above, these are single-snapshot recordings — faithful to the source
+entry's own recorded top-of-book, not to its recorded classifier `signal` (order-book/feature
+history cannot be honestly reconstructed after the fact; see that script's docstring). Labelled
+`synthetic` or `real` per the source ledger entry's mode. `scripts/eval/promote.py`'s frozen
+suite includes this directory by default; `scripts/eval/live_agent.py`'s paid Tier 2 set does
+not (a human reviews generated scenarios first).
+
 ## How a consumer should use these
 
 A worldline is disclosed only in-world time order: a consumer reads records one at a time and

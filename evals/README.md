@@ -105,3 +105,53 @@ Documented here only; no code yet.
 - **Forward-only, not "mostly forward-only."** No pre-cutoff data is reused as if it were a
   shadow result, and no result is reported until the pre-planned sample size is reached — a
   peek-and-stop is exactly the failure mode the sample-size plan exists to prevent.
+
+## Learning loop: scenarios from history, and champion/challenger promotion (issues #52, #53)
+
+Two scripts close the "recursive learning loop" the coordinator spec describes: real decisions
+become new test cases, and only agent changes that prove better on *both* a frozen test and a
+real forward test get recommended.
+
+**`just scenarios-from-ledger`** (`scripts/eval/scenarios_from_ledger.py`) reads a decision
+ledger and, for every entry whose outcome is now known (at least `--horizon`, default 20, later
+entries exist to mark against), applies three documented selection rules — a risk-rejected
+trade, a confident decision that lost money, or a declined request that would have made money —
+and writes a new frozen scenario under `evals/scenarios/from_ledger/`: a single-snapshot
+recording reproducing the entry's own top-of-book, plus a `.provenance.json` sidecar (source
+ledger sha256, entry index/request_id, date range, selection reason, recorded outcome, and the
+original decision/result for human audit). The generator function that builds the scenario's CSV
+takes only the entry's `request` — never its `decision`/`result`/outcome — so the recorded
+outcome cannot leak into the generated scenario's decision inputs by construction, not by
+filtering (`scripts/eval/scenarios_from_ledger.py`'s own docstring; tested directly). Labelled
+`synthetic` or `real` by the source ledger entry's mode. Not wired into `live_agent.py`'s paid
+Tier 2 scenario set (a human reviews generated scenarios first) — but `promote.py`'s frozen suite
+below does include this directory by default, which is the loop actually closing.
+
+**`just promote`** (`scripts/eval/promote.py`) is a champion/challenger pipeline for agent
+prompt/tool-config versions (`agent/src/prompts/*.md`, `decider/fake.ts`'s decision threshold).
+Two tiers, both required to promote:
+1. **Frozen** — champion and challenger each run once per scenario in `evals/scenarios/*.csv`
+   plus `evals/scenarios/from_ledger/*.csv`, in fake mode by default (deterministic, free), or
+   live mode when `--live` is passed and `ai_gate.py loop-agent-eval` allows. Compared paired per
+   scenario: net P&L after costs, plus two guardrails (invalid decisions, risk rejects) the
+   challenger must not make significantly worse.
+2. **Forward** — an already-recorded shadow/paper ledger for each candidate (issue #48's
+   mechanism produces these, not this script); without both, this tier is `UNAVAILABLE`, never a
+   silent pass.
+
+Every metric's significance is a bootstrap test (paired for the frozen tier, unpaired for the
+forward tier), Holm-corrected jointly across the metric family — per
+`llm-trading-eval-research.md` §4's Ordinal-Gates critique, an uncorrected single test can look
+like a real effect and evaporate under correction. **A challenger is `PROMOTED` only when both
+tiers `PASS`** — helping on the frozen suite alone is `NOT_PROMOTED` (tested directly:
+`tests/evals/test_promote.py::test_frozen_pass_forward_unavailable_is_not_promoted`). Every run
+appends one side-by-side record to `evals/promotions/promotions.jsonl`; a `NOT_PROMOTED` verdict
+also appends a row to `evals/graveyard.md`. A `PROMOTED` verdict writes *only* a recommendation
+file under `evals/promotions/recommendations/` — **this script never edits
+`agent/src/prompts/*.md` or any decider default itself** (tested at the filesystem level). If
+champion and challenger report the same underlying model, the record always says so and why that
+means their agreement is not independent confirmation (correlated-errors caution,
+`llm-trading-eval-research.md` §2). Promotion-bar thresholds (minimum improvement, significance
+level, bootstrap size) are config, not magic numbers: `evals/promotions/policy.toml`, placeholder
+values pending founders' decision, the same pattern issue #22 established for the classifier's
+gate.
