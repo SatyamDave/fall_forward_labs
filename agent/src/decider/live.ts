@@ -5,7 +5,7 @@
 // MCP server, a broker credential, or a real submit path — this decider only produces a
 // Decision; src/loop.ts is what calls the real qc-bridge afterwards.
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, readFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import {
@@ -63,12 +63,51 @@ export const preToolUseHook: HookCallback = async (input) => {
   };
 };
 
-function promptPath(): string {
-  return path.join(repoRoot(), "agent", "src", "prompts", `decide-${PROMPT_VERSION}.md`);
+const PROMPT_FILE_PATTERN = /^decide-(.+)\.md$/;
+
+function promptsDir(): string {
+  return path.join(repoRoot(), "agent", "src", "prompts");
 }
 
-export function buildPrompt(req: DecisionRequest): string {
-  const template = readFileSync(promptPath(), "utf8");
+function promptPath(version: string): string {
+  return path.join(promptsDir(), `decide-${version}.md`);
+}
+
+/** Every prompt version actually present on disk (`decide-<v>.md`), sorted. This is the
+ *  allowlist `resolvePromptVersion` validates QC_PROMPT_VERSION against -- there is no separate,
+ *  hand-maintained list to drift out of sync with the files themselves. */
+export function listPromptVersions(): string[] {
+  return readdirSync(promptsDir())
+    .map((name) => PROMPT_FILE_PATTERN.exec(name)?.[1])
+    .filter((v): v is string => v !== undefined)
+    .sort();
+}
+
+/**
+ * Issue #54's prompt-version override (`QC_PROMPT_VERSION`), so `scripts/eval/promote.py` can A/B
+ * a prompt change as a challenger without editing the committed default. Fails closed: an unset
+ * env var keeps today's committed `PROMPT_VERSION`; a set-but-unrecognized one refuses to start
+ * rather than silently falling back (root CLAUDE.md rule 12 -- "a check that could not run is not
+ * a check that passed" applies just as much to "a version that doesn't exist is not a version").
+ */
+function requireKnownPromptVersion(version: string, source: string): string {
+  const available = listPromptVersions();
+  if (!available.includes(version)) {
+    throw new Error(
+      `${source}=${JSON.stringify(version)} is not a known prompt version ` +
+        `(available: ${available.join(", ") || "(none found)"}); refusing to guess.`,
+    );
+  }
+  return version;
+}
+
+export function resolvePromptVersion(env: NodeJS.ProcessEnv = process.env): string {
+  const requested = env.QC_PROMPT_VERSION;
+  return requested === undefined ? PROMPT_VERSION : requireKnownPromptVersion(requested, "QC_PROMPT_VERSION");
+}
+
+export function buildPrompt(req: DecisionRequest, promptVersion: string = PROMPT_VERSION): string {
+  const template = readFileSync(promptPath(promptVersion), "utf8");
   return `${template}\n\n## Decision request\n\n\`\`\`json\n${JSON.stringify(req, null, 2)}\n\`\`\`\n`;
 }
 
@@ -165,12 +204,40 @@ export function buildOptions(policy: LivePolicy, capture: { outcome?: Decision }
   };
 }
 
+export interface LiveDeciderOptions {
+  /**
+   * Caps this instance's per-decision budget at or below whatever `ai_gate.py` allows, never
+   * above it -- issue #54's ensemble uses this to split one total budget equally across N
+   * members (`splitBudgetEqually` in `./ensemble.js`), so the panel's combined worst-case spend
+   * is the same as a single agent's, not N times it.
+   */
+  maxBudgetUsdOverride?: number;
+  /** Defaults to `resolvePromptVersion(process.env)` (QC_PROMPT_VERSION, validated, fail-closed)
+   *  when omitted -- an ensemble member can be pinned to a specific version explicitly instead. */
+  promptVersion?: string;
+}
+
 export class LiveDecider implements Decider {
+  readonly promptVersion: string;
+
+  constructor(private readonly opts: LiveDeciderOptions = {}) {
+    this.promptVersion =
+      opts.promptVersion !== undefined
+        ? requireKnownPromptVersion(opts.promptVersion, "LiveDeciderOptions.promptVersion")
+        : resolvePromptVersion();
+  }
+
   async decide(req: DecisionRequest): Promise<DecisionOutcome> {
     const policy = resolveLivePolicy();
+    if (this.opts.maxBudgetUsdOverride !== undefined) {
+      // Tighten only, matching root CLAUDE.md rule 4's "limits can only be tightened
+      // automatically" logic even though this isn't a config/limits/** risk limit: a caller-
+      // supplied override can never raise what ai_gate.py already allowed.
+      policy.maxBudgetUsd = Math.min(policy.maxBudgetUsd, this.opts.maxBudgetUsdOverride);
+    }
     const capture: { outcome?: Decision } = {};
     const options = buildOptions(policy, capture);
-    const prompt = buildPrompt(req);
+    const prompt = buildPrompt(req, this.promptVersion);
 
     const raw: unknown[] = [];
     let costUsd: DecimalString | undefined;

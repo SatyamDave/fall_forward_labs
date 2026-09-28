@@ -7,13 +7,15 @@
 ## Commands
 - `just agent-setup`, `just agent-test`, `just agent-sim` (fake mode against tests/replay/sample_day.csv; running it twice must give identical ledger sha256)
 - `QC_AGENT_MODE=fake ...`: no network, no key, what CI runs. `QC_AGENT_MODE=live ...`: needs `ANTHROPIC_API_KEY` and `scripts/ci/ai_gate.py loop-agent-eval` to allow it.
+- `just ensemble-compare` (issue #54): single decider vs an N-member ensemble at the exact same total AI usage, over the frozen suite; reports P&L, member agreement, and an ADOPT/DO_NOT_ADOPT verdict. Never wired into the live loop by default — `QC_ENSEMBLE_SIZE`/`QC_ENSEMBLE_AGGREGATION` opt `cli.ts` in.
 
 ## MUST
 - Exactly two SDK tools are registered, both from one in-process `createSdkMcpServer()`/`tool()` wrapper over `qc-bridge`: `submit_order_intent` and `no_trade`. `tools: []`; `allowedTools` names only these two; `permissionMode: "dontAsk"`.
 - A `PreToolUse` hook denies any tool name other than the two above — defense in depth in case a future tool is added without updating the allowlist; `canUseTool` alone is not enough.
 - `@anthropic-ai/claude-agent-sdk` is exact-pinned in `package.json` (no `^`/`~`). `tests/permission-e2e.test.ts` proves the real permission-decision code path denies everything but the two wrapper tools by driving `buildOptions()` through a hand-reverse-engineered stub of the SDK's stream-json control protocol (`tests/helpers/fakeClaudeCli.mjs`), not a documented API — a version bump can silently change that protocol out from under the stub. **Any SDK version bump must re-run `npm test` (this suite included) before merging**, and if the stub's assumptions about `control_request`/`hook_callback`/`mcp_message` shapes stop matching, update `fakeClaudeCli.mjs` in the same PR as the bump, not after.
 - Both tools only forward to the bridge's `submit_order_intent` / `no_trade` ops; neither talks to a venue or broker directly. The loop fetches `next_decision_request` itself; the model never pulls market data through a tool.
-- Every prompt has a version string; every ledger entry records that version plus the model id.
+- Every prompt has a version string; every ledger entry records that version plus the model id. `QC_PROMPT_VERSION` (live mode only) overrides which `prompts/decide-<v>.md` is used, validated against the files actually on disk — an unrecognized version refuses to start rather than falling back (issue #54, for `scripts/eval/promote.py` prompt A/B tests).
+- `QC_ENSEMBLE_SIZE`/`QC_ENSEMBLE_AGGREGATION` (issue #54) wrap the chosen mode's decider in an N-member panel (`src/decider/ensemble.ts`); live members split one total per-decision budget equally, never more. Unset (default): today's single-decider behavior, byte-for-byte.
 - Every `DecisionRequest`, prompt version, model id, full SDK request/response (or `"fake"` marker), `Decision`, and `IntentResult` is appended to `out/agent/ledger.jsonl` (gitignored, append-only; root rule 6).
 - Live mode needs `ANTHROPIC_API_KEY` (secret manager, never in git — root rule 2) and a true result from `scripts/ci/ai_gate.py loop-agent-eval`; fake mode needs neither.
 - `src/broker/` executes only an order `qc-bridge` already approved (an approval token bound to the intent hash); it is never one of the two SDK tools above.
