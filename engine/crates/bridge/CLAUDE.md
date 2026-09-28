@@ -51,6 +51,13 @@
   clock (see `main.rs`'s `spawn_kill_file_watcher` doc comment) — the one
   documented exception to the no-wall-clock rule below, since the engine's
   clock is owned solely by the main thread this watcher must not depend on.
+- `trading_hours.calendar` (wave3/calendar) optionally names a
+  `config/instruments/calendars/*.toml` NYSE holiday/early-close calendar,
+  cwd-relative like `limits`. `instrument::TradingHours::is_open` fails a
+  holiday closed and an early close at its configured minute, and fails a
+  date outside the calendar's own covered years closed too (still
+  `outside_trading_hours`) rather than assuming a regular session
+  (`tests/instrument.rs`).
 - `external` mode refuses `submit_order_intent` until a `reconcile` finds no
   discrepancy (`"unreconciled"`); a discrepancy halts as `reconciliation` (`tests/reconcile.rs`).
 - `cancel_order_intent` never checks `self.halted` (risk never blocks a

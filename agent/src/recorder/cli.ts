@@ -1,6 +1,8 @@
 #!/usr/bin/env node
-// `just record-quotes [-- <flags>]`: polls Robinhood quotes for one instrument and writes a
-// replay-store CSV under data/raw/ plus a data/catalog/<dataset>.json manifest (issue #46).
+// `just record-quotes [-- <flags>]`: polls Robinhood's order book for one instrument (full Level
+// 2 depth when the asset class has one, top-of-book otherwise -- poll.ts's pollBook) and writes
+// a replay-store CSV under data/raw/ plus a data/catalog/<dataset>.json manifest (issue #46,
+// #43/#46 follow-up).
 //
 // --dry-run runs entirely in-process against agent/src/testkit/mock-robinhood-mcp.ts over an
 // InMemoryTransport (no network, no real Robinhood connection -- hard limit). Without
@@ -141,6 +143,7 @@ async function main(): Promise<void> {
   ]);
 
   let requestsMade = 0;
+  let depthCounts = { l2: 0, top_of_book: 0 };
   try {
     const result = await runSession({
       client,
@@ -154,6 +157,7 @@ async function main(): Promise<void> {
       signal: controller.signal,
     });
     requestsMade = result.requestsMade;
+    depthCounts = result.depthCounts;
   } finally {
     writer.close();
     process.removeListener("SIGINT", stop);
@@ -182,6 +186,7 @@ async function main(): Promise<void> {
     pollIntervalMs: args.pollIntervalMs,
     requestBudget: args.requestBudget,
     requestsMade,
+    depthCounts,
     records: writer.written,
     quality,
     recordingRelPath: path.relative(repoRoot(), outPath),
@@ -192,6 +197,7 @@ async function main(): Promise<void> {
   console.log(`wrote ${writer.written.length} record(s) to ${outPath}`);
   console.log(`catalog: ${manifestPath}`);
   console.log(`quality: ok=${quality.ok} seq_gaps=${quality.seqGaps.length} duplicates=${quality.duplicateSeqs.length} time_gaps=${quality.timeGaps.length} clock_skew=${quality.clockSkew.length}`);
+  console.log(`depth: l2=${depthCounts.l2} top_of_book=${depthCounts.top_of_book}`);
   if (!quality.ok) {
     console.warn("quality checks found issues -- see the catalog manifest's \"quality\" field for details");
   }

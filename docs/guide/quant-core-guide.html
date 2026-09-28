@@ -119,11 +119,11 @@ svg .ah{fill:var(--muted)} svg .ah-acc{fill:var(--accent)} svg .ah-bad{fill:var(
 <p class="small">This block rewrites itself from the repository on every merge to <code>main</code> and every 30 minutes for pull-request changes. The rest of the guide is written by hand and dated.</p>
 <!-- AUTO-STATUS:START -->
 <div class="card"><p class="small">Updated automatically on every merge to main and every 30 minutes by <code>.github/workflows/docs-status.yml</code>. Full table: <code>docs/STATUS.md</code>.</p>
-<p><b>main</b> at <code>c0958a5 2026-09-28</code> · latest CI: <b>in_progress on c0958a5</b> · paid AI loops: <b>off</b></p>
-<p><b>Open PRs (0)</b></p><ul><li>none</li></ul>
-<p><b>Recently merged</b></p><ul><li>#87 The kill switch cancels everything at the broker, even if the agent is stuck (2026-09-28)</li><li>#86 The PR checklist check accepts sections written as headings (2026-09-28)</li><li>#84 Wire the gateway to protocol v1.2: reconciliation, cancel, market clock (2026-09-28)</li><li>#85 External kill switch, real instrument, and protocol v1.2 for qc-bridge (2026-09-28)</li><li>#83 Turn real trades into lessons, and only promote agent changes that prove better (2026-09-28)</li><li>#82 Record real Robinhood price data for our asset (2026-09-28)</li><li>#81 Measure real per-decision latency (bridge, decide, full loop) (2026-09-28)</li><li>#78 Redo study 0001 favorite-longshot v2, bounded population, real sample (2026-09-28)</li></ul>
+<p><b>main</b> at <code>b44607a 2026-09-28</code> · latest CI: <b>in_progress on b44607a</b> · paid AI loops: <b>off</b></p>
+<p><b>Open PRs (2)</b></p><ul><li>#92 Profit is measured from what the broker actually filled, checked every day</li><li>#91 Live trading refuses to start until every go-live check passes</li></ul>
+<p><b>Recently merged</b></p><ul><li>#90 Never send an order when the market is closed (2026-09-28)</li><li>#89 Record the full order book, not just the best price (2026-09-28)</li><li>#88 Bring the docs and roadmap up to date with what&#x27;s built (2026-09-28)</li><li>#87 The kill switch cancels everything at the broker, even if the agent is stuck (2026-09-28)</li><li>#86 The PR checklist check accepts sections written as headings (2026-09-28)</li><li>#84 Wire the gateway to protocol v1.2: reconciliation, cancel, market clock (2026-09-28)</li><li>#85 External kill switch, real instrument, and protocol v1.2 for qc-bridge (2026-09-28)</li><li>#83 Turn real trades into lessons, and only promote agent changes that prove better (2026-09-28)</li></ul>
 <p><b>Decisions</b></p><ul><li>ADR-0001: Engine foundation: Proposed</li><li>ADR-0002: Dependencies and licenses: Proposed</li><li>ADR-0003: Venue selection: Proposed</li><li>ADR-0004: Languages and toolchain: Proposed</li><li>ADR-0005: Data storage: Proposed</li><li>ADR-0006: Run autonomy loops on GitHub Actions schedules with claude-code-action: unknown</li><li>ADR-0010: Decision layer (hosted decision models in the control plane only): Proposed</li><li>ADR-0011: TypeSafe AI (Jev) vendor review and access rules: Proposed</li><li>ADR-0013: Learning speeds (L0-L3) and their authority: Proposed (2026-09-27)</li><li>ADR-0020: First vertical: Proposed</li><li>ADR-0040: Agentic trading decision (final trade call moves to an AI agent): Accepted by Satyam 2026-09-28</li></ul>
-<p class="small">Rust #[test] functions: 133, Python test functions: 253 · trials: demo 4, study-0001-favorite-longshot 1, study-0002-favorite-longshot-v2 1</p></div>
+<p class="small">Rust #[test] functions: 144, Python test functions: 253 · trials: demo 4, study-0001-favorite-longshot 1, study-0002-favorite-longshot-v2 1</p></div>
 <!-- AUTO-STATUS:END -->
 
 <nav class="toc" aria-label="Contents">
@@ -168,24 +168,25 @@ svg .ah{fill:var(--muted)} svg .ah-acc{fill:var(--accent)} svg .ah-bad{fill:var(
 <thead><tr><th>Piece</th><th>What it does, plainly</th><th>Status</th><th>Main limitation</th></tr></thead>
 <tbody>
 <tr><td>Order book (<code>qc-orderbook</code>)</td><td>Keeps the current list of buy and sell prices for a market, rejects corrupt updates</td><td><span class="pill p-ok">Built, tested</span></td><td>Only fed synthetic data so far</td></tr>
-<tr><td>Risk checks + kill switch (<code>qc-risk</code>)</td><td>Blocks any order that breaks a limit; a kill switch stops new orders and cancels open ones</td><td><span class="pill p-ok">Built, tested</span></td><td>Limits are tiny placeholders; kill switch has no external button yet; does not close positions</td></tr>
-<tr><td>Order manager (<code>qc-oms</code>)</td><td>Tracks every order through its life (sent, accepted, filled, cancelled) and halts on surprises</td><td><span class="pill p-ok">Built, tested</span></td><td>Positions not reconciled with a broker (no broker yet)</td></tr>
-<tr><td>Simulated venue (<code>SimVenue</code>)</td><td>A fake exchange used for testing</td><td><span class="pill p-warn">Built, simplified</span></td><td>Ignores queue position and can reuse liquidity, so its fills are not realistic</td></tr>
+<tr><td>Risk checks + kill switch (<code>qc-risk</code>)</td><td>Blocks any order that breaks a limit (11 checks now, incl. self-cross and wash-trade); a kill switch stops new orders and cancels open ones</td><td><span class="pill p-ok">Built, tested</span></td><td>Limits are tiny placeholders; positions are not flattened. An external <code>--kill-file</code> + watcher thread and a broker-side heartbeat now exist in <code>qc-bridge</code>/the gateway (section 9) — the plain engine above still has no external button</td></tr>
+<tr><td>Order manager (<code>qc-oms</code>)</td><td>Tracks every order through its life (sent, accepted, filled, cancelled) and halts on surprises</td><td><span class="pill p-ok">Built, tested</span></td><td>Positions not reconciled with a real broker (mock-tested reconciliation exists in the agentic path, section 9)</td></tr>
+<tr><td>Simulated venue (<code>SimVenue</code>)</td><td>A fake exchange used for testing</td><td><span class="pill p-warn">Built, simplified</span></td><td>Models queue position and consumed liquidity now, so fills are more realistic; still simplified (no real order-book depth)</td></tr>
 <tr><td>Replay (<code>just replay</code>)</td><td>Runs a recorded day through the engine twice and proves the orders come out identical</td><td><span class="pill p-ok">Verified</span></td><td>The "recorded day" is synthetic</td></tr>
 <tr><td>Research stack (Python)</td><td>Datasets without future information, features, a baseline model, walk-forward testing, overfitting statistics</td><td><span class="pill p-ok">Built, tested</span></td><td>Only demo runs on synthetic data (they correctly FAIL)</td></tr>
 <tr><td>Experiment ledger + graveyard</td><td>Every test ever run is appended; failed ideas are recorded with reasons</td><td><span class="pill p-ok">Built</span></td><td>Plain files, not a database</td></tr>
-<tr><td>Study 0001 (Kalshi favorite-longshot)</td><td>Our first real-data research cycle</td><td><span class="pill p-warn">Inconclusive</span></td><td>0 markets analysed (a design mistake in the sample rule); must be re-registered as v2</td></tr>
+<tr><td>Study 0001 + 0002 (Kalshi favorite-longshot)</td><td>Our first two real-data research cycles</td><td><span class="pill p-warn">Inconclusive</span></td><td>0001: 0 markets analysed (a design mistake). 0002 (v2, bounded population): a real sample of 976 markets, still INSUFFICIENT EVIDENCE — the edge estimate straddles zero</td></tr>
 <tr><td>Python ↔ Rust parity</td><td>Proves the research model and the engine compute identical features</td><td><span class="pill p-ok">Verified</span></td><td>Model not yet wired into live decisions</td></tr>
 <tr><td>CI and security scanning</td><td>Every change is tested, linted, and scanned for vulnerabilities and secrets</td><td><span class="pill p-ok">Passing on main</span></td><td>GitHub cannot force it to block merges on this plan</td></tr>
 <tr><td>Claude Code guardrails</td><td>Hooks and permissions that stop AI assistants reading secrets or editing protected files</td><td><span class="pill p-ok">Built, 62 tests</span></td><td>Only binds Claude sessions; a determined shell command can bypass</td></tr>
-<tr><td>Broker adapter (Robinhood)</td><td>Would connect the engine to a real account</td><td><span class="pill p-plan">Not built</span></td><td>Needs the decisions in section 10</td></tr>
-<tr><td>Live market data recorder</td><td>Would capture real prices continuously</td><td><span class="pill p-plan">Not built</span></td><td>Needs venue choice</td></tr>
+<tr><td>Agentic decision pipeline (<code>qc-bridge</code>, agent service)</td><td>An AI agent makes the trade/no-trade call after the classifier, before risk (ADR-0040)</td><td><span class="pill p-ok">Built, tested (fake/replay mode)</span></td><td>No live model call anywhere; see section 9</td></tr>
+<tr><td>Broker gateway + mock Robinhood connection</td><td>Verifies approval stamps, submits/cancels orders, reconciles books, drains cancels on a kill</td><td><span class="pill p-warn">Built, mock-tested</span></td><td>Tested only against a synthetic mock MCP server; a real connection needs a real account (section 10)</td></tr>
+<tr><td>Real price recorder (<code>agent/src/recorder/</code>)</td><td>Would capture real prices continuously, read-only</td><td><span class="pill p-warn">Built, mock-tested</span></td><td>Never run against a real feed or for a full trading day; needs the asset decision (section 12)</td></tr>
 <tr><td>Realistic backtest / paper trading</td><td>Would simulate fills honestly, then trade on paper</td><td><span class="pill p-plan">Not built</span></td><td><code>just backtest</code> exits 2, <code>just paper</code> refuses</td></tr>
 </tbody></table></div>
 
 <!-- 3 -->
 <h2 id="map">3. The system map</h2>
-<div class="plain"><b class="lbl">How to read this</b>Left to right is the journey from raw market data to a real order. The red dashed wall is the most important line in the project: nothing on the left (research, AI, experiments) can send an order. Only a model or strategy that passes every gate and a human approval crosses the wall, and only as a hash-checked file. Solid boxes exist today; dashed grey boxes are planned. New in this batch: <code>qc-bridge</code> and the agent service sit between the classifier and the risk checks — the agent decides, but its only callable action is <code>submit_order_intent</code>; it never holds a broker tool, so the wall still holds (<a href="#agents">section 9</a>, ADR-0040).</div>
+<div class="plain"><b class="lbl">How to read this</b>Left to right is the journey from raw market data to a real order. The red dashed wall is the most important line in the project: nothing on the left (research, AI, experiments) can send an order. Only a model or strategy that passes every gate and a human approval crosses the wall, and only as a hash-checked file. Solid boxes exist today; dashed grey boxes are planned. Built and tested (fake/replay mode, mock broker): <code>qc-bridge</code> and the agent service sit between the classifier and the risk checks — the agent decides, but its only callable actions are <code>submit_order_intent</code>/<code>no_trade</code>; it never holds a broker tool, so the wall still holds. An external <code>--kill-file</code> plus a broker-side heartbeat can halt and cancel every open order even if the agent is stuck (<a href="#agents">section 9</a>, ADR-0040).</div>
 <div class="diagram" role="img" aria-label="System map from market data through research, promotion gates, the agent decision service, the trading engine and the broker, with humans and automation around it">
 <svg viewBox="0 0 1200 1000" xmlns="http://www.w3.org/2000/svg">
 <defs>
@@ -288,22 +289,22 @@ svg .ah{fill:var(--muted)} svg .ah-acc{fill:var(--accent)} svg .ah-bad{fill:var(
 <text x="754" y="463" class="t-s" style="fill:var(--bad)">intent reaches risk + OMS</text>
 <text x="754" y="479" class="t-s" style="fill:var(--bad)">(enforced in code, section 9)</text>
 <rect x="960" y="397" width="210" height="34" rx="8" class="b-ok"/>
-<text x="972" y="418" class="t-h t-s">qc-bridge (Rust bridge)</text>
+<text x="972" y="418" class="t-h t-s">qc-bridge v1.2.1 (Rust)</text>
 <rect x="960" y="439" width="210" height="44" rx="8" class="b-ok"/>
-<text x="972" y="459" class="t-h t-s">Agent service (Agent SDK)</text><text x="972" y="475" class="t-s t-m">fake mode built; live gated</text>
+<text x="972" y="459" class="t-h t-s">Agent service (Agent SDK)</text><text x="972" y="475" class="t-s t-m">fake/replay built; live gated</text>
 
 <rect x="730" y="499" width="440" height="72" rx="8" class="b-bad"/>
-<text x="742" y="522" class="t-h t-s">Risk checks (every single order)</text>
-<text x="742" y="540" class="t-s t-m">1 kill switch · 2 valid order · 3 stale data · 4 daily loss · 5 price band</text>
-<text x="742" y="556" class="t-s t-m">6 order size (notional) · 7 position incl. open orders · 8 order rate</text>
+<text x="742" y="522" class="t-h t-s">Risk checks (every single order, 11 total)</text>
+<text x="742" y="540" class="t-s t-m">1 kill switch · 2 valid order · 3 stale data · 4 daily loss · 5 price band · 6 self-cross</text>
+<text x="742" y="556" class="t-s t-m">7 notional · 8 daily-notional cap · 9 position · 10 wash-trade · 11 order rate</text>
 <rect x="730" y="591" width="210" height="62" rx="8" class="b-ok"/>
 <text x="742" y="614" class="t-h t-s">Order manager</text><text x="742" y="632" class="t-s t-m">7-state life cycle;</text><text x="742" y="646" class="t-s t-m">halts on any surprise</text>
 <rect x="960" y="591" width="210" height="62" rx="8" class="b-ok"/>
 <text x="972" y="614" class="t-h t-s">Reconciliation</text><text x="972" y="632" class="t-s t-m">compare with broker before</text><text x="972" y="646" class="t-s t-m">first order and every 60 s</text>
-<rect x="730" y="673" width="210" height="72" rx="8" class="b-plan"/>
-<text x="742" y="696" class="t-h t-s">Robinhood adapter</text><text x="742" y="714" class="t-s t-m">Agentic MCP gateway,</text><text x="742" y="730" class="t-s t-m">approval-token (planned)</text>
+<rect x="730" y="673" width="210" height="72" rx="8" class="b-warn"/>
+<text x="742" y="696" class="t-h t-s">Robinhood gateway</text><text x="742" y="714" class="t-s t-m">approval/cancel/reconcile</text><text x="742" y="730" class="t-s t-m">built; mock-tested only</text>
 <rect x="960" y="673" width="210" height="72" rx="8" class="b-warn"/>
-<text x="972" y="696" class="t-h t-s">Simulated venue</text><text x="972" y="714" class="t-s t-m">only venue in bridge v1;</text><text x="972" y="730" class="t-s t-m">fills not realistic</text>
+<text x="972" y="696" class="t-h t-s">Simulated venue</text><text x="972" y="714" class="t-s t-m">queue position + consumed</text><text x="972" y="730" class="t-s t-m">liquidity now modelled</text>
 
 <path d="M830,223 L830,243" class="ar-plan" marker-end="url(#m4)"/>
 <path d="M1070,223 L1070,243" class="ar" marker-end="url(#m1)"/>
@@ -317,7 +318,7 @@ svg .ah{fill:var(--muted)} svg .ah-acc{fill:var(--accent)} svg .ah-bad{fill:var(
 <path d="M835,379 L835,388 L738,388 L738,488 L835,488 L835,497" class="ar" marker-end="url(#m1)"/>
 <path d="M835,571 L835,589" class="ar" marker-end="url(#m1)"/>
 <path d="M940,622 L958,622" class="ar" marker-end="url(#m1)"/>
-<path d="M835,653 L835,671" class="ar-plan" marker-end="url(#m4)"/>
+<path d="M835,653 L835,671" class="ar" marker-end="url(#m1)"/>
 <path d="M900,653 C940,660 1000,660 1030,671" class="ar" marker-end="url(#m1)"/>
 <path d="M678,370 C700,370 700,348 958,348" class="ar-acc" marker-end="url(#m2)"/>
 <text x="706" y="392" class="t-s" style="fill:var(--accent)">approved model file only</text>
@@ -357,7 +358,7 @@ svg .ah{fill:var(--muted)} svg .ah-acc{fill:var(--accent)} svg .ah-bad{fill:var(
 <h2 id="engine">4. Inside the trading engine</h2>
 <div class="plain"><b class="lbl">Plain terms</b>Every time a new price update arrives, the engine runs the same short checklist, in the same order, every time. Because it never uses randomness, clocks from the operating system, or outside services, running the same day twice produces exactly the same orders. We prove that with a fingerprint of the order log (<code>d3400a1a…b8e0</code>).</div>
 <div class="diagram" role="img" aria-label="Engine pipeline for one market update, with failure branches">
-<svg viewBox="0 0 1200 520" xmlns="http://www.w3.org/2000/svg">
+<svg viewBox="0 0 1200 570" xmlns="http://www.w3.org/2000/svg">
 <defs>
   <marker id="e1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="ah"/></marker>
   <marker id="e3" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" class="ah-bad"/></marker>
@@ -387,17 +388,20 @@ svg .ah{fill:var(--muted)} svg .ah-acc{fill:var(--accent)} svg .ah-bad{fill:var(
 <path d="M1115,140 L1115,210" class="ar-bad" marker-end="url(#e3)"/>
 <rect x="1055" y="212" width="130" height="92" rx="8" class="b-bad"/><text x="1065" y="234" class="t-h t-s">Broker error</text><text x="1065" y="252" class="t-s">logged as failed,</text><text x="1065" y="268" class="t-s">never as success;</text><text x="1065" y="284" class="t-s">order state rolls back</text>
 <!-- risk list -->
-<rect x="20" y="340" width="1160" height="160" rx="10" class="zone"/>
-<text x="36" y="366" class="t-h">The 8 risk checks, in the order they run (limits come from config/limits/default.toml — deliberately tiny today)</text>
+<rect x="20" y="340" width="1160" height="200" rx="10" class="zone"/>
+<text x="36" y="366" class="t-h">The 11 risk checks, in the order they run (limits come from config/limits/*.toml — deliberately tiny today)</text>
 <text x="36" y="392" class="t-s">1. Kill switch engaged? → reject everything</text>
-<text x="36" y="412" class="t-s">2. Order malformed (zero size, bad price)? → reject</text>
-<text x="36" y="432" class="t-s">3. Market data older than 1,000 ms? → reject (stale)</text>
-<text x="36" y="452" class="t-s">4. Today's loss ≥ 100 (quote currency)? → halt the whole engine</text>
-<text x="600" y="392" class="t-s">5. Price more than 0.5% from the market reference? → reject (fat-finger)</text>
-<text x="600" y="412" class="t-s">6. Order value above 500? → reject</text>
-<text x="600" y="432" class="t-s">7. Position after fill, counting open orders, above 0.01 units? → reject</text>
-<text x="600" y="452" class="t-s">8. More than 5 orders in the last second? → reject</text>
-<text x="36" y="484" class="t-s t-m">No switch turns these off in any build. Loosening a limit needs human approval; the guardrail hook blocks AI sessions from loosening them.</text>
+<text x="36" y="410" class="t-s">2. Order malformed (zero size, bad price)? → reject</text>
+<text x="36" y="428" class="t-s">3. Market data older than 1,000 ms? → reject (stale)</text>
+<text x="36" y="446" class="t-s">4. Today's loss ≥ 100 (quote currency)? → halt the whole engine</text>
+<text x="36" y="464" class="t-s">5. Price more than 0.5% from the market reference? → reject (fat-finger)</text>
+<text x="36" y="482" class="t-s">6. Would fill against our own resting order? → reject (self-cross)</text>
+<text x="600" y="392" class="t-s">7. Order value above its cap? → reject (notional)</text>
+<text x="600" y="410" class="t-s">8. Today's cumulative order notional above its cap? → reject</text>
+<text x="600" y="428" class="t-s">9. Position after fill, counting open orders, above its cap? → reject</text>
+<text x="600" y="446" class="t-s">10. A completed fill reversed at the same price/qty inside the window? → reject (wash-trade)</text>
+<text x="600" y="464" class="t-s">11. More than 5 orders in the last second? → reject</text>
+<text x="36" y="510" class="t-s t-m">No switch turns these off in any build; risk never blocks a cancel. Loosening a limit needs human approval; the guardrail hook blocks AI sessions from loosening them.</text>
 </svg>
 </div>
 <details><summary>Engine components in detail (for engineers)</summary>
@@ -407,7 +411,7 @@ svg .ah{fill:var(--muted)} svg .ah-acc{fill:var(--accent)} svg .ah-bad{fill:var(
 <tr><td><code>qc-strategy-runtime</code></td><td><code>Strategy::on_event(&amp;Event,&amp;OrderBook,&amp;mut Vec&lt;Command&gt;)</code></td><td>Only <code>InsideQuoter</code>, a test fixture</td></tr>
 <tr><td><code>qc-risk</code> (protected)</td><td><code>RiskCheck::check</code>, <code>RiskEngine</code>, <code>KillSwitch</code></td><td>Checks above; kill switch is one-way per process</td></tr>
 <tr><td><code>qc-oms</code></td><td><code>insert</code>, <code>request_cancel</code>, <code>apply</code>, <code>reconcile</code></td><td>Exhaustive 7×7 state table; any discrepancy halts</td></tr>
-<tr><td><code>qc-gateway</code></td><td><code>VenueAdapter{submit,cancel,poll,order_snapshot}</code>, <code>TokenBucket</code>, backoff</td><td>Only <code>SimVenue</code> implements it; a Robinhood adapter would be the second</td></tr>
+<tr><td><code>qc-gateway</code></td><td><code>VenueAdapter{submit,cancel,poll,order_snapshot}</code>, <code>TokenBucket</code>, backoff</td><td>Only <code>SimVenue</code> implements it, now modelling queue position and consumed liquidity (#30); the TypeScript broker gateway (<code>agent/src/broker/</code>) is a second, mock-Robinhood-tested adapter outside this crate</td></tr>
 <tr><td><code>qc-replay</code></td><td><code>Engine::on_record</code>, binary <code>qc-replay</code></td><td>Runs the loop; halts on runaway (&gt;10,000 follow-up events from one record)</td></tr>
 <tr><td><code>qc-inference</code></td><td><code>LinearModel::load(bytes, sha256)</code></td><td>Refuses mismatched fingerprint; <code>None</code> on NaN/inf/missing features</td></tr>
 </tbody></table></div></details>
@@ -464,7 +468,9 @@ svg .ah{fill:var(--muted)} svg .ah-acc{fill:var(--accent)} svg .ah-bad{fill:var(
 <h3>What is enforced today vs. what relies on people</h3>
 <div class="tblwrap"><table class="tbl"><thead><tr><th>Control</th><th>Status</th><th>Scope and gaps</th></tr></thead><tbody>
 <tr><td>Risk checks in the engine</td><td><span class="pill p-ok">Enforced in code</span></td><td>Every order; tested at each limit boundary. Limits are placeholders.</td></tr>
-<tr><td>Kill switch</td><td><span class="pill p-ok">Enforced in code</span></td><td>Stops new orders and cancels open ones within the next update (measured ~60 µs in test). No external button yet; does not close positions.</td></tr>
+<tr><td>Kill switch (plain engine)</td><td><span class="pill p-ok">Enforced in code</span></td><td>Stops new orders and cancels open ones within the next update (measured ~60 µs in test). No external button; does not close positions.</td></tr>
+<tr><td>Kill switch (<code>qc-bridge</code>/gateway, agentic path)</td><td><span class="pill p-ok">Enforced in code, mock-tested</span></td><td>An external <code>--kill-file</code> is observed by a dedicated watcher thread independent of the agent process (proven with zero stdin traffic); a gateway heartbeat then drains signed cancel approvals at the broker (~12-36ms observed in tests, well under the 1s budget). Still does not close positions, and only tested against a mock broker.</td></tr>
+<tr><td>Broker gateway (mock)</td><td><span class="pill p-ok">Enforced in code, mock-tested</span></td><td>Approval-token verification, idempotent submit/cancel, and daily reconciliation against a mock Robinhood MCP server. No real Robinhood connection exists yet (issue #26).</td></tr>
 <tr><td>Replay determinism</td><td><span class="pill p-ok">Enforced in CI</span></td><td>Order-log fingerprint committed; any behaviour change fails the check.</td></tr>
 <tr><td>Tests, lint, vulnerability and secret scans</td><td><span class="pill p-ok">Run on every PR</span></td><td>Pass on <code>main</code>. GitHub will not block a merge on failure on this plan.</td></tr>
 <tr><td>AI assistant guardrails (hooks)</td><td><span class="pill p-warn">Partial</span></td><td>Block AI sessions from reading secrets or loosening limits. A shell command such as <code>uv run python …</code> can still bypass them.</td></tr>
@@ -591,6 +597,7 @@ svg .ah{fill:var(--muted)} svg .ah-acc{fill:var(--accent)} svg .ah-bad{fill:var(
 <div class="card"><b>What it does not give us, so our gateway adds it</b><ul style="margin:6px 0 0;padding-left:20px"><li><b>No configurable spending cap.</b> Confirmation is instruction-based, not a platform toggle — our gateway enforces a hard per-order and per-day dollar cap before anything reaches Robinhood</li><li><b>Revocation is not retroactive</b> (§29.8): an instruction Robinhood already received stays binding even after you disconnect. Our kill switch must stop new intents at the gateway, not rely on disconnecting after the fact</li><li><b>No rate limits or full tool parameter schemas published.</b> Discover them only by connecting a client (an A0/A3 task) and treat them as unstable until then</li><li><b>No sandbox.</b> Only single-order <code>review_*</code>/<code>preview_*</code> previews exist — our SimVenue on recorded/live quotes is the paper-trading environment</li><li><b>Full liability for manipulation-adjacent patterns is ours</b>, "regardless of whether such conduct was intended" — the gateway adds self-cross / wash-trade prevention on top of the per-order caps</li></ul></div>
 </div>
 <div class="plain"><b class="lbl">Gateway placement (ADR-0040)</b>The broker gateway (Robinhood's MCP client) lives in <code>agent/src/broker/</code> — TypeScript, <code>@modelcontextprotocol/sdk</code> — but is <b>never</b> registered as a tool the trading agent can call. It only executes orders the Rust bridge already approved: the bridge returns an approval token bound to the intent's hash, and the gateway reports acks/fills back to the bridge's OMS. This keeps "the agent never sees broker tools" true even though the gateway and the agent are both TypeScript in the same package.</div>
+<div class="okbox"><b>Built so far (mock-tested, no real network call anywhere):</b> approval-token verification (signature, field match, expiry against the bridge's own market clock); idempotent submit and cancel (an unknown outcome queries status before ever resubmitting); daily reconciliation of orders/position/cash against the broker's reported state; a heartbeat that drains signed cancel approvals at the broker even if the agent is stuck; a read-only quote recorder gated by its own tool allowlist. All of it is exercised only against <code>agent/src/testkit/mock-robinhood-mcp.ts</code>, a synthetic server — the real tool parameter schemas are UNVERIFIED until issue #26 connects a real account.</div>
 
 <h3>First asset: liquid ETF vs. crypto (cost comparison)</h3>
 <div class="plain"><b class="lbl">Why this matters</b>The plan is minimal money, many round trips, forward-only shadow evidence. Round-trip cost decides how many cycles the learning loop can afford, so it is a founders' decision the ADR surfaces rather than hides in a spreadsheet.</div>
@@ -665,13 +672,13 @@ svg .ah{fill:var(--muted)} svg .ah-acc{fill:var(--accent)} svg .ah-bad{fill:var(
 <g>
 <circle cx="80" cy="60" r="10" class="b-ok"/><text x="46" y="36" class="t-h t-s">M0 · done</text>
 <circle cx="219" cy="60" r="10" class="b-human"/><text x="205" y="36" class="t-h t-s">A0</text>
-<circle cx="347" cy="60" r="10" class="b-plan"/><text x="333" y="36" class="t-h t-s">A1</text>
-<circle cx="475" cy="60" r="10" class="b-plan"/><text x="461" y="36" class="t-h t-s">A2</text>
-<circle cx="603" cy="60" r="10" class="b-plan"/><text x="589" y="36" class="t-h t-s">A3</text>
+<circle cx="347" cy="60" r="10" class="b-ok"/><text x="333" y="36" class="t-h t-s">A1 · met</text>
+<circle cx="475" cy="60" r="10" class="b-ok"/><text x="461" y="36" class="t-h t-s">A2 · met</text>
+<circle cx="603" cy="60" r="10" class="b-warn"/><text x="583" y="36" class="t-h t-s">A3 · partial</text>
 <circle cx="731" cy="60" r="10" class="b-plan"/><text x="717" y="36" class="t-h t-s">A4</text>
 <circle cx="859" cy="60" r="10" class="b-plan"/><text x="845" y="36" class="t-h t-s">A5</text>
 <circle cx="987" cy="60" r="10" class="b-human"/><text x="973" y="36" class="t-h t-s">A6</text>
-<circle cx="1115" cy="60" r="10" class="b-plan"/><text x="1101" y="36" class="t-h t-s">A7</text>
+<circle cx="1115" cy="60" r="10" class="b-warn"/><text x="1091" y="36" class="t-h t-s">A7 · partial</text>
 </g>
 <rect x="10" y="90" width="140" height="370" rx="10" class="b-ok"/>
 <text x="20" y="114" class="t-h t-s">Offline foundation</text>
@@ -688,16 +695,19 @@ svg .ah{fill:var(--muted)} svg .ah-acc{fill:var(--accent)} svg .ah-bad{fill:var(
 <text x="296" y="134" class="t-s">DecisionRequest /</text><text x="296" y="150" class="t-s">Decision schemas,</text><text x="296" y="166" class="t-s">qc-bridge, agent</text><text x="296" y="182" class="t-s">skeleton, fake LLM</text>
 <text x="296" y="212" class="t-s t-h">Exit test</text><text x="296" y="230" class="t-s t-m">just agent-sim green;</text><text x="296" y="246" class="t-s t-m">permission test proves</text><text x="296" y="262" class="t-s t-m">no other tool callable</text>
 <text x="296" y="292" class="t-s t-h">Owner</text><text x="296" y="310" class="t-s t-m">Rohit (bridge),</text><text x="296" y="326" class="t-s t-m">Satyam (agent)</text>
+<text x="296" y="356" class="t-s t-h">Status</text><text x="296" y="374" class="t-s t-m">Met. Fake/replay modes,</text><text x="296" y="390" class="t-s t-m">permission-e2e proven</text><text x="296" y="406" class="t-s t-m">(PRs #58, #61, #74)</text>
 <rect x="416" y="90" width="118" height="370" rx="10" class="b-plan"/>
 <text x="424" y="114" class="t-h t-s">A2 Evals</text>
 <text x="424" y="134" class="t-s">deterministic suite</text><text x="424" y="150" class="t-s">every PR; paid agent</text><text x="424" y="166" class="t-s">eval on merge/nightly</text>
 <text x="424" y="196" class="t-s t-h">Exit test</text><text x="424" y="214" class="t-s t-m">just eval green on</text><text x="424" y="230" class="t-s t-m">every PR; ai_gate.py</text><text x="424" y="246" class="t-s t-m">caps the paid tier</text>
 <text x="424" y="276" class="t-s t-h">Owner</text><text x="424" y="294" class="t-s t-m">Satyam</text>
+<text x="424" y="324" class="t-s t-h">Status</text><text x="424" y="342" class="t-s t-m">Met. 7/7 Tier 1 cases;</text><text x="424" y="358" class="t-s t-m">Tier 2 gated off, zero</text><text x="424" y="374" class="t-s t-m">budget (PRs #56, #79)</text>
 <rect x="544" y="90" width="118" height="370" rx="10" class="b-plan"/>
 <text x="552" y="114" class="t-h t-s">A3 Broker</text>
 <text x="552" y="134" class="t-s">Agentic MCP gateway</text><text x="552" y="150" class="t-s">behind the risk wrap;</text><text x="552" y="166" class="t-s">external kill switch;</text><text x="552" y="182" class="t-s">reconciliation</text>
 <text x="552" y="212" class="t-s t-h">Exit test</text><text x="552" y="230" class="t-s t-m">recorded-response tests</text><text x="552" y="246" class="t-s t-m">pass; approval-token</text><text x="552" y="262" class="t-s t-m">path proven end to end</text>
 <text x="552" y="292" class="t-s t-h">Owner</text><text x="552" y="310" class="t-s t-m">Rohit</text>
+<text x="552" y="340" class="t-s t-h">Status</text><text x="552" y="358" class="t-s t-m">Mock scaffold met (#73,</text><text x="552" y="374" class="t-s t-m">#76,#84,#85,#87); real</text><text x="552" y="390" class="t-s t-m">connection needs #26</text>
 <rect x="672" y="90" width="118" height="370" rx="10" class="b-plan"/>
 <text x="680" y="114" class="t-h t-s">A4 Data</text>
 <text x="680" y="134" class="t-s">record quotes for the</text><text x="680" y="150" class="t-s">chosen asset; retrain</text><text x="680" y="166" class="t-s">classifier; walk-</text><text x="680" y="182" class="t-s">forward gates</text>
@@ -718,17 +728,18 @@ svg .ah{fill:var(--muted)} svg .ah-acc{fill:var(--accent)} svg .ah-bad{fill:var(
 <text x="1064" y="134" class="t-s">ledger → scenarios →</text><text x="1064" y="150" class="t-s">prompt/tool challenger</text><text x="1064" y="166" class="t-s">→ eval → promotion;</text><text x="1064" y="182" class="t-s">parallel-agent trial</text>
 <text x="1064" y="212" class="t-s t-h">Exit test</text><text x="1064" y="230" class="t-s t-m">challenger beats champion</text><text x="1064" y="246" class="t-s t-m">on frozen suite + forward</text><text x="1064" y="262" class="t-s t-m">shadow before promotion</text>
 <text x="1064" y="292" class="t-s t-h">Owner</text><text x="1064" y="310" class="t-s t-m">Satyam (eval),</text><text x="1064" y="326" class="t-s t-m">Rohit (infra)</text>
+<text x="1064" y="356" class="t-s t-h">Status</text><text x="1064" y="374" class="t-s t-m">Scenario gen + promotion</text><text x="1064" y="390" class="t-s t-m">pipeline built (#83);</text><text x="1064" y="406" class="t-s t-m">multi-agent (#54), cadence</text><text x="1064" y="422" class="t-s t-m">sign-off (#55) not started</text>
 </svg>
 </div>
 <ol class="steps">
 <li><b>A0 · Decide.</b> ADR-0040 accepted by both founders; first asset chosen (section 10); counsel review requested; Agentic beta account access confirmed. <i>Nothing past this point routes real money.</i></li>
-<li><b>A1 · Handoff contract.</b> <code>DecisionRequest</code>/<code>Decision</code> JSON schemas; the <code>qc-bridge</code> crate; the agent service skeleton running against SimVenue in fake mode; a test proving no tool but <code>submit_order_intent</code> is callable.</li>
-<li><b>A2 · Evals.</b> The deterministic recorded-response suite runs on every PR; a paid live-LLM agent eval runs on merge to main and nightly, budget-capped by <code>scripts/ci/ai_gate.py</code> — never on every PR push.</li>
-<li><b>A3 · Broker.</b> The Robinhood Agentic MCP gateway adapter, behind the risk wrapper, tested only on recorded responses; an external kill switch; position and cash reconciliation.</li>
+<li><b>A1 · Handoff contract — met.</b> <code>DecisionRequest</code>/<code>Decision</code> JSON schemas (now v1.2.1); the <code>qc-bridge</code> crate; the agent service running against SimVenue in fake and replay mode; a test drives the real SDK permission engine and proves no tool but <code>submit_order_intent</code>/<code>no_trade</code> is callable.</li>
+<li><b>A2 · Evals — met.</b> The deterministic Tier 1 suite (7 cases) runs green on every PR; a paid live-LLM agent eval is wired for merge-to-main and nightly, budget-capped by <code>scripts/ci/ai_gate.py</code> and still gated off (zero budget) — never on every PR push.</li>
+<li><b>A3 · Broker — mock scaffold met, real connection not.</b> The gateway (approval verification, cancel, reconcile, a kill-file-independent heartbeat) is built and tested against a mock Robinhood MCP server. The real network adapter needs issue #26 (a real account to learn tool schemas from).</li>
 <li><b>A4 · Data + classifier.</b> Record quotes for the chosen asset; retrain the classifier on real data through the existing lab; the deflated-Sharpe threshold is decided, not left at an impossible default.</li>
 <li><b>A5 · Shadow.</b> The agent decides on live data; orders go only to SimVenue/paper, for at least 14 days; forward metrics compared against a classifier-only baseline and a no-trade baseline (research shows a dumb baseline often wins — see section 9).</li>
 <li><b>A6 · First agentic trade.</b> A funded agent account, limit orders only, tiny per-order and per-day caps, both founders approve before it starts, daily reconciliation.</li>
-<li><b>A7 · Learning loop on.</b> Decision-ledger outcomes become new frozen scenarios; prompt/tool changes are challengers evaluated against the champion before promotion; a parallel-agent experiment only ships if it beats one agent at equal token budget.</li>
+<li><b>A7 · Learning loop on — partially built.</b> The ledger→scenario generator and the champion/challenger promotion pipeline are built and tested (never auto-promotes; writes a recommendation file only). The parallel-agent experiment and the measured-cadence "first HFAT" sign-off are not started.</li>
 </ol>
 <div class="badbox"><b>Hard stops at every stage.</b> Any reconciliation mismatch, limit breach, drift in model behaviour, or broker anomaly demotes to "no signal"/no-trade automatically. Promotion back up needs the founders again, and A6 needs both, every time, not just once.</div>
 </div>
@@ -751,7 +762,7 @@ svg .ah{fill:var(--muted)} svg .ah-acc{fill:var(--accent)} svg .ah-bad{fill:var(
 <h2 id="risks">13. Risks and honest limits</h2>
 <div class="grid g2">
 <div class="card"><b>Market and cost risk</b><p>No edge has been shown. Robinhood crypto costs about 1% per round trip (spread or taker fee), and quotes carry no order-book depth. A strategy must beat those costs, which rules out high-frequency trading there.</p></div>
-<div class="card"><b>Simulation risk</b><p>The simulated venue ignores queue position and reuses liquidity. Any profit it shows is not evidence. A realistic fill model needs real order and fill data.</p></div>
+<div class="card"><b>Simulation risk</b><p>The simulated venue now models queue position and consumed liquidity (#30), but its fill model is still simplified — no real order-book depth. Any profit it shows is not evidence. A fully realistic fill model needs real order and fill data.</p></div>
 <div class="card"><b>Overfitting risk</b><p>Testing many ideas on the same data finds fake patterns. Every trial is counted and penalised; still, forward (live, shadow) evidence is the real test.</p></div>
 <div class="card"><b>Operational risk</b><p>Broker outages, rate limits, lost connections, orders stuck "pending". The engine halts on surprises; the kill switch cancels but does not close positions.</p></div>
 <div class="card"><b>Account and legal risk</b><p>Robinhood's agreements require written consent for API use and limit it to personal, non-commercial use, and Robinhood can disable API access at any time. Trading someone else's account or pooling money can trigger adviser or pool registration. All of this needs a lawyer.</p></div>

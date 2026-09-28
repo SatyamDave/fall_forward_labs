@@ -13,6 +13,7 @@ import type { CallToolResult, McpClient } from "./mcp-client.js";
 import type {
   ApprovedOrder,
   AssetClass,
+  BookLevel,
   CancelOrderResult,
   DecimalString,
   OrderStatusResult,
@@ -31,9 +32,13 @@ export class RobinhoodToolError extends Error {
 }
 
 // Single source of truth for the name mapping (robinhood-agentic-mcp.md §2's tool tables).
+// `book` is intentionally absent from crypto: robinhood-agentic-mcp.md §2 confirms
+// get_equity_price_book as the only Level 2 tool published ("No equivalent Level 2 tool is
+// listed for options or crypto") -- getBook() below throws BookUnsupportedError for any asset
+// class with no `book` entry here, rather than guessing a name that doesn't exist.
 const TOOLS: Record<
   AssetClass,
-  { place: string; cancel: string; preview: string; status: string; quote: string; positions: string }
+  { place: string; cancel: string; preview: string; status: string; quote: string; positions: string; book?: string }
 > = {
   equity: {
     place: "place_equity_order",
@@ -42,6 +47,7 @@ const TOOLS: Record<
     status: "get_equity_orders",
     quote: "get_equity_quotes",
     positions: "get_equity_positions",
+    book: "get_equity_price_book",
   },
   crypto: {
     place: "place_crypto_order",
@@ -213,6 +219,75 @@ export async function getQuote(
 ): Promise<Record<string, unknown>> {
   const tool = TOOLS[assetClass].quote;
   return unwrap(tool, await callTool(client, tool, { symbols: [instrument] }, opts));
+}
+
+/** Thrown by getBook() for an asset class with no `book` entry in TOOLS (crypto/options today --
+ *  module header). Callers (agent/src/recorder/poll.ts's pollBook) catch this specifically to
+ *  fall back to a top-of-book quote; any other error from getBook still propagates. */
+export class BookUnsupportedError extends Error {
+  constructor(public readonly assetClass: AssetClass) {
+    super(
+      `get_equity_price_book has no mapping for asset class "${assetClass}" ` +
+        "(robinhood-agentic-mcp.md §2: no L2 tool is published for options or crypto)",
+    );
+    this.name = "BookUnsupportedError";
+  }
+}
+
+export interface BookResult {
+  bids: BookLevel[];
+  asks: BookLevel[];
+  raw: Record<string, unknown>;
+}
+
+/** UNVERIFIED shape (module header): get_equity_price_book's real response schema is not
+ *  published, only its purpose ("a real-time Level 2 order book showing bid/ask price levels
+ *  and resting size on each side, for up to 4 stocks" -- robinhood-agentic-mcp.md §2). This
+ *  assumes a `{ books: [{ symbol, bids: [{price,quantity}], asks: [...] }] }` list shape,
+ *  mirroring get_equity_quotes's own `{ quotes: [...] }` convention above. #43 replaces this
+ *  once #26 confirms the real schema. */
+function normalizeBookLevels(tool: string, side: "bids" | "asks", raw: unknown): BookLevel[] {
+  if (!Array.isArray(raw)) {
+    throw new RobinhoodToolError(tool, `book response ${side} is not an array: ${JSON.stringify(raw)}`);
+  }
+  return raw.map((entry, i) => {
+    if (typeof entry !== "object" || entry === null) {
+      throw new RobinhoodToolError(tool, `book response ${side}[${i}] is not an object: ${JSON.stringify(entry)}`);
+    }
+    const price = asDecimalString((entry as Record<string, unknown>).price);
+    const qty = asDecimalString((entry as Record<string, unknown>).quantity);
+    if (price === undefined || qty === undefined) {
+      throw new RobinhoodToolError(tool, `book response ${side}[${i}] missing string price/quantity: ${JSON.stringify(entry)}`);
+    }
+    return { price, qty };
+  });
+}
+
+/** Level 2 order book for one instrument -- issue #43/#46 follow-up: "map get_equity_price_book,
+ *  normalized to our book levels." Levels are trusted to arrive best-first from the venue, same
+ *  as record.rs's own snapshot grammar assumes ("sides are `price@qty;...`, best first"); this
+ *  module doesn't re-sort or validate ordering -- an out-of-order or crossed snapshot is exactly
+ *  the "ambiguous response" case downstream (qc_orderbook::OrderBook::apply_snapshot rejects it
+ *  as InvalidSnapshot rather than this module silently reordering one). */
+export async function getBook(
+  client: McpClient,
+  assetClass: AssetClass,
+  instrument: string,
+  opts?: CallOptions,
+): Promise<BookResult> {
+  const tool = TOOLS[assetClass].book;
+  if (!tool) throw new BookUnsupportedError(assetClass);
+  const raw = unwrap(tool, await callTool(client, tool, { symbols: [instrument] }, opts));
+  const books = Array.isArray(raw.books) ? raw.books : [];
+  const match = books.find(
+    (b): b is Record<string, unknown> => typeof b === "object" && b !== null && (b as Record<string, unknown>).symbol === instrument,
+  );
+  if (!match) throw new RobinhoodToolError(tool, `no book entry for ${instrument} in response: ${JSON.stringify(raw)}`);
+  return {
+    bids: normalizeBookLevels(tool, "bids", match.bids),
+    asks: normalizeBookLevels(tool, "asks", match.asks),
+    raw: match,
+  };
 }
 
 /** One order exactly as the broker itself reports it -- issue #45's reconciliation input. Not
