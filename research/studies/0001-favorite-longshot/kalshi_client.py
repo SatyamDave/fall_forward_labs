@@ -5,14 +5,15 @@ ledger is the budget: the client refuses to send once it holds MAX_REQUESTS line
 """
 
 import hashlib
+import http.client
 import json
 import time
-import urllib.error
 import urllib.parse
-import urllib.request
 from pathlib import Path
 
-BASE = "https://external-api.kalshi.com/trade-api/v2"
+HOST = "external-api.kalshi.com"
+BASE_PATH = "/trade-api/v2"
+BASE = f"https://{HOST}{BASE_PATH}"
 # 3000 total minus 7 documentation fetches made by hand on 2026-09-27 (see README).
 MAX_REQUESTS = 2993
 # Basic read budget is 200 tokens/s at 10 tokens per request (docs rate_limits.md,
@@ -42,6 +43,7 @@ class Client:
         """GET BASE+path, save the body under raw_dir/save_as, return parsed JSON."""
         query = urllib.parse.urlencode({k: v for k, v in params.items() if v is not None})
         url = f"{BASE}{path}?{query}" if query else f"{BASE}{path}"
+        target = f"{BASE_PATH}{path}?{query}" if query else f"{BASE_PATH}{path}"
         for attempt in range(MAX_RETRIES + 1):
             if self.used >= MAX_REQUESTS:
                 raise BudgetExhausted(f"request budget {MAX_REQUESTS} exhausted")
@@ -50,14 +52,16 @@ class Client:
                 time.sleep(wait)
             self._last = time.monotonic()
             fetched_at = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
-            req = urllib.request.Request(url, headers={"Accept": "application/json"})  # noqa: S310
+            # HTTPSConnection to a fixed host: no other scheme or host is reachable from here.
+            conn = http.client.HTTPSConnection(HOST, timeout=30)
             try:
-                with urllib.request.urlopen(req, timeout=30) as resp:  # noqa: S310 (fixed https host)
-                    status, body = resp.status, resp.read()
-            except urllib.error.HTTPError as e:
-                status, body = e.code, e.read()
-            except (urllib.error.URLError, TimeoutError) as e:
+                conn.request("GET", target, headers={"Accept": "application/json"})
+                resp = conn.getresponse()
+                status, body = resp.status, resp.read()
+            except (OSError, http.client.HTTPException) as e:
                 status, body = 0, str(e).encode()
+            finally:
+                conn.close()
             row: dict[str, object] = {
                 "url": url,
                 "status": status,
