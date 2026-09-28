@@ -64,7 +64,10 @@ def _entry(
     if latency_ms is not None:
         entry["latency_ms"] = latency_ms
     if cost_usd is not None:
-        entry["cost_usd"] = cost_usd
+        # Wave 2: cost_usd is a decimal string on the wire (agent/src/types.ts); this helper
+        # still takes a plain float for readability at each call site and stringifies it here,
+        # once, so every fixture entry exercises ledger_report.py's real (string) input shape.
+        entry["cost_usd"] = str(cost_usd)
     return entry
 
 

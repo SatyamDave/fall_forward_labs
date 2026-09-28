@@ -18,6 +18,7 @@ import type {
   ApprovedOrder,
   AssetClass,
   BridgeReporter,
+  CancelApprovalPayload,
   ExecutionEvent,
   PlaceOrderResult,
   PreviewResult,
@@ -72,6 +73,15 @@ export interface GatewayConfig {
    *  "unknown" and is reconciled via a status query, never blind-resubmitted. Required before
    *  this gateway ever holds a real broker credential. */
   journalPath?: string;
+  /** Fires whenever an order's outcome becomes "unknown" (the placeOrder call itself threw --
+   *  root CLAUDE.md "an ambiguous broker response is reconciled before any retry"). This method
+   *  already forces the *next* call for that one client_order_id to reconcile via a status query
+   *  before ever resubmitting (see `reconcile()` below); this hook is for triggering the wider
+   *  broker/bridge reconciliation (agent/src/broker/reconcile.ts) that an ambiguous response
+   *  should also prompt -- our books might be wrong about more than just this one order. Fire
+   *  and forget on purpose: called synchronously from inside a catch block that is about to
+   *  throw the order's own error, so it must never itself throw or be awaited here. */
+  onAmbiguousOutcome?: (clientOrderId: number) => void;
 }
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 5_000;
@@ -89,6 +99,14 @@ function isApprovalPayload(value: unknown): value is ApprovalPayload {
     (p.side === "buy" || p.side === "sell") &&
     (p.time_in_force === "ioc" || p.time_in_force === "gtc")
   );
+}
+
+/** Protocol v1.2's cancel approval payload -- a distinct, smaller shape from the order-approval
+ *  payload above (agent/src/types.ts's `CancelApprovalPayload`). */
+function isCancelApprovalPayload(value: unknown): value is CancelApprovalPayload {
+  if (typeof value !== "object" || value === null) return false;
+  const p = value as Record<string, unknown>;
+  return p.action === "cancel" && typeof p.client_order_id === "number" && typeof p.expires_ts_ns === "number";
 }
 
 export class BrokerGateway {
@@ -127,10 +145,18 @@ export class BrokerGateway {
     return promise;
   }
 
-  async cancelOrder(clientOrderId: number, instrument: string, assetClass: AssetClass) {
-    // Cancels can only reduce exposure, never create it, so the authorization bar is that we
-    // ourselves already placed (and hold a terminal, live) state for this client_order_id --
-    // there is no separate cancel-approval payload defined in protocol v1.1 to check instead.
+  /**
+   * Protocol v1.2: cancels are approved separately from submits (`CancelApprovalPayload`, not
+   * `ApprovalPayload`), verified here the same way `submitOrder` verifies an order approval --
+   * signature, field match, expiry against the bridge's own market clock -- before the broker is
+   * ever called. Cancels can only reduce exposure, never create it, but an unverified cancel
+   * approval is still refused: the authorization bar for "we may tell the broker to cancel this"
+   * is the same as the bar for "we may tell the broker to place this".
+   */
+  async cancelOrder(clientOrderId: number, instrument: string, assetClass: AssetClass, approval: Approval | undefined) {
+    this.assertCancelApproval(clientOrderId, approval);
+    // Beyond the approval, the authorization bar is also that we ourselves already placed (and
+    // hold a terminal, live) state for this client_order_id.
     const existing = this.orders.get(clientOrderId);
     if (!existing || existing.state !== "terminal" || !["accepted", "partially_filled"].includes(existing.result.status)) {
       throw new GatewayRejection(`client_order_id ${clientOrderId} has no live order to cancel`);
@@ -147,7 +173,10 @@ export class BrokerGateway {
     return result;
   }
 
-  private assertApproval(order: ApprovedOrder, approval: Approval | undefined): void {
+  /** Parses `approval.payload` as JSON and verifies the signature over its exact bytes --
+   *  shared by `assertApproval` (order) and `assertCancelApproval` (cancel); everything past
+   *  this point is caller-specific field matching. */
+  private verifyApprovalPayload(approval: Approval | undefined): unknown {
     if (!approval) throw new GatewayRejection("missing approval");
 
     let parsed: unknown;
@@ -155,9 +184,6 @@ export class BrokerGateway {
       parsed = JSON.parse(approval.payload);
     } catch {
       throw new GatewayRejection("approval payload is not valid JSON");
-    }
-    if (!isApprovalPayload(parsed)) {
-      throw new GatewayRejection("approval payload is missing or has malformed fields");
     }
 
     // Authenticate the bytes before trusting anything the payload says.
@@ -167,6 +193,15 @@ export class BrokerGateway {
       Buffer.from(approval.signature, "base64"),
     );
     if (!sigOk) throw new GatewayRejection("approval signature does not verify");
+
+    return parsed;
+  }
+
+  private assertApproval(order: ApprovedOrder, approval: Approval | undefined): void {
+    const parsed = this.verifyApprovalPayload(approval);
+    if (!isApprovalPayload(parsed)) {
+      throw new GatewayRejection("approval payload is missing or has malformed fields");
+    }
 
     if (
       parsed.client_order_id !== order.client_order_id ||
@@ -182,6 +217,19 @@ export class BrokerGateway {
 
     if (parsed.expires_ts_ns <= this.now()) {
       throw new GatewayRejection("approval has expired");
+    }
+  }
+
+  private assertCancelApproval(clientOrderId: number, approval: Approval | undefined): void {
+    const parsed = this.verifyApprovalPayload(approval);
+    if (!isCancelApprovalPayload(parsed)) {
+      throw new GatewayRejection("cancel approval payload is missing or has malformed fields");
+    }
+    if (parsed.client_order_id !== clientOrderId) {
+      throw new GatewayRejection("cancel approval payload does not match the order being cancelled");
+    }
+    if (parsed.expires_ts_ns <= this.now()) {
+      throw new GatewayRejection("cancel approval has expired");
     }
   }
 
@@ -231,6 +279,11 @@ export class BrokerGateway {
       // Outcome unknown: could have reached Robinhood and been lost on the way back, or never
       // arrived at all. Either way, never resubmit blindly -- the next call reconciles first.
       this.orders.set(order.client_order_id, { state: "unknown" });
+      try {
+        this.config.onAmbiguousOutcome?.(order.client_order_id);
+      } catch {
+        // best effort: a reconcile-trigger failure must never mask the order error below
+      }
       throw new Error(`order ${order.client_order_id}: outcome unknown after placeOrder failed: ${(err as Error).message}`);
     }
 

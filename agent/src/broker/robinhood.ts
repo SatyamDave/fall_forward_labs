@@ -31,13 +31,17 @@ export class RobinhoodToolError extends Error {
 }
 
 // Single source of truth for the name mapping (robinhood-agentic-mcp.md §2's tool tables).
-const TOOLS: Record<AssetClass, { place: string; cancel: string; preview: string; status: string; quote: string }> = {
+const TOOLS: Record<
+  AssetClass,
+  { place: string; cancel: string; preview: string; status: string; quote: string; positions: string }
+> = {
   equity: {
     place: "place_equity_order",
     cancel: "cancel_equity_order",
     preview: "review_equity_order",
     status: "get_equity_orders",
     quote: "get_equity_quotes",
+    positions: "get_equity_positions",
   },
   crypto: {
     place: "place_crypto_order",
@@ -45,8 +49,17 @@ const TOOLS: Record<AssetClass, { place: string; cancel: string; preview: string
     preview: "preview_crypto_order",
     status: "get_crypto_orders",
     quote: "get_crypto_quotes",
+    // UNVERIFIED name -- robinhood-agentic-mcp.md §2 names get_equity_positions for equity but
+    // does not confirm a crypto equivalent; this is this module's own placeholder (module
+    // header), replaced once #26 lands.
+    positions: "get_crypto_holdings",
   },
 };
+
+// UNVERIFIED name (module header): not asset-class-specific -- one account, called once
+// regardless of which asset class the reconciliation run is otherwise pulling orders/positions
+// for. Issue #45's engineering notes cite `get_accounts`/`get_portfolio` for cash.
+const ACCOUNT_TOOL = "get_accounts";
 
 // UNVERIFIED shape -- see module header.
 function placeParams(order: ApprovedOrder): Record<string, unknown> {
@@ -200,4 +213,67 @@ export async function getQuote(
 ): Promise<Record<string, unknown>> {
   const tool = TOOLS[assetClass].quote;
   return unwrap(tool, await callTool(client, tool, { symbols: [instrument] }, opts));
+}
+
+/** One order exactly as the broker itself reports it -- issue #45's reconciliation input. Not
+ *  filtered by client_order_id (unlike `getOrderStatus` above): this is "give me everything you
+ *  have", the shape `reconcile.ts` needs to compare against the bridge's own OMS state. */
+export interface VenueOrder {
+  client_order_id: number | null;
+  venue_order_id: string | null;
+  status: PlaceOrderResult["status"] | "not_found";
+  filled_qty?: DecimalString;
+}
+
+export async function listOrders(client: McpClient, assetClass: AssetClass, opts?: CallOptions): Promise<VenueOrder[]> {
+  const tool = TOOLS[assetClass].status;
+  const raw = unwrap(tool, await callTool(client, tool, {}, opts));
+  const orders = Array.isArray(raw.orders) ? raw.orders : [];
+  return orders
+    .filter((o): o is Record<string, unknown> => typeof o === "object" && o !== null)
+    .map((o) => {
+      const state = o.state;
+      const status = typeof state === "string" ? PLACE_STATES[state] : undefined;
+      if (!status) {
+        // An unrecognized state here is exactly the "ambiguous broker response" case (module
+        // header, and the same convention `normalizePlaceResult` uses) -- throw, don't guess.
+        throw new RobinhoodToolError(tool, `unrecognized order state in listOrders: ${JSON.stringify(state)}`);
+      }
+      const rawClientOrderId = o.client_order_id;
+      return {
+        client_order_id: typeof rawClientOrderId === "string" && rawClientOrderId !== "" ? Number(rawClientOrderId) : null,
+        venue_order_id: typeof o.id === "string" ? o.id : null,
+        status,
+        filled_qty: asDecimalString(o.filled_quantity),
+      };
+    });
+}
+
+/** Position and cash for one instrument's account, for issue #45's daily/startup/periodic
+ *  reconciliation against the bridge's own OMS-tracked position. `cash` is account-level (not
+ *  per-instrument), `position` is this instrument's own held quantity. UNVERIFIED shapes --
+ *  module header. */
+export interface AccountState {
+  position: DecimalString;
+  cash: DecimalString | null;
+}
+
+export async function getAccountState(
+  client: McpClient,
+  assetClass: AssetClass,
+  instrument: string,
+  opts?: CallOptions,
+): Promise<AccountState> {
+  const positionsTool = TOOLS[assetClass].positions;
+  const positionsRaw = unwrap(positionsTool, await callTool(client, positionsTool, { symbol: instrument }, opts));
+  const positions = Array.isArray(positionsRaw.positions) ? positionsRaw.positions : [];
+  const match = positions.find(
+    (p): p is Record<string, unknown> => typeof p === "object" && p !== null && (p as Record<string, unknown>).symbol === instrument,
+  );
+  const position = (match && asDecimalString(match.quantity)) ?? "0";
+
+  const accountRaw = unwrap(ACCOUNT_TOOL, await callTool(client, ACCOUNT_TOOL, {}, opts));
+  const cash = asDecimalString(accountRaw.cash) ?? null;
+
+  return { position, cash };
 }

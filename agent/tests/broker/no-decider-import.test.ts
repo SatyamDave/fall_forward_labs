@@ -3,18 +3,21 @@
 // structural test rather than a claim -- same spirit as agent/CLAUDE.md's "the loop fetches
 // next_decision_request itself; the model never pulls market data through a tool").
 //
-// agent/src/decider/ doesn't exist in this worktree (it's a different lane's, wave1/agent-core,
-// building in parallel off the same origin/main commit) -- this scans whatever *.ts files exist
-// under agent/src (excluding this directory itself and testkit/) for an import specifier that
-// resolves into agent/src/broker/, so it starts exercising real enforcement the moment that
-// lane's files land, without needing to be re-written then.
-import { readdirSync, readFileSync, statSync } from "node:fs";
+// Scope note (wave 2, gateway-integration): this used to scan every file under agent/src except
+// broker/ itself, which happened to match this test's stated intent only because nothing outside
+// decider/ had a reason to import broker/ yet. Wave 2 intentionally wires agent/src/loop.ts (and
+// agent/src/bridge.ts, agent/src/cli.ts) to agent/src/broker/ -- that IS the fix for the "gateway
+// isn't wired to the real bridge" gap, not a violation of this boundary. The boundary this test
+// exists to prove is specifically decider/ -> broker/ (the LLM's own reasoning loop must never
+// reach a broker credential or tool), so the scan is narrowed to agent/src/decider/ to match.
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const AGENT_SRC = path.resolve(HERE, "..", "..", "src");
+const DECIDER_SRC = path.join(AGENT_SRC, "decider");
 
 function walk(dir: string): string[] {
   const out: string[] = [];
@@ -44,8 +47,9 @@ function importsBroker(file: string): string[] {
 }
 
 describe("agent/src/decider/ cannot import agent/src/broker/", () => {
-  it("no file under src/decider (or anywhere outside src/broker itself) imports src/broker", () => {
-    const files = walk(AGENT_SRC).filter((f) => !f.includes(`${path.sep}src${path.sep}broker${path.sep}`));
+  it("no file under src/decider imports src/broker", () => {
+    if (!existsSync(DECIDER_SRC)) return; // not built yet in this worktree; see header comment
+    const files = walk(DECIDER_SRC);
     const offenders = files.flatMap((f) => importsBroker(f).map((spec) => `${path.relative(AGENT_SRC, f)}: imports "${spec}"`));
     expect(offenders).toEqual([]);
   });

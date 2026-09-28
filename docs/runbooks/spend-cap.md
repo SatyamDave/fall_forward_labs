@@ -13,9 +13,8 @@ trading will stop for the day soon (or already has, if the cap is enforced elsew
 human time to decide whether that is expected before it happens. `scripts/ops/alerts.py` sums the
 optional `cost_usd` field across ledger entries whose (nested) `request.ts_ns` falls in the
 current UTC day, and alerts when that sum exceeds `--spend-ratio` (default 0.8) times
-`--daily-cap-usd`. Note `cost_usd` is typed `number` in `agent/src/types.ts`, not this repo's usual
-decimal-string money convention -- an existing choice in agent-core's code, flagged here rather
-than silently worked around. **The default cap in this repo is a small placeholder pending
+`--daily-cap-usd`. `cost_usd` is a decimal string (`agent/src/types.ts`, wave 2 -- it was a JSON
+number through wave 1). **The default cap in this repo is a small placeholder pending
 founders' decision, not an agreed number** -- see `ops/live/README.md` and
 `scripts/ops/alerts.py --help`.
 

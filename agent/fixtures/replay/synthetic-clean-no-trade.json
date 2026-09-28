@@ -55,6 +55,6 @@
       { "type": "result", "subtype": "success", "total_cost_usd": 0.003 }
     ]
   },
-  "cost_usd": 0.003,
+  "cost_usd": "0.003",
   "latency_ms": 1420
 }

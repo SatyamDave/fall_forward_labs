@@ -189,3 +189,13 @@ agent-sim:
     echo "run 2 ledger sha256: $hash2"
     if [ "$hash1" != "$hash2" ]; then echo "FAIL: agent-sim ledger is not deterministic"; exit 1; fi
     echo "agent-sim deterministic across two runs"
+
+# Protocol v1.2 (wave2-spec.md, issue #45 + gateway-integration): agent (fake decider) -> bridge
+# --venue external -> gateway -> mock Robinhood MCP -> report_execution, run twice with identical
+# ledger AND broker-journal hashes, exercising a partial fill, a reject, and a cancel. Runs
+# against agent/src/testkit/fake-bridge-v12.ts (protocol v1.2) until the bridge-control lane's
+# real qc-bridge binary supports `--venue external`/hello/cancel_order_intent/reconcile -- point
+# QC_BRIDGE_BIN at that binary and adjust agent/src/testkit/run-external-sim.ts once it lands
+# (see the PR body's integration notes for wave2/bridge-control).
+agent-sim-external:
+    cd {{agent}} && node_modules/.bin/tsx src/testkit/run-external-sim.ts
