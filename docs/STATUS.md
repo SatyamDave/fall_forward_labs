@@ -6,7 +6,7 @@ Regenerated automatically by `.github/workflows/docs-status.yml` on every merge 
 Narrative docs: [project guide](guide/quant-core-guide.html) ·
 [base status](reports/base-status.md) · [NOW](NOW.md).
 
-Generated from `main` at **502df0f 2026-09-28**. Latest CI on `main`: **queued on 502df0f**.
+Generated from `main` at **1ac55f3 2026-09-28**. Latest CI on `main`: **in_progress on 1ac55f3**.
 Paid AI loops: **off**.
 
 ## Open pull requests (5)
@@ -23,6 +23,7 @@ Paid AI loops: **off**.
 
 | PR | Title | Merged |
 |---|---|---|
+| [#80](https://github.com/SatyamDave/fall_forward_labs/pull/80) | Replaying a recorded decision gives the same ledger every time | 2026-09-28 |
 | [#74](https://github.com/SatyamDave/fall_forward_labs/pull/74) | Prove the agent can only place orders one way, replay decisions for free, write the live prompt | 2026-09-28 |
 | [#73](https://github.com/SatyamDave/fall_forward_labs/pull/73) | Build the broker gateway door and a mock Robinhood connection | 2026-09-28 |
 | [#76](https://github.com/SatyamDave/fall_forward_labs/pull/76) | Stamp approved orders and prove the bridge refuses what it doesn't understand | 2026-09-28 |
@@ -37,12 +38,14 @@ Paid AI loops: **off**.
 | [#8](https://github.com/SatyamDave/fall_forward_labs/pull/8) | Document the actual base state and consolidate the repo guide | 2026-09-28 |
 | [#17](https://github.com/SatyamDave/fall_forward_labs/pull/17) | Fix base integration failures and make checks cover every suite | 2026-09-28 |
 | [#6](https://github.com/SatyamDave/fall_forward_labs/pull/6) | Draft team plan and docs/NOW.md for both founders (Phase 1) | 2026-09-28 |
-| [#16](https://github.com/SatyamDave/fall_forward_labs/pull/16) | Test favorite-longshot bias on settled Kalshi markets: insufficient evidence, listing cap dropped every day | 2026-09-28 |
 
 ## Recent commits on main
 
 | Commit | Date | Subject |
 |---|---|---|
+| `1ac55f3` | 2026-09-28 | Merge pull request #80 from SatyamDave/fix/replay-ledger-determinism |
+| `257b29c` | 2026-09-28 | fix(agent): record wall-clock latency only for live decisions |
+| `8519a7d` | 2026-09-28 | docs(status): regenerate live status from 502df0f [skip ci] |
 | `502df0f` | 2026-09-28 | Merge pull request #74 from SatyamDave/wave1/agent-core |
 | `694a8ed` | 2026-09-28 | docs(status): regenerate live status from 153f09e [skip ci] |
 | `65478d5` | 2026-09-28 | Merge main into wave1/agent-core before merging #74 |
@@ -52,9 +55,6 @@ Paid AI loops: **off**.
 | `1f5a183` | 2026-09-28 | Merge pull request #76 from SatyamDave/wave1/bridge-v11 |
 | `5940dd9` | 2026-09-28 | docs(agent): note that an SDK version bump must re-run the permission e2e test |
 | `60e8d94` | 2026-09-28 | fix(agent/broker): persist a journal so a restart never blind-resubmits an order |
-| `b1fb65c` | 2026-09-28 | style(bridge): cargo fmt the negative-price test |
-| `0172d6e` | 2026-09-28 | docs(bridge): name the clock the gateway must use for approval expiry |
-| `34cc420` | 2026-09-28 | fix(bridge): refuse a negative fill price/qty in report_execution |
 
 ## Decisions (ADRs)
 
