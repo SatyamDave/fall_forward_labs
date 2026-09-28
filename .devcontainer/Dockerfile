@@ -11,12 +11,8 @@
 FROM rust:1-bookworm@sha256:93ce27a88655056a51dbdd8f5f2d7ddc071c7b0070fb288a37b5a285fc83971e
 
 ENV CARGO_HOME=/usr/local/cargo \
-    PATH=/usr/local/cargo/bin:/root/.local/bin:$PATH
-
-# uv also manages the Python 3.12 install (research/pyproject.toml pins python = "3.12"), so no
-# separate system Python package is needed. https://docs.astral.sh/uv/getting-started/installation/
-RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
-    && uv python install 3.12
+    RUSTUP_HOME=/usr/local/rustup \
+    PATH=/usr/local/cargo/bin:/home/vscode/.local/bin:$PATH
 
 # just: the repo's task runner (justfile at the repo root). https://github.com/casey/just
 RUN cargo install just --locked
@@ -24,9 +20,6 @@ RUN cargo install just --locked
 # cargo-deny / cargo-audit: consumed by `just audit` and CI (Phase 4 security pipeline).
 RUN cargo install cargo-deny --locked \
     && cargo install cargo-audit --locked
-
-# pre-commit: run via uv so it doesn't need a separate system Python.
-RUN uv tool install pre-commit
 
 # gitleaks: pinned release binary (v8.30.1, latest as of 2026-09-27 per
 # `gh api repos/gitleaks/gitleaks/releases/latest`), not a moving tag. TARGETARCH is set
@@ -48,3 +41,21 @@ RUN set -eu; \
     tar -xzf "${asset}" -C /usr/local/bin gitleaks; \
     rm "${asset}" checksums.txt; \
     gitleaks version
+
+# Work as an unprivileged user (uid 1000, the devcontainer convention, so bind-mounted files keep
+# the host user's ownership on Linux). It owns the cargo and rustup homes, because rustup installs
+# the toolchain named in engine/rust-toolchain.toml on first use and cargo writes its registry.
+ARG USERNAME=vscode
+RUN groupadd --gid 1000 "${USERNAME}" \
+    && useradd --uid 1000 --gid 1000 --create-home --shell /bin/bash "${USERNAME}" \
+    && chown -R "${USERNAME}:${USERNAME}" "${CARGO_HOME}" "${RUSTUP_HOME}"
+USER ${USERNAME}
+
+# uv (installed per user into ~/.local/bin) also manages the Python 3.12 install
+# (research/.python-version), so no system Python package is needed.
+# https://docs.astral.sh/uv/getting-started/installation/
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
+    && uv python install 3.12
+
+# pre-commit: run via uv so it doesn't need a separate system Python.
+RUN uv tool install pre-commit
