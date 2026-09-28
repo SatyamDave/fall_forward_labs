@@ -25,3 +25,8 @@
 /tests/autonomy/**                  @SatyamDave
 /tests/hooks/**                     @SatyamDave
 /.github/workflows/autonomy-gate.yml @SatyamDave
+
+# Checks the AI and knowledge loops read from main (T3 per autonomy/POLICY.yaml).
+/scripts/ci/ai_gate.py              @SatyamDave
+/tests/ci/**                        @SatyamDave
+/scripts/knowledge/scope_check.py   @SatyamDave

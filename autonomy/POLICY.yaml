@@ -84,7 +84,13 @@
     # Tests for the protected hooks.
     "tests/hooks/**",
     # The T3 reviewer; a softer prompt is a softer T3.
-    ".claude/agents/risk-auditor.md"
+    ".claude/agents/risk-auditor.md",
+    # Checks the paid and knowledge loops read from main: loosening the AI
+    # gate turns every paid loop on, loosening the scope check widens what a
+    # knowledge PR may touch.
+    "scripts/ci/ai_gate.py",
+    "tests/ci/**",
+    "scripts/knowledge/scope_check.py"
   ],
 
   # Never auto-merged, whatever tier a path would otherwise get. Deliberately
@@ -98,7 +104,10 @@
     ".github/workflows/**",
     ".claude/settings.json",
     ".claude/hooks/**",
-    "autonomy/**"
+    "autonomy/**",
+    "scripts/ci/ai_gate.py",
+    "tests/ci/**",
+    "scripts/knowledge/scope_check.py"
   ],
 
   # Ordered; the first matching rule sets a path's tier. Globs: "**" spans
