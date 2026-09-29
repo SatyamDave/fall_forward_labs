@@ -170,9 +170,9 @@ def _decision_ledger_fill(entry: dict[str, Any]) -> tuple[str, Decimal, Decimal]
 
 def make_broker_fill_resolver(journal: dict[int, dict[str, Any]]) -> FillResolver:
     """Resolver backing `--source broker`: only a `client_order_id` the journal has resolved to a
-    real fill (`"filled"` or `"partially_filled"`, with both `filled_qty` and `avg_price` present)
-    counts -- a rejected, canceled, or still-unresolved order contributes nothing, never a zero or
-    an assumed fill."""
+    real fill (`"filled"`, `"partially_filled"`, or `"canceled"` after a partial fill, with a
+    nonzero `filled_qty` and an `avg_price`) counts -- a rejected, unfilled canceled, or
+    still-unresolved order contributes nothing, never a zero or an assumed fill."""
 
     def resolve(entry: dict[str, Any]) -> tuple[str, Decimal, Decimal] | None:
         decision = entry.get("decision", {})
@@ -186,10 +186,12 @@ def make_broker_fill_resolver(journal: dict[int, dict[str, Any]]) -> FillResolve
         if not isinstance(client_order_id, int):
             return None
         resolved = journal.get(client_order_id)
-        if resolved is None or resolved.get("status") not in ("filled", "partially_filled"):
+        # "canceled" too: the gateway emulates IOC as gfd + cancel, so a partial fill ends
+        # canceled with a nonzero filled_qty.
+        if resolved is None or resolved.get("status") not in ("filled", "partially_filled", "canceled"):
             return None
         filled_qty, avg_price = resolved.get("filled_qty"), resolved.get("avg_price")
-        if not filled_qty or not avg_price:
+        if not filled_qty or not avg_price or Decimal(str(filled_qty)) == 0:
             return None
         return action, Decimal(str(filled_qty)), Decimal(str(avg_price))
 

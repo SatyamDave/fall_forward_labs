@@ -138,7 +138,8 @@ async function main(): Promise<number> {
     mkdirSync(outDir, { recursive: true });
     writeFileSync(outPath, `${JSON.stringify({ target, probed_at: now.toISOString(), calls: result.shapes }, null, 2)}\n`);
     console.log(`wrote response shapes (values redacted) to ${outPath}`);
-    for (const [symbol, price] of result.prices) console.log(`${symbol} last_trade_price=${price}`);
+    const label = target === "mock" ? " (SYNTHETIC mock price)" : "";
+    for (const [symbol, price] of result.prices) console.log(`${symbol} last_trade_price=${price}${label}`);
     if (result.failures > 0) console.log(`${result.failures} call(s) failed; see the shapes file`);
     return result.failures === 0 ? 0 : 1;
   } finally {
