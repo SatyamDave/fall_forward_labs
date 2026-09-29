@@ -119,6 +119,12 @@ def test_an_instrument_file_for_another_symbol_is_refused() -> None:
         shadow_run.load_instrument("QQQ", SPY)
 
 
+def test_experimental_rule_decider_needs_no_model_gate() -> None:
+    args = shadow_run.parse_args(["--dry-run", "--decider", "experimental-rule"])
+    assert args.decider == "experimental-rule"
+    assert shadow_run.DECIDERS["experimental-rule"] == ("experimental-rule", None)
+
+
 def test_decider_defaults_to_fake_and_live_is_an_alias() -> None:
     assert shadow_run.parse_args(["--dry-run"]).decider == "fake"
     assert shadow_run.parse_args(["--dry-run", "--live"]).decider == "live"

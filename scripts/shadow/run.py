@@ -72,6 +72,9 @@ DECIDERS = {
     "fake": ("fake", None),
     "live": ("live", "loop-agent-eval"),
     "openrouter": ("openrouter", "loop-agent-openrouter"),
+    # Deterministic, no model call, so no ai_gate loop. EXPERIMENTAL paper evidence only; run it
+    # with --decide-every 1, since its windows are measured over every snapshot.
+    "experimental-rule": ("experimental-rule", None),
 }
 # One decision per 900 synced records: ~15 min at the recorder's 1 s poll, ~26 per 6.5 h session,
 # so a free model's daily request limit is not exceeded. qc-bridge's own default (50) is left
