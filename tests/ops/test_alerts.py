@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import sys
 from decimal import Decimal
 from pathlib import Path
@@ -303,3 +304,74 @@ def test_console_notifier_is_the_default_and_makes_no_network_call(
     assert isinstance(notifier, alerts.Notifier)
     notifier.send(alerts.Alert("halt", "critical", "test", "halt:1"))
     assert "test" in capsys.readouterr().out
+
+
+# --- recording_stalled (#48: qc-bridge --follow cannot tell a dead recorder from a quiet market)
+
+
+SPY = REPO / "config/instruments/spy.toml"  # real trading_hours + calendars/nyse.toml
+MON_OPEN_NS = 1790618400 * SECOND_NS  # 2026-09-28T18:00Z = Mon 14:00 America/New_York
+MON_AFTER_CLOSE_NS = 1790627400 * SECOND_NS  # 2026-09-28T20:30Z = Mon 16:30 New York
+SAT_MIDDAY_NS = 1790445600 * SECOND_NS  # 2026-09-26T18:00Z = Sat 14:00 New York
+THANKSGIVING_NS = 1795719600 * SECOND_NS  # 2026-11-26T19:00Z = Thu 14:00 New York, holiday
+EARLY_CLOSE_BEFORE_NS = 1795800600 * SECOND_NS  # 2026-11-27T17:30Z = Fri 12:30 New York
+EARLY_CLOSE_AFTER_NS = 1795804200 * SECOND_NS  # 2026-11-27T18:30Z = Fri 13:30, past 13:00 close
+
+
+def recording_last_written(tmp_path: Path, now_ns: int, ago_sec: int) -> Path:
+    path = tmp_path / "2026-09-28.csv"
+    path.write_text("ts_ns,bid,ask\n")
+    written_ns = now_ns - ago_sec * SECOND_NS
+    os.utime(path, ns=(written_ns, written_ns))
+    return path
+
+
+def stall_alerts(recording: Path, now_ns: int) -> list[str]:
+    return [a.rule for a in alerts.check_recording_stalled(recording, SPY, now_ns, 120.0)]
+
+
+def test_growing_recording_does_not_alert(tmp_path: Path) -> None:
+    assert stall_alerts(recording_last_written(tmp_path, MON_OPEN_NS, 5), MON_OPEN_NS) == []
+
+
+def test_stalled_recording_during_open_hours_alerts(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    recording = recording_last_written(tmp_path, MON_OPEN_NS, 300)
+    code, out = run(
+        ["--recording", str(recording), "--instrument", str(SPY), "--now-ns", str(MON_OPEN_NS)],
+        tmp_path,
+        capsys,
+    )
+    assert code == 1
+    assert "recording_stalled" in out
+    assert "has not grown for 300s" in out
+    assert alerts.RUNBOOKS["recording_stalled"] in out
+
+
+@pytest.mark.parametrize(
+    "now_ns",
+    [MON_AFTER_CLOSE_NS, SAT_MIDDAY_NS, THANKSGIVING_NS, EARLY_CLOSE_AFTER_NS],
+    ids=["after-close", "weekend", "holiday", "after-early-close"],
+)
+def test_stalled_recording_outside_market_hours_does_not_alert(tmp_path: Path, now_ns: int) -> None:
+    assert stall_alerts(recording_last_written(tmp_path, now_ns, 3600), now_ns) == []
+    assert stall_alerts(tmp_path / "missing.csv", now_ns) == []
+
+
+def test_early_close_day_is_open_before_its_close(tmp_path: Path) -> None:
+    recording = recording_last_written(tmp_path, EARLY_CLOSE_BEFORE_NS, 3600)
+    assert stall_alerts(recording, EARLY_CLOSE_BEFORE_NS) == ["recording_stalled"]
+
+
+def test_missing_recording_during_open_hours_alerts(tmp_path: Path) -> None:
+    found = alerts.check_recording_stalled(tmp_path / "missing.csv", SPY, MON_OPEN_NS, 120.0)
+    assert [a.rule for a in found] == ["recording_stalled"]
+    assert "does not exist" in found[0].message
+
+
+def test_year_outside_calendar_coverage_is_assumed_open(tmp_path: Path) -> None:
+    now_ns = 1853517600 * SECOND_NS  # 2028-09-25T18:00Z = Mon 14:00 New York, no 2028 entries
+    found = alerts.check_recording_stalled(tmp_path / "missing.csv", SPY, now_ns, 120.0)
+    assert [a.rule for a in found] == ["recording_stalled"]
+    assert "no 2028 entries" in found[0].message

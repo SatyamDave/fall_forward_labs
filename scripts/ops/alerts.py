@@ -12,6 +12,9 @@ alert for each of:
   - spend_cap         the agent ledger's cost_usd sum for the current UTC day exceeds
                        --spend-ratio of --daily-cap-usd
   - stop_rule         the daily P&L report at --pnl-report has `stop_rule.triggered: true`
+  - recording_stalled the price recording at --recording (qc-bridge --follow's input) has not
+                       been written for more than --stall-after-sec while --instrument's market is
+                       open; a missing file during open hours also fires (fail closed)
 
 Integration notes (for the bridge-v1.1 lane; this is the *contract* this checker needs from
 qc-bridge's own log, not something read from a merged bridge-v1.1 PR -- it runs in parallel):
@@ -51,6 +54,15 @@ here. Fires once per calendar date recorded in the report's own `date` field (de
 `stop_rule:<date>`), not once per run, so a human isn't re-alerted every 1-2 minutes for the same
 day's already-seen trip.
 
+Recording stall (#48): qc-bridge --follow waits indefinitely for the recording to grow, so a
+recorder that silently stops (dead sign-in, network, crash) looks exactly like a quiet market.
+"Grown" is the file's mtime: the recorder only ever appends, so a stale mtime means no new rows.
+Market hours come from the instrument TOML's `[trading_hours]` and its calendar (holidays, early
+closes), the same files qc-bridge's `MarketCalendar` reads. A date outside the calendar's
+coverage years is treated as a regular session, so the check errs toward alerting.
+scripts/shadow/run.py runs this check on every heartbeat for data/raw/shadow/<date>.csv; on the
+live host pass the recording qc-bridge follows (the first positional in QC_BRIDGE_ARGS).
+
 Usage (run periodically, e.g. from a systemd timer every 1-2 minutes -- "within minutes" per
 #64 does not need a persistent tailing process). --bridge-log points at whichever log file
 actually carries qc-bridge's output: ops/live/logs/agent.log in today's one-process topology
@@ -67,13 +79,16 @@ mailer, can double as a second notification path).
 from __future__ import annotations
 
 import argparse
+import datetime as dt
 import json
 import sys
 import time
+import tomllib
 import urllib.request
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
+from zoneinfo import ZoneInfo
 
 SECOND_NS = 1_000_000_000
 DAY_NS = 86_400 * SECOND_NS
@@ -83,6 +98,11 @@ DAY_NS = 86_400 * SECOND_NS
 # --daily-cap-usd or QC_DAILY_SPEND_CAP_USD.
 DEFAULT_DAILY_CAP_USD = Decimal("5.00")
 
+DEFAULT_INSTRUMENT = Path(__file__).resolve().parents[2] / "config/instruments/spy.toml"
+# The recorder polls once a second in a real run; two minutes of silence is well past a slow poll.
+DEFAULT_STALL_AFTER_SEC = 120.0
+_WEEKDAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
 RUNBOOKS = {
     "halt": "docs/runbooks/kill-switch.md",
     "kill_switch": "docs/runbooks/kill-switch.md",
@@ -90,6 +110,7 @@ RUNBOOKS = {
     "repeated_risk_rejects": "docs/runbooks/repeated-risk-rejects.md",
     "spend_cap": "docs/runbooks/spend-cap.md",
     "stop_rule": "docs/runbooks/stop-rule-tripped.md",
+    "recording_stalled": "docs/runbooks/recording-stalled.md",
 }
 
 
@@ -288,6 +309,46 @@ def check_stop_rule(pnl_report: dict[str, object] | None) -> list[Alert]:
     ]
 
 
+def market_open(instrument_path: Path, now_ns: int) -> tuple[bool, str]:
+    """(open?, note). Reads the instrument's `[trading_hours]` and the calendar it names
+    (resolved relative to the instrument file, like `main.rs::load_instrument`)."""
+    with instrument_path.open("rb") as f:
+        hours = tomllib.load(f)["trading_hours"]
+    with (instrument_path.parent / hours["calendar"]).open("rb") as f:
+        calendar = tomllib.load(f)
+    local = dt.datetime.fromtimestamp(now_ns / SECOND_NS, ZoneInfo(hours["tz"]))
+    day = local.date().isoformat()
+    if _WEEKDAYS[local.weekday()] not in hours["days"]:
+        return False, ""
+    holidays = {h["date"] for h in calendar.get("holidays", [])}
+    early = {e["date"]: e["close"] for e in calendar.get("early_closes", [])}
+    if day in holidays:
+        return False, ""
+    covered = {d[:4] for d in holidays | early.keys()}
+    note = "" if day[:4] in covered else f" (calendar has no {day[:4]} entries; assumed open)"
+    now_hm = local.strftime("%H:%M")
+    return hours["open"] <= now_hm < early.get(day, hours["close"]), note
+
+
+def check_recording_stalled(
+    recording: Path, instrument_path: Path, now_ns: int, stall_after_sec: float
+) -> list[Alert]:
+    is_open, note = market_open(instrument_path, now_ns)
+    if not is_open:
+        return []
+    if not recording.exists():
+        message = f"recording {recording} does not exist during market hours{note}"
+    else:
+        idle_sec = (now_ns - recording.stat().st_mtime_ns) / SECOND_NS
+        if idle_sec <= stall_after_sec:
+            return []
+        message = (
+            f"recording {recording} has not grown for {idle_sec:.0f}s "
+            f"(limit {stall_after_sec:.0f}s) during market hours{note}"
+        )
+    return [Alert("recording_stalled", "critical", message, dedup_key=None)]
+
+
 def load_state(path: Path) -> set[str]:
     if not path.exists():
         return set()
@@ -329,6 +390,14 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
         help="scripts/reports/pnl_report.py's daily record (fund/track-record/daily/<date>.json); "
         "alerts if its stop_rule.triggered is true (issue #70). Omit to skip this check.",
     )
+    p.add_argument(
+        "--recording",
+        type=Path,
+        help="the price recording qc-bridge --follow reads; alerts if it stops growing during "
+        "--instrument's market hours. Omit to skip this check.",
+    )
+    p.add_argument("--instrument", type=Path, default=DEFAULT_INSTRUMENT)
+    p.add_argument("--stall-after-sec", type=float, default=DEFAULT_STALL_AFTER_SEC)
     return p.parse_args(argv)
 
 
@@ -352,6 +421,10 @@ def main(argv: list[str] | None = None) -> int:
         alerts += check_spend_cap(ledger, now_ns, args.daily_cap_usd, args.spend_ratio)
     if args.pnl_report and args.pnl_report.exists():
         alerts += check_stop_rule(json.loads(args.pnl_report.read_text(encoding="utf-8")))
+    if args.recording:
+        alerts += check_recording_stalled(
+            args.recording, args.instrument, now_ns, args.stall_after_sec
+        )
 
     seen = load_state(args.state_file)
     fresh = dedup(alerts, seen)

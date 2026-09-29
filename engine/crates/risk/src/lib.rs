@@ -354,8 +354,8 @@ mod tests {
 
     const SEC: u64 = 1_000_000_000;
 
-    /// Defaults: `max_position` 0.01, `max_notional` 500, 5 orders/s, `max_daily_loss` 100,
-    /// band 50 bps, stale 1000 ms, `max_daily_notional` 2000, wash window 2000 ms. The base
+    /// Defaults: `max_position` 0.01, `max_notional` 25, 5 orders/s, `max_daily_loss` 5,
+    /// band 50 bps, stale 1000 ms, `max_daily_notional` 50, wash window 2000 ms. The base
     /// order is well inside every limit.
     fn order(side: Side, price: &str, qty: &str) -> OrderRequest {
         OrderRequest {
@@ -474,15 +474,15 @@ mod tests {
     fn daily_loss_boundary() {
         let o = order(Side::Buy, "10000", "0.001");
         let mut c = ctx();
-        c.daily_pnl = Price::from_raw(-p("100").raw() + 1);
+        c.daily_pnl = Price::from_raw(-p("5").raw() + 1);
         assert_eq!(check(&o, &c), Ok(()), "one unit short of the loss passes");
-        c.daily_pnl = p("-100");
+        c.daily_pnl = p("-5");
         assert_eq!(
             check(&o, &c),
             Err(RiskReject::MaxDailyLoss),
             "reaching the loss halts"
         );
-        c.daily_pnl = p("-100.00000001");
+        c.daily_pnl = p("-5.00000001");
         assert_eq!(check(&o, &c), Err(RiskReject::MaxDailyLoss));
     }
 
@@ -512,11 +512,11 @@ mod tests {
     #[test]
     fn notional_boundary() {
         let mut c = ctx();
-        c.reference_price = Some(p("50000"));
-        // 50000 * 0.01 = 500 exactly; position limit is also 0.01, so both are at the edge.
-        assert_eq!(check(&order(Side::Buy, "50000", "0.01"), &c), Ok(()));
+        c.reference_price = Some(p("2500"));
+        // 2500 * 0.01 = 25 exactly; position limit is also 0.01, so both are at the edge.
+        assert_eq!(check(&order(Side::Buy, "2500", "0.01"), &c), Ok(()));
         assert_eq!(
-            check(&order(Side::Buy, "50000.00000100", "0.01"), &c),
+            check(&order(Side::Buy, "2500.00000100", "0.01"), &c),
             Err(RiskReject::MaxNotional)
         );
         c.reference_price = Some(Price::from_raw(i64::MAX / 2));
@@ -536,30 +536,33 @@ mod tests {
 
     #[test]
     fn position_boundary_counts_open_orders_on_the_same_side() {
+        // Priced at 2000 so even the 0.01 sell ($20) fits the $25 per-order cap.
         let mut c = ctx();
+        c.reference_price = Some(p("2000"));
         c.position = q("0.005");
         c.open_buy_qty = q("0.004");
-        assert_eq!(check(&order(Side::Buy, "10000", "0.001"), &c), Ok(()));
+        assert_eq!(check(&order(Side::Buy, "2000", "0.001"), &c), Ok(()));
         assert_eq!(
-            check(&order(Side::Buy, "10000", "0.00100001"), &c),
+            check(&order(Side::Buy, "2000", "0.00100001"), &c),
             Err(RiskReject::MaxPosition)
         );
         // Selling reduces a long, so it passes even though buys are at the limit.
-        assert_eq!(check(&order(Side::Sell, "10000", "0.01"), &c), Ok(()));
+        assert_eq!(check(&order(Side::Sell, "2000", "0.01"), &c), Ok(()));
         c.position = q("-0.005");
         c.open_sell_qty = q("0.005");
         assert_eq!(
-            check(&order(Side::Sell, "10000", "0.00000001"), &c),
+            check(&order(Side::Sell, "2000", "0.00000001"), &c),
             Err(RiskReject::MaxPosition)
         );
         c.open_sell_qty = q("0.004");
-        assert_eq!(check(&order(Side::Sell, "10000", "0.001"), &c), Ok(()));
+        assert_eq!(check(&order(Side::Sell, "2000", "0.001"), &c), Ok(()));
     }
 
     #[test]
     fn order_rate_boundary_uses_a_sliding_one_second_window() {
         let mut risk = engine();
-        let o = order(Side::Buy, "10000", "0.001");
+        // $1 each, so every accepted order here stays under the $50 daily cap.
+        let o = order(Side::Buy, "10000", "0.0001");
         let at = |ns: u64| {
             let mut c = ctx();
             c.now = Timestamp(ns);
@@ -722,24 +725,24 @@ mod tests {
     fn daily_notional_cap_rejects_once_cumulative_total_crosses_it() {
         let mut risk = engine();
         let mut c = ctx();
-        c.reference_price = Some(p("50000"));
-        // Notional 50000 * 0.01 = 500 exactly: at the per-order cap, not over it.
-        let o = order(Side::Buy, "50000", "0.01");
+        c.reference_price = Some(p("2500"));
+        // Notional 2500 * 0.01 = 25 exactly: at the per-order cap, not over it.
+        let o = order(Side::Buy, "2500", "0.01");
         let day_start = c.now.0;
-        // Default max_daily_notional is 2000: four of these reach it exactly. Time advances
+        // Default max_daily_notional is 50: two of these reach it exactly. Time advances
         // 1 s per order, well inside the same exchange day, so the rate limit (5/s) never
         // interferes.
-        for i in 0..4 {
+        for i in 0..2 {
             c.now = Timestamp(day_start + i * SEC);
             c.last_market_data = c.now;
             assert_eq!(
                 risk.check(&o, &c),
                 Ok(()),
-                "order {i} of 4 reaches the cap exactly"
+                "order {i} of 2 reaches the cap exactly"
             );
         }
         // One more, of any size, would push the cumulative total past the cap.
-        let tiny = order(Side::Buy, "50000", "0.00000001");
+        let tiny = order(Side::Buy, "2500", "0.00000001");
         assert_eq!(risk.check(&tiny, &c), Err(RiskReject::MaxDailyNotional));
 
         // A new exchange day resets the counter (placeholder bucketing pending #23).

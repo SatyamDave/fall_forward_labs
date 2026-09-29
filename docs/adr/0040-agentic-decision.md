@@ -2,13 +2,12 @@
 
 ## Status
 
-Accepted by Satyam 2026-09-28. Pending Rohit's approval per the decision protocol in
-[docs/TEAM.md](../TEAM.md#review-and-the-enforcement-gap) (protected-zone and non-negotiable-rule
-changes need both founders; Rohit has not yet reviewed this ADR). Root [CLAUDE.md](../../CLAUDE.md)
+Accepted by Satyam 2026-09-28. Accepted by Rohit Vivek (@rovivek) 2026-09-28, after reviewing
+the pipeline shape (Decision §1-4), the isolation guarantees (§3), the approval-token protocol
+(§4), and the challenges to the owner's plan (§Challenges 1-9). Rohit's approval covers the
+design as written; the open legal questions in Challenges 8-9 remain blockers on A6 (first live
+trade) and require counsel before real money is involved. Root [CLAUDE.md](../../CLAUDE.md)
 rule 1 is amended by this decision for the trade-decision step only; see "Rule 1 amendment" below.
-Until Rohit approves, this ADR authorizes the offline, fake-mode, no-network build work in the
-`agentic/*` lanes (schemas, `qc-bridge`, the agent service skeleton, evals scaffolding, CI/policy
-entries) and nothing that calls a live model, calls Robinhood, or spends real money.
 
 ## Context
 

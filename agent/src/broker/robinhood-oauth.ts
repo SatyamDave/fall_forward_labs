@@ -7,12 +7,15 @@
 // Two ways in:
 //   - login(): `just robinhood-login`, interactive. Opens the system browser, waits on a
 //     loopback callback, checks `state`, stores the result, then lists tools once to confirm.
-//   - storedAuthProvider(): every other caller (schema check, gateway, recorder). Never opens
+//   - storedAuthTransport(): every other caller (schema check, gateway, recorder). Never opens
 //     a browser: no stored sign-in, or an expired one that cannot be refreshed, is an error
 //     telling the founder to re-run login.
 //
 // The token file lives outside the repo (tokenPath()), is written 0600 by an atomic rename,
-// and no token value is ever logged.
+// and no token value is ever logged. Refresh tokens are single-use and the recorder and gateway
+// are separate processes on one host, so every refresh runs under a lock beside the token file
+// (file-lock.ts) and first re-reads the file: a process that waited adopts the tokens the
+// holder just stored instead of spending the same refresh token a second time.
 import { execFile } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { mkdirSync, openSync, readFileSync, renameSync, writeSync, closeSync, fsyncSync } from "node:fs";
@@ -23,11 +26,14 @@ import { auth, UnauthorizedError, type OAuthClientProvider } from "@modelcontext
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { OAuthClientInformationMixed, OAuthClientMetadata, OAuthTokens } from "@modelcontextprotocol/sdk/shared/auth.js";
+import { withFileLock } from "./file-lock.js";
 import { repoRoot } from "../paths.js";
 import { listAllTools } from "./schema-check.js";
 
 export const TOKEN_PATH_ENV = "QC_ROBINHOOD_TOKEN_PATH";
 export const RELOGIN = "run `just robinhood-login` on a desktop to sign in again";
+/** Bounds how long the refresh lock can be held by a live process (file-lock.ts staleMs is 60s). */
+const REFRESH_TIMEOUT_MS = 20_000;
 
 /** What the token file holds. scripts/ops/preflight.py reads the same fields. */
 export interface StoredAuth {
@@ -80,9 +86,19 @@ function isExpired(stored: StoredAuth, now: number): boolean {
   return stored.expires_at_ms !== undefined && stored.expires_at_ms <= now;
 }
 
+/** A token-endpoint response carrying stored tokens, with expires_in recomputed from now. */
+function tokenResponse(stored: StoredAuth): Response {
+  const { expires_in: _stale, ...tokens } = stored.tokens;
+  const body = stored.expires_at_ms === undefined ? tokens : { ...tokens, expires_in: Math.max(0, Math.floor((stored.expires_at_ms - Date.now()) / 1000)) };
+  return new Response(JSON.stringify(body), { status: 200, headers: { "content-type": "application/json" } });
+}
+
 class FileOAuthProvider implements OAuthClientProvider {
   private verifier: string | undefined;
   readonly expectedState = randomBytes(16).toString("base64url");
+  /** Why the last refresh failed. The SDK swallows non-OAuth refresh errors and falls through to
+   *  redirectToAuthorization, which reports this instead of a bare "sign in again". */
+  refreshError: unknown;
 
   constructor(
     private readonly file: string,
@@ -125,6 +141,13 @@ class FileOAuthProvider implements OAuthClientProvider {
   }
 
   saveTokens(tokens: OAuthTokens): void {
+    // A refresh through fetch() below has already stored these under the lock; writing them
+    // again here, outside it, could overwrite a newer refresh by the other process.
+    if (tokens.access_token === this.record.tokens?.access_token) return;
+    this.persist(tokens);
+  }
+
+  private persist(tokens: OAuthTokens): void {
     if (!this.record.client_information) throw new Error("OAuth tokens arrived before client registration");
     const stored: StoredAuth = {
       server_url: this.serverUrl,
@@ -134,6 +157,35 @@ class FileOAuthProvider implements OAuthClientProvider {
     };
     writeStoredAuth(this.file, stored);
     this.record = stored;
+  }
+
+  /** Passed to the transport and to auth() as their fetch. It is the one seam every SDK token
+   *  request goes through (the up-front refresh here and the transport's refresh on a 401), so
+   *  refresh-grant requests are run under the lock; everything else passes straight through. */
+  readonly fetch = async (url: string | URL, init?: RequestInit): Promise<Response> => {
+    const body = init?.body;
+    if (!(body instanceof URLSearchParams) || body.get("grant_type") !== "refresh_token") return fetch(url, init);
+    try {
+      return await withFileLock(`${this.file}.lock`, () => this.refreshLocked(url, init!, body.get("refresh_token")));
+    } catch (err) {
+      this.refreshError = err;
+      throw err;
+    }
+  };
+
+  private async refreshLocked(url: string | URL, init: RequestInit, sent: string | null): Promise<Response> {
+    const current = readStoredAuth(this.file);
+    if (current?.tokens.refresh_token && current.tokens.refresh_token !== sent) {
+      this.record = current; // another process refreshed while this one waited
+      return tokenResponse(current);
+    }
+    const res = await fetch(url, { ...init, signal: AbortSignal.timeout(REFRESH_TIMEOUT_MS) });
+    if (!res.ok) return res;
+    const tokens = (await res.json()) as OAuthTokens;
+    if (typeof tokens.access_token !== "string") throw new Error("the token endpoint returned no access_token");
+    // The SDK keeps the old refresh token when none comes back; so must the stored copy.
+    this.persist({ ...(sent ? { refresh_token: sent } : {}), ...tokens });
+    return tokenResponse(this.record as StoredAuth);
   }
 
   async redirectToAuthorization(authorizationUrl: URL): Promise<void> {
@@ -160,7 +212,7 @@ class FileOAuthProvider implements OAuthClientProvider {
 
 /** The provider every non-interactive connection uses. Refreshes an expired access token up
  *  front when a refresh token exists; otherwise fails closed. */
-export async function storedAuthProvider(serverUrl: string, file = tokenPath()): Promise<OAuthClientProvider> {
+async function storedAuthProvider(serverUrl: string, file: string): Promise<FileOAuthProvider> {
   const stored = readStoredAuth(file);
   if (!stored) throw new Error(`no Robinhood sign-in found at ${file}; ${RELOGIN}`);
   if (stored.server_url !== serverUrl) {
@@ -171,17 +223,24 @@ export async function storedAuthProvider(serverUrl: string, file = tokenPath()):
     throw new Error(`the Robinhood sign-in at ${file} has expired and has no refresh token; ${RELOGIN}`);
   }
   const redirect = (stored.client_information as { redirect_uris?: string[] }).redirect_uris?.[0] ?? "http://127.0.0.1/callback";
-  const provider = new FileOAuthProvider(file, serverUrl, redirect, async () => {
-    throw new Error(`Robinhood needs a new sign-in (the stored one was rejected and could not be refreshed); ${RELOGIN}`);
+  const provider: FileOAuthProvider = new FileOAuthProvider(file, serverUrl, redirect, async () => {
+    const why = provider.refreshError instanceof Error ? `: ${provider.refreshError.message}` : "";
+    throw new Error(`Robinhood needs a new sign-in (the stored one was rejected and could not be refreshed${why}); ${RELOGIN}`);
   }, stored);
   if (expired) {
     try {
-      await auth(provider, { serverUrl });
+      await auth(provider, { serverUrl, fetchFn: provider.fetch });
     } catch (err) {
       throw new Error(`the Robinhood sign-in at ${file} has expired and refreshing it failed (${err instanceof Error ? err.message : String(err)}); ${RELOGIN}`);
     }
   }
   return provider;
+}
+
+/** A transport to serverUrl signed in with the stored sign-in, refreshing it under the lock. */
+export async function storedAuthTransport(serverUrl: string, file = tokenPath()): Promise<StreamableHTTPClientTransport> {
+  const provider = await storedAuthProvider(serverUrl, file);
+  return new StreamableHTTPClientTransport(new URL(serverUrl), { authProvider: provider, fetch: provider.fetch });
 }
 
 interface Callback {
@@ -282,7 +341,7 @@ export async function login(opts: LoginOptions): Promise<number> {
   }
 
   const client = new Client({ name: "fall-forward-labs-robinhood-login", version: "0.1.0" });
-  await client.connect(new StreamableHTTPClientTransport(new URL(opts.serverUrl), { authProvider: await storedAuthProvider(opts.serverUrl, file) }));
+  await client.connect(await storedAuthTransport(opts.serverUrl, file));
   try {
     return (await listAllTools(client)).length;
   } finally {

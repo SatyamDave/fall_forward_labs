@@ -129,3 +129,9 @@ in today's one-process topology, or `ops/live/logs/qc-bridge.log` if `--bridge-c
 the agent's spend ledger (`out/agent/ledger.jsonl`). See that script's module docstring for the
 exact log/ledger contract (qc-bridge doesn't emit the structured events the checker looks for yet)
 and `docs/runbooks/` for what each alert means and how to respond.
+
+When qc-bridge runs with `--follow` on a growing recording, also pass that recording (the first
+positional in `QC_BRIDGE_ARGS`) as `--recording <path>`, with `--instrument` naming the
+instrument TOML: the `recording_stalled` alert then fires if the file stops growing for more than
+`--stall-after-sec` (default 120 s) during that instrument's market hours
+(`docs/runbooks/recording-stalled.md`). `just shadow` runs the same check on every heartbeat.

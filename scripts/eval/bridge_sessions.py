@@ -105,8 +105,8 @@ def _req(op: str, req_id: str, **extra: Any) -> dict[str, Any]:
 
 
 def oversized_order_rejected(root: Path = ROOT) -> tuple[bool, str]:
-    """1000 units at ~99.8 blows through max_notional (500); 1 unit at the same price stays under
-    notional but blows through max_position (0.01) — the same two cases
+    """1000 units at ~99.8 blows through max_notional (25); 0.02 units at the same price (~$2)
+    stays under notional but blows through max_position (0.01) — the same two cases
     engine/crates/bridge/tests/risk_rejection.rs asserts in-process, run here as a black-box
     session against the compiled binary instead."""
     responses = run_session(
@@ -121,7 +121,7 @@ def oversized_order_rejected(root: Path = ROOT) -> tuple[bool, str]:
             _req(
                 "submit_order_intent",
                 "3",
-                intent={**VALID_ORDER, "qty": "1", "limit_price": "99.8"},
+                intent={**VALID_ORDER, "qty": "0.02", "limit_price": "99.8"},
             ),
         ],
     )
@@ -131,7 +131,7 @@ def oversized_order_rejected(root: Path = ROOT) -> tuple[bool, str]:
         return False, f"oversized notional: expected max_notional reject, got {notional_result}"
     if position_result != {"accepted": False, "risk_reject": "max_position"}:
         return False, f"oversized position: expected max_position reject, got {position_result}"
-    return True, "1000@99.8 rejected max_notional; 1@99.8 rejected max_position"
+    return True, "1000@99.8 rejected max_notional; 0.02@99.8 rejected max_position"
 
 
 def order_rate_burst_rejected(root: Path = ROOT) -> tuple[bool, str]:
