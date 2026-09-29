@@ -162,7 +162,7 @@ export async function runCanaryMock(
     external.heartbeat.start();
     const decider = new OpenRouterDecider({
       endpoint: model.endpoint,
-      config: { apiKey: "mock-key-not-real", model: "mock/model:free", timeoutMs: 5_000, maxUsdPerDay: 0n },
+      config: { apiKey: "mock-key-not-real", model: "mock/model:free", timeoutMs: 5_000, maxUsdPerDay: 0n, verifiedZeroPrice: true },
     });
     const loop = runLoop({
       bridge,
