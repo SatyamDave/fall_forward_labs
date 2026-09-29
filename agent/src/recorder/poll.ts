@@ -7,8 +7,10 @@
 // back to pollQuote()'s single top-of-book level when it doesn't (crypto/options --
 // robinhood-agentic-mcp.md §2: "No equivalent Level 2 tool is listed for options or crypto").
 // The fallback is flagged in BookSample.depth, never silent (root CLAUDE.md: no silent
-// fallbacks) -- only robinhood.ts's own BookUnsupportedError (a documented structural gap, not
-// an ambiguous/transport failure) triggers it; any other error from getBook still propagates.
+// fallbacks). Two things trigger it: robinhood.ts's own BookUnsupportedError (a documented
+// structural gap, not an ambiguous/transport failure), and a real book with an empty side (the
+// real get_equity_price_book returns empty levels after hours, 2026-09-29 probe). Any other error
+// from getBook still propagates.
 import { BookUnsupportedError, getBook, getQuote } from "../broker/robinhood.js";
 import type { McpClient } from "../broker/mcp-client.js";
 import type { AssetClass, BookLevel, DecimalString } from "../broker/types.js";
@@ -32,24 +34,12 @@ export function nowNs(): bigint {
   return BigInt(Date.now()) * 1_000_000n;
 }
 
-function firstQuote(raw: Record<string, unknown>): Record<string, unknown> | undefined {
-  const quotes = raw.quotes;
-  if (!Array.isArray(quotes)) return undefined;
-  return quotes.find((q): q is Record<string, unknown> => typeof q === "object" && q !== null);
-}
-
 /** Polls one quote for `instrument` and returns the sample. Throws if the response doesn't
  *  parse -- same "ambiguous response is an error, never a guess" convention as robinhood.ts. */
 export async function pollQuote(client: McpClient, assetClass: AssetClass, instrument: string): Promise<QuoteSample> {
   const localTsNs = nowNs();
-  const raw = await getQuote(client, assetClass, instrument);
-  const quote = firstQuote(raw);
-  if (!quote) throw new Error(`quote tool returned no quote entry for ${instrument}: ${JSON.stringify(raw)}`);
-  const { bid, ask } = quote;
-  if (typeof bid !== "string" || typeof ask !== "string") {
-    throw new Error(`quote tool response missing string bid/ask for ${instrument}: ${JSON.stringify(quote)}`);
-  }
-  return { bid, ask, exchangeTsNs: localTsNs, localTsNs, raw: quote };
+  const { bid, ask, raw } = await getQuote(client, assetClass, instrument);
+  return { bid, ask, exchangeTsNs: localTsNs, localTsNs, raw };
 }
 
 /** One book level as pollBook() reports it. `qty` is present with a real resting size for an
@@ -65,7 +55,8 @@ export interface BookSample {
   bids: PolledLevel[];
   asks: PolledLevel[];
   /** "l2": real per-level resting size from get_equity_price_book. "top_of_book": no L2 tool
-   *  for this asset class -- one level per side, price only, built from pollQuote(). */
+   *  for this asset class, or the real book had an empty side -- one level per side, price
+   *  only, built from pollQuote(). */
   depth: "l2" | "top_of_book";
   exchangeTsNs: bigint;
   localTsNs: bigint;
@@ -79,7 +70,9 @@ export async function pollBook(client: McpClient, assetClass: AssetClass, instru
   const localTsNs = nowNs();
   try {
     const book = await getBook(client, assetClass, instrument);
-    return { bids: book.bids, asks: book.asks, depth: "l2", exchangeTsNs: localTsNs, localTsNs, raw: book.raw };
+    if (book.bids.length > 0 && book.asks.length > 0) {
+      return { bids: book.bids, asks: book.asks, depth: "l2", exchangeTsNs: localTsNs, localTsNs, raw: book.raw };
+    }
   } catch (err) {
     if (!(err instanceof BookUnsupportedError)) throw err;
   }

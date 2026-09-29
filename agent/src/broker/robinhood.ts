@@ -7,12 +7,15 @@
 // (src/testkit/mock-robinhood-mcp.ts) serves those exact schemas and rejects any call that does
 // not satisfy them, so the tests and `just robinhood-schema-check` fail if this file drifts.
 //
-// Response shapes: UNVERIFIED. tools/list returned no outputSchema, and no real tool has been
-// called yet. Every field read out of a response (`accounts[]`, `agentic_allowed`, `cash`,
-// `orders[]`, `positions[]`, `next`, `books[]`, and an order's `id`/`ref_id`/`state`/
-// `filled_quantity`/`average_price`/`reject_reason`) is a guess, parsed defensively: an
-// unexpected shape throws instead of defaulting. `just robinhood-probe-readonly --target real`
-// records the real shapes.
+// Response shapes: every real response is `{ "data": {...}, "guide": "<text>" }`, recorded by the
+// read-only probe on 2026-09-29 (docs/research/robinhood-shapes-2026-09-29.json, keys and types
+// only). VERIFIED from it: get_accounts' `data.accounts[]` (`account_number`, `agentic_allowed`,
+// `deactivated`, `permanently_deactivated`; no cash field), get_equity_quotes'
+// `data.results[].quote` (`symbol`, `bid_price`, `ask_price`, `last_trade_price` as strings), and
+// get_equity_price_book's `data.books[]` (`symbol`, `asks`, `bids`). Still UNVERIFIED, because the
+// probed lists were empty or the tool was not called: a book level's fields, a position's and an
+// order's fields, where a pagination cursor sits, and the place/cancel/review responses (assumed
+// to use the same envelope). Those are parsed defensively: an unexpected shape throws.
 //
 // Crypto: only the read-only quote tool is mapped (the recorder uses it). Crypto orders need a
 // different account number (rhs_account_number), a different order-type vocabulary and gtc-only
@@ -230,7 +233,7 @@ function unwrap(tool: string, result: CallToolResult): Record<string, unknown> {
     const text = result.content?.find((c): c is { type: "text"; text: string } => c.type === "text")?.text;
     throw new RobinhoodToolError(tool, text ?? "tool reported an error with no text content");
   }
-  if (result.structuredContent) return result.structuredContent as Record<string, unknown>;
+  if (result.structuredContent) return envelopeData(tool, result.structuredContent as Record<string, unknown>);
   const text = result.content?.find((c): c is { type: "text"; text: string } => c.type === "text")?.text;
   if (!text) throw new RobinhoodToolError(tool, "response has neither structuredContent nor text content");
   let parsed: unknown;
@@ -240,7 +243,16 @@ function unwrap(tool: string, result: CallToolResult): Record<string, unknown> {
     throw new RobinhoodToolError(tool, "text content is not JSON");
   }
   if (!isRecord(parsed)) throw new RobinhoodToolError(tool, "response JSON is not an object");
-  return parsed;
+  return envelopeData(tool, parsed);
+}
+
+/** The `data` object of a real response envelope. Any top-level key besides `data` and `guide`
+ *  throws, so a field Robinhood adds beside `data` (a pagination cursor, say) cannot be missed. */
+export function envelopeData(tool: string, body: Record<string, unknown>): Record<string, unknown> {
+  const extra = Object.keys(body).filter((k) => k !== "data" && k !== "guide");
+  if (extra.length > 0) throw new RobinhoodToolError(tool, `unexpected top-level key(s) beside "data": [${extra.join(", ")}]`);
+  if (!isRecord(body.data)) throw new RobinhoodToolError(tool, `response has no "data" object; keys are [${Object.keys(body).join(", ")}]`);
+  return body.data;
 }
 
 /** Every failure of an account-scoped call has the account number removed from its message and
@@ -262,6 +274,26 @@ async function call(client: McpClient, tool: string, args: Record<string, unknow
 
 function asDecimalString(value: unknown): DecimalString | undefined {
   return typeof value === "string" ? value : undefined;
+}
+
+/** `obj[field]` as a decimal string toFixed() accepts, or a thrown error naming it. */
+function decimalField(tool: string, what: string, obj: Record<string, unknown>, field: string): DecimalString {
+  const value = obj[field];
+  if (typeof value !== "string") throw new RobinhoodToolError(tool, `${what} ${field} is ${value === null ? "null" : `a ${typeof value}`}, not a decimal string`);
+  try {
+    toFixed(value);
+  } catch {
+    throw new RobinhoodToolError(tool, `${what} ${field} is not a decimal string`);
+  }
+  return value;
+}
+
+/** A list field whose every entry must be an object. */
+function recordList(tool: string, list: unknown[], what: string): Array<Record<string, unknown>> {
+  return list.map((entry, i) => {
+    if (!isRecord(entry)) throw new RobinhoodToolError(tool, `${what}[${i}] is not an object`);
+    return entry;
+  });
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -315,13 +347,7 @@ export interface VenueOrderRecord extends PlaceOrderResult {
 function fillField(tool: string, body: Record<string, unknown>, field: string): DecimalString | undefined {
   const value = body[field];
   if (value === undefined || value === null) return undefined;
-  if (typeof value !== "string") throw new RobinhoodToolError(tool, `order ${field} is a ${typeof value}, not a decimal string`);
-  try {
-    toFixed(value);
-  } catch {
-    throw new RobinhoodToolError(tool, `order ${field} is not a decimal string`);
-  }
-  return value;
+  return decimalField(tool, "order", body, field);
 }
 
 /** One order object, from a place response or an orders list. An unknown state, or a fill with no
@@ -350,13 +376,19 @@ function normalizeOrder(tool: string, body: unknown): VenueOrderRecord {
   };
 }
 
-/** Startup check: the configured account exists and allows agentic trading. Returns its entry. */
+/** Startup check: the configured account exists, allows agentic trading and is not deactivated.
+ *  Each flag must be the exact boolean; a missing or non-boolean flag fails. Returns its entry. */
 export async function verifyAgenticAccount(client: McpClient, account: string, opts?: CallOptions): Promise<Record<string, unknown>> {
-  const accounts = listField(ACCOUNT_TOOL, await call(client, ACCOUNT_TOOL, {}, opts), "accounts");
-  const entry = accounts.find((a): a is Record<string, unknown> => isRecord(a) && a.account_number === account);
-  if (!entry) throw new RobinhoodToolError(ACCOUNT_TOOL, `${ACCOUNT_NUMBER_ENV} is not among the ${accounts.length} account(s) returned`);
+  const accounts = recordList(ACCOUNT_TOOL, listField(ACCOUNT_TOOL, await call(client, ACCOUNT_TOOL, {}, opts), "accounts"), "accounts");
+  const matches = accounts.filter((a) => a.account_number === account);
+  if (matches.length === 0) throw new RobinhoodToolError(ACCOUNT_TOOL, `${ACCOUNT_NUMBER_ENV} is not among the ${accounts.length} account(s) returned`);
+  if (matches.length > 1) throw new RobinhoodToolError(ACCOUNT_TOOL, `${matches.length} accounts carry the ${ACCOUNT_NUMBER_ENV} number`);
+  const entry = matches[0]!;
   if (entry.agentic_allowed !== true) {
     throw new RobinhoodToolError(ACCOUNT_TOOL, `the ${ACCOUNT_NUMBER_ENV} account does not have agentic_allowed=true`);
+  }
+  if (entry.deactivated !== false || entry.permanently_deactivated !== false) {
+    throw new RobinhoodToolError(ACCOUNT_TOOL, `the ${ACCOUNT_NUMBER_ENV} account is not deactivated=false and permanently_deactivated=false`);
   }
   return entry;
 }
@@ -413,14 +445,41 @@ export async function findOrderByRefId(
   opts?: CallOptions,
 ): Promise<VenueOrderRecord | undefined> {
   const tool = equityOnly(assetClass).orders;
-  const orders = await listAll(client, tool, recentOrdersParams(account, symbol, createdAtGte), "orders", opts);
-  const matches = orders.filter((o) => isRecord(o) && o.ref_id === refId);
+  const orders = recordList(tool, await listAll(client, tool, recentOrdersParams(account, symbol, createdAtGte), "orders", opts), "orders");
+  const matches = orders.filter((o) => o.ref_id === refId);
   if (matches.length > 1) throw new RobinhoodToolError(tool, `${matches.length} orders share one ref_id`);
   return matches.length === 1 ? normalizeOrder(tool, matches[0]) : undefined;
 }
 
-export async function getQuote(client: McpClient, assetClass: AssetClass, instrument: string, opts?: CallOptions): Promise<Record<string, unknown>> {
-  return call(client, QUOTE_TOOLS[assetClass], symbolsParams(instrument), opts);
+export interface Quote {
+  bid: DecimalString;
+  ask: DecimalString;
+  last: DecimalString;
+  raw: Record<string, unknown>;
+}
+
+/** `symbol`'s quote out of a quote tool's `data` (`results[].quote`). Crypto's response shape is
+ *  UNVERIFIED and assumed to match equity's. */
+export function quoteFromData(tool: string, data: Record<string, unknown>, symbol: string): Quote {
+  const results = recordList(tool, listField(tool, data, "results"), "results");
+  const quotes = results.map((r, i) => {
+    if (!isRecord(r.quote)) throw new RobinhoodToolError(tool, `results[${i}].quote is not an object`);
+    return r.quote;
+  });
+  const matches = quotes.filter((q) => q.symbol === symbol);
+  if (matches.length !== 1) throw new RobinhoodToolError(tool, matches.length === 0 ? `no quote for ${symbol}` : `${matches.length} quotes for ${symbol}`);
+  const quote = matches[0]!;
+  return {
+    bid: decimalField(tool, "quote", quote, "bid_price"),
+    ask: decimalField(tool, "quote", quote, "ask_price"),
+    last: decimalField(tool, "quote", quote, "last_trade_price"),
+    raw: quote,
+  };
+}
+
+export async function getQuote(client: McpClient, assetClass: AssetClass, instrument: string, opts?: CallOptions): Promise<Quote> {
+  const tool = QUOTE_TOOLS[assetClass];
+  return quoteFromData(tool, await call(client, tool, symbolsParams(instrument), opts), instrument);
 }
 
 /** Thrown by getBook() for an asset class with no Level 2 tool (crypto). The recorder catches it
@@ -456,16 +515,15 @@ function normalizeBookLevels(tool: string, side: "bids" | "asks", raw: unknown):
 }
 
 /** Level 2 order book for one instrument. Levels are trusted to arrive best-first; a crossed or
- *  out-of-order snapshot is rejected downstream by qc_orderbook rather than reordered here. */
+ *  out-of-order snapshot is rejected downstream by qc_orderbook rather than reordered here. A
+ *  side can be empty (the real book is empty after hours); the recorder handles that. */
 export async function getBook(client: McpClient, assetClass: AssetClass, instrument: string, opts?: CallOptions): Promise<BookResult> {
   if (assetClass !== "equity") throw new BookUnsupportedError(assetClass);
   const tool = EQUITY.book;
   const raw = await call(client, tool, symbolsParams(instrument), opts);
-  const books = Array.isArray(raw.books) ? raw.books : [];
-  const match = books.find(
-    (b): b is Record<string, unknown> => typeof b === "object" && b !== null && (b as Record<string, unknown>).symbol === instrument,
-  );
-  if (!match) throw new RobinhoodToolError(tool, `no book entry for ${instrument} in response: ${JSON.stringify(raw)}`);
+  const matches = recordList(tool, listField(tool, raw, "books"), "books").filter((b) => b.symbol === instrument);
+  if (matches.length !== 1) throw new RobinhoodToolError(tool, `${matches.length} book entries for ${instrument} in response: ${JSON.stringify(raw)}`);
+  const match = matches[0]!;
   return {
     bids: normalizeBookLevels(tool, "bids", match.bids),
     asks: normalizeBookLevels(tool, "asks", match.asks),
@@ -481,8 +539,9 @@ export async function listAgenticOrders(client: McpClient, assetClass: AssetClas
 }
 
 /** Position and cash for issue #45's reconciliation. `position` is this instrument's held
- *  quantity; `cash` is the account entry's `cash` field if it has one (UNVERIFIED; qc-bridge does
- *  not compare cash yet). Re-checks agentic_allowed on every pass. */
+ *  quantity; `cash` is the account entry's `cash` field if it has one. The real get_accounts
+ *  entry has none (2026-09-29 probe), so it is null there; qc-bridge does not compare cash yet.
+ *  Re-checks the account on every pass. */
 export interface AccountState {
   position: DecimalString;
   cash: DecimalString | null;
@@ -496,11 +555,15 @@ export async function getAccountState(
   opts?: CallOptions,
 ): Promise<AccountState> {
   const tool = equityOnly(assetClass).positions;
-  const positions = await listAll(client, tool, positionsParams(account), "positions", opts);
-  const match = positions.filter((p): p is Record<string, unknown> => isRecord(p) && p.symbol === instrument);
+  const positions = recordList(tool, await listAll(client, tool, positionsParams(account), "positions", opts), "positions");
+  // A position's fields are UNVERIFIED (the probed account held none). An entry without a string
+  // symbol throws: skipping it could hide this instrument's holding behind a zero.
+  positions.forEach((p, i) => {
+    if (typeof p.symbol !== "string") throw new RobinhoodToolError(tool, `position entry ${i} has no string symbol; keys are [${Object.keys(p).join(", ")}]`);
+  });
+  const match = positions.filter((p) => p.symbol === instrument);
   if (match.length > 1) throw new RobinhoodToolError(tool, `${match.length} positions for ${instrument}`);
-  const position = match.length === 0 ? "0" : asDecimalString(match[0]!.quantity);
-  if (position === undefined) throw new RobinhoodToolError(tool, `position for ${instrument} has no string quantity`);
+  const position = match.length === 0 ? "0" : decimalField(tool, "position", match[0]!, "quantity");
 
   const entry = await verifyAgenticAccount(client, account, opts);
   return { position, cash: asDecimalString(entry.cash) ?? null };

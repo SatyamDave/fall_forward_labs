@@ -1,0 +1,75 @@
+{
+  "_label": "SYNTHETIC values in the REAL response shapes recorded by `just robinhood-probe-readonly --target real` on 2026-09-29 (docs/research/robinhood-shapes-2026-09-29.json: keys and JSON types only). Every value here is invented; tests/broker/real-envelopes.test.ts checks this file's shapes equal the recorded ones.",
+  "get_accounts": {
+    "data": {
+      "accounts": [
+        {
+          "account_number": "SYNTH0001",
+          "rhs_account_number": "SYNTHRHS1",
+          "rhc_account_number": "SYNTHRHC1",
+          "type": "cash",
+          "unsettled_funds": "0.0000",
+          "brokerage_account_type": "individual",
+          "is_default": true,
+          "agentic_allowed": true,
+          "option_level": "",
+          "management_type": "self_directed",
+          "affiliate": "rhf",
+          "state": "active",
+          "deactivated": false,
+          "permanently_deactivated": false
+        },
+        {
+          "account_number": "SYNTH0002",
+          "rhs_account_number": "SYNTHRHS2",
+          "rhc_account_number": "SYNTHRHC2",
+          "type": "margin",
+          "unsettled_funds": "0.0000",
+          "brokerage_account_type": "individual",
+          "nickname": "SYNTHETIC second account",
+          "is_default": false,
+          "agentic_allowed": false,
+          "option_level": "",
+          "management_type": "self_directed",
+          "affiliate": "rhf",
+          "state": "active",
+          "deactivated": false,
+          "permanently_deactivated": false
+        }
+      ]
+    },
+    "guide": "SYNTHETIC guide text"
+  },
+  "get_equity_positions": { "data": { "positions": [] }, "guide": "SYNTHETIC guide text" },
+  "get_equity_orders": { "data": { "orders": [] }, "guide": "SYNTHETIC guide text" },
+  "get_equity_quotes": {
+    "data": {
+      "results": [
+        {
+          "quote": {
+            "symbol": "SPY",
+            "last_trade_price": "100.020000",
+            "venue_last_trade_time": "2026-09-28T20:00:00Z",
+            "last_non_reg_trade_price": "100.010000",
+            "venue_last_non_reg_trade_time": "2026-09-28T23:59:00Z",
+            "adjusted_previous_close": "99.500000",
+            "previous_close": "99.500000",
+            "previous_close_date": "2026-09-25",
+            "bid_price": "100.000000",
+            "venue_bid_time": "2026-09-28T20:00:00Z",
+            "ask_price": "100.050000",
+            "venue_ask_time": "2026-09-28T20:00:00Z",
+            "has_traded": true,
+            "state": "active"
+          },
+          "close": { "symbol": "SPY", "date": "2026-09-28", "price": "100.020000", "interpolated": false, "source": "SYNTHETIC" }
+        }
+      ]
+    },
+    "guide": "SYNTHETIC guide text"
+  },
+  "get_equity_price_book": {
+    "data": { "books": [{ "symbol": "SPY", "updated_at": "2026-09-29T06:21:09Z", "asks": [], "bids": [] }] },
+    "guide": "SYNTHETIC guide text"
+  }
+}

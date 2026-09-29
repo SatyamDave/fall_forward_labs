@@ -17,13 +17,17 @@ function bookClient(): McpClient {
     callTool: vi.fn().mockResolvedValue({
       content: [],
       structuredContent: {
-        books: [
-          {
-            symbol: "SPY",
-            bids: [{ price: "99.99", quantity: "500" }],
-            asks: [{ price: "100.05", quantity: "400" }],
-          },
-        ],
+        data: {
+          books: [
+            {
+              symbol: "SPY",
+              updated_at: "2026-09-29T14:30:00Z",
+              bids: [{ price: "99.99", quantity: "500" }],
+              asks: [{ price: "100.05", quantity: "400" }],
+            },
+          ],
+        },
+        guide: "SYNTHETIC",
       },
     }),
   } as unknown as McpClient;

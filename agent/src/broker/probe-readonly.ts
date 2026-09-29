@@ -17,7 +17,7 @@ import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { repoRoot } from "../paths.js";
 import { createMockRobinhoodServer, MOCK_ACCOUNT_NUMBER } from "../testkit/mock-robinhood-mcp.js";
 import { allowOnly, connectRobinhoodMcp, type CallToolResult, type McpClient } from "./mcp-client.js";
-import { accountNumberFromEnv, PROBE_TOOLS, probeCalls } from "./robinhood.js";
+import { accountNumberFromEnv, envelopeData, PROBE_TOOLS, probeCalls, quoteFromData } from "./robinhood.js";
 
 /** SPY plus low-priced broad-market ETF CANDIDATES for the first trade under the $25/order cap.
  *  Listed as candidates only: this file makes no claim about their prices; the probe prints them. */
@@ -62,17 +62,20 @@ function body(result: CallToolResult): unknown {
   }
 }
 
-/** Last-trade price per symbol from a get_equity_quotes body, or why it could not be read. The
- *  key name `last_trade_price` is a guess (UNVERIFIED); the shapes file shows the real one. */
+/** Last-trade price per symbol from a get_equity_quotes body, read by robinhood.ts's own quote
+ *  parser, or "not found" when that parser rejects it. */
 export function lastTradePrices(quotesBody: unknown, symbols: string[]): Map<string, string> {
   const out = new Map<string, string>();
-  const quotes = typeof quotesBody === "object" && quotesBody !== null ? (quotesBody as Record<string, unknown>).quotes : undefined;
   for (const symbol of symbols) {
-    const quote = Array.isArray(quotes)
-      ? quotes.find((q): q is Record<string, unknown> => typeof q === "object" && q !== null && (q as Record<string, unknown>).symbol === symbol)
-      : undefined;
-    const price = quote?.last_trade_price;
-    out.set(symbol, typeof price === "string" && /^[0-9]+(\.[0-9]+)?$/.test(price) ? price : "not found (see the shapes file)");
+    let price = "not found (see the shapes file)";
+    try {
+      if (typeof quotesBody === "object" && quotesBody !== null) {
+        price = quoteFromData("get_equity_quotes", envelopeData("get_equity_quotes", quotesBody as Record<string, unknown>), symbol).last;
+      }
+    } catch {
+      // keep "not found"
+    }
+    out.set(symbol, price);
   }
   return out;
 }

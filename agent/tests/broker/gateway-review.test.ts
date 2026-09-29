@@ -24,7 +24,7 @@ interface Call {
   timeout?: number;
 }
 
-const ok = (body: Record<string, unknown>) => ({ structuredContent: body, content: [] });
+const ok = (data: Record<string, unknown>) => ({ structuredContent: { data, guide: "SYNTHETIC" }, content: [] });
 const toolError = (text: string) => ({ isError: true, content: [{ type: "text", text }] });
 
 function fakeMcp(handlers: Record<string, Handler>, calls: Call[] = []): McpClient {
@@ -271,7 +271,7 @@ describe("the account number never leaves the order path", () => {
     const mcp = fakeMcp({
       get_equity_orders: () => toolError(`account ${ACCOUNT} is not permitted`),
       get_equity_positions: () => ok({ positions: [] }),
-      get_accounts: () => ok({ accounts: [{ account_number: ACCOUNT, agentic_allowed: true }] }),
+      get_accounts: () => ok({ accounts: [{ account_number: ACCOUNT, agentic_allowed: true, deactivated: false, permanently_deactivated: false }] }),
     });
     const bridge = { reconcile: async () => ({ ok: true, reconcile: { ok: true, discrepancies: [] } }) };
 

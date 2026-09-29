@@ -63,9 +63,10 @@ describe("robinhood read-only probe", () => {
     expect(written).not.toContain("10000");
     expect(written).not.toContain("100.0");
     expect(result.shapes.find((s) => s.tool === "get_accounts")!.shape).toEqual({
-      accounts: [{ account_number: "string", agentic_allowed: "boolean", cash: "string" }],
+      data: { accounts: [expect.objectContaining({ account_number: "string", agentic_allowed: "boolean", deactivated: "boolean" })] },
+      guide: "string",
     });
-    expect(result.prices).toEqual(new Map([["SPY", "100.02"], ["SPLG", "100.02"]]));
+    expect(result.prices).toEqual(new Map([["SPY", "100.020000"], ["SPLG", "100.020000"]]));
   });
 
   it("redacts keys that could be data, and never keeps array lengths", () => {
@@ -75,6 +76,7 @@ describe("robinhood read-only probe", () => {
 
   it("reports a missing price instead of guessing", () => {
     expect(lastTradePrices({ quotes: [{ symbol: "SPY", last: "1" }] }, ["SPY"]).get("SPY")).toMatch(/not found/);
+    expect(lastTradePrices({ data: { results: [{ quote: { symbol: "SPY", last_trade_price: "1" } }] } }, ["SPY"]).get("SPY")).toMatch(/not found/);
     expect(lastTradePrices(undefined, ["SPY"]).get("SPY")).toMatch(/not found/);
   });
 

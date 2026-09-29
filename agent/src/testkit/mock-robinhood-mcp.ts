@@ -6,8 +6,11 @@
 // Input schemas are the REAL ones from the founder's tools/list run (issue #26,
 // docs/research/robinhood-tools-2026-09-29.json), and every call is checked against them: a
 // missing required argument, an argument the real schema does not have, or a wrong JSON type is
-// an error here, as it would be upstream. Response bodies are this testkit's own guesses
-// (UNVERIFIED, see robinhood.ts's header) and every value in them is synthetic.
+// an error here, as it would be upstream. Every response uses the real envelope,
+// `{ data, guide }`, and get_accounts, the quote tools and get_equity_price_book return the real
+// shapes the read-only probe recorded (docs/research/robinhood-shapes-2026-09-29.json). Order,
+// position and book-level fields are still this testkit's guesses (UNVERIFIED, see robinhood.ts's
+// header). Every value is synthetic.
 //
 // This is deliberately NOT agent/src/testkit/fake-bridge.ts (that fakes qc-bridge). This fakes
 // Robinhood, over MCP.
@@ -50,8 +53,11 @@ export interface MockRobinhoodOptions {
    *  own bookkeeping of every order's signed fills, per symbol. */
   position?: string;
   positionSymbol?: string;
-  /** get_accounts' `cash` for the account; `null` omits the field. Default "10000.00". */
+  /** Adds a `cash` field to the account entry. The real entry has none, so neither does the
+   *  default. */
   cash?: string | null;
+  /** get_equity_price_book returns empty asks and bids, as the real one does after hours. */
+  emptyBook?: boolean;
   /** Rewrites the tool list ListTools returns, for the schema check's tests. */
   listTools?: (tools: MockTool[]) => MockTool[];
 }
@@ -105,8 +111,54 @@ function schemaProblems(schema: Tool["inputSchema"], args: Record<string, unknow
   return problems;
 }
 
-function structured(body: Record<string, unknown>): CallToolResult {
+function structured(data: Record<string, unknown>): CallToolResult {
+  const body = { data, guide: "SYNTHETIC guide text" };
   return { content: [{ type: "text", text: JSON.stringify(body) }], structuredContent: body };
+}
+
+/** One get_accounts entry in the real shape. */
+function accountEntry(accountNumber: string, cash: string | null | undefined): Record<string, unknown> {
+  return {
+    account_number: accountNumber,
+    rhs_account_number: "SYNTHRHS1",
+    rhc_account_number: "SYNTHRHC1",
+    type: "cash",
+    unsettled_funds: "0.0000",
+    brokerage_account_type: "individual",
+    is_default: true,
+    agentic_allowed: true,
+    option_level: "",
+    management_type: "self_directed",
+    affiliate: "rhf",
+    state: "active",
+    deactivated: false,
+    permanently_deactivated: false,
+    ...(typeof cash === "string" ? { cash } : {}),
+  };
+}
+
+/** One get_equity_quotes result in the real shape; the same 100.00/100.05 top of book as the book. */
+function quoteResult(symbol: string): Record<string, unknown> {
+  const t = "2026-09-29T14:30:00Z";
+  return {
+    quote: {
+      symbol,
+      last_trade_price: "100.020000",
+      venue_last_trade_time: t,
+      last_non_reg_trade_price: "100.020000",
+      venue_last_non_reg_trade_time: t,
+      adjusted_previous_close: "99.500000",
+      previous_close: "99.500000",
+      previous_close_date: "2026-09-28",
+      bid_price: "100.000000",
+      venue_bid_time: t,
+      ask_price: "100.050000",
+      venue_ask_time: t,
+      has_traded: true,
+      state: "active",
+    },
+    close: { symbol, date: "2026-09-28", price: "99.500000", interpolated: false, source: "SYNTHETIC" },
+  };
 }
 
 function errorResult(message: string): CallToolResult {
@@ -266,36 +318,36 @@ export function createMockRobinhoodServer(opts: MockRobinhoodOptions = {}): Serv
         return structured({ positions: positions(), next: null });
 
       case "get_accounts": {
-        const cash = opts.cash === undefined ? "10000.00" : opts.cash;
-        const own: Record<string, unknown> = { account_number: account, agentic_allowed: true, ...(cash === null ? {} : { cash }) };
-        return structured({ accounts: opts.accounts ?? [own] });
+        return structured({ accounts: opts.accounts ?? [accountEntry(account, opts.cash)] });
       }
 
       case "get_equity_quotes":
       case "get_crypto_quotes": {
         // get_crypto_quotes' real parameter is also `symbols` (array); every value is SYNTHETIC.
         const symbols = Array.isArray(args.symbols) ? args.symbols.filter((x): x is string => typeof x === "string") : [];
-        return structured({ quotes: symbols.map((symbol) => ({ symbol, bid: "100.00", ask: "100.05", last_trade_price: "100.02" })) });
+        return structured({ results: symbols.map(quoteResult) });
       }
 
       case "get_equity_price_book": {
         const symbols = Array.isArray(args.symbols) ? args.symbols.filter((s): s is string => typeof s === "string") : [];
         // SYNTHETIC 3-level book per side, strictly sorted best-first and centered on the same
-        // 100.00/100.05 top of book the quote tools report.
-        const books = symbols.map((symbol) => ({
-          symbol,
-          bids: [
-            { price: "99.99", quantity: "500" },
-            { price: "99.98", quantity: "300" },
-            { price: "99.97", quantity: "200" },
-          ],
-          asks: [
-            { price: "100.05", quantity: "400" },
-            { price: "100.06", quantity: "250" },
-            { price: "100.07", quantity: "150" },
-          ],
-        }));
-        return structured({ books });
+        // 100.00/100.05 top of book the quote tools report. Level fields (price, quantity) are
+        // UNVERIFIED: the real probe only saw empty books.
+        const levels = opts.emptyBook
+          ? { asks: [], bids: [] }
+          : {
+              bids: [
+                { price: "99.99", quantity: "500" },
+                { price: "99.98", quantity: "300" },
+                { price: "99.97", quantity: "200" },
+              ],
+              asks: [
+                { price: "100.05", quantity: "400" },
+                { price: "100.06", quantity: "250" },
+                { price: "100.07", quantity: "150" },
+              ],
+            };
+        return structured({ books: symbols.map((symbol) => ({ symbol, updated_at: "2026-09-29T14:30:00Z", ...levels })) });
       }
     }
     return errorResult(`SYNTHETIC mock has no handler for tool ${name}`);

@@ -42,8 +42,8 @@ describe("recorder allowlist against the mock Robinhood MCP server", () => {
     const client = readOnly(rawClient);
 
     const sample = await pollQuote(client, "equity", "SPY");
-    expect(sample.bid).toBe("100.00");
-    expect(sample.ask).toBe("100.05");
+    expect(sample.bid).toBe("100.000000");
+    expect(sample.ask).toBe("100.050000");
     expect(calledTools).toEqual(["get_equity_quotes"]);
   });
 
@@ -106,6 +106,24 @@ describe("recorder allowlist against the mock Robinhood MCP server", () => {
     expect(calledTools).toEqual(["get_equity_price_book"]);
   });
 
+  it("falls back to a flagged top-of-book poll for equity when the real book comes back empty", async () => {
+    const calledTools: string[] = [];
+    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+    const server = createMockRobinhoodServer({ emptyBook: true, onToolCall: (name) => calledTools.push(name) });
+    await server.connect(serverTransport);
+    const rawClient = await connectRobinhoodMcp({ transport: clientTransport });
+    cleanup = async () => {
+      await rawClient.close();
+      await server.close();
+    };
+
+    const book = await pollBook(readOnly(rawClient), "equity", "SPY");
+    expect(book.depth).toBe("top_of_book");
+    expect(book.bids).toEqual([{ price: "100.000000" }]);
+    expect(book.asks).toEqual([{ price: "100.050000" }]);
+    expect(calledTools).toEqual(["get_equity_price_book", "get_equity_quotes"]);
+  });
+
   it("falls back to a flagged top-of-book poll for crypto -- no L2 tool exists, and it never calls an order tool either", async () => {
     const calledTools: string[] = [];
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
@@ -120,8 +138,8 @@ describe("recorder allowlist against the mock Robinhood MCP server", () => {
 
     const book = await pollBook(client, "crypto", "BTC-USD");
     expect(book.depth).toBe("top_of_book");
-    expect(book.bids).toEqual([{ price: "100.00" }]);
-    expect(book.asks).toEqual([{ price: "100.05" }]);
+    expect(book.bids).toEqual([{ price: "100.000000" }]);
+    expect(book.asks).toEqual([{ price: "100.050000" }]);
     // Only the read-only quote tool was ever reached -- no attempt at a crypto price-book tool
     // (there isn't one) and no order tool.
     expect(calledTools).toEqual(["get_crypto_quotes"]);
