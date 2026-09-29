@@ -1,4 +1,4 @@
-import type { DecimalString, Decision, DecisionRequest } from "../types.js";
+import type { DecimalString, Decision, DecisionRequest, IntentResult } from "../types.js";
 
 export interface DecisionOutcome {
   decision: Decision;
@@ -10,4 +10,7 @@ export interface DecisionOutcome {
 
 export interface Decider {
   decide(req: DecisionRequest): Promise<DecisionOutcome>;
+  /** Optional: the loop reports what the bridge did with the last decision (null for no_trade)
+   *  before asking for the next one. */
+  observe?(result: IntentResult | null): void;
 }

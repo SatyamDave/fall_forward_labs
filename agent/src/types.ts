@@ -23,6 +23,9 @@ export interface Limits {
   max_notional: DecimalString;
   max_order_rate_per_sec: number;
   remaining_daily_loss: DecimalString;
+  /** Protocol v1.3, optional: max_daily_notional left today. Risk charges an order at
+   *  acceptance, filled or not. */
+  remaining_daily_notional?: DecimalString;
 }
 
 export interface DecisionRequest {

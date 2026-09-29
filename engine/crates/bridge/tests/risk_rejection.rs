@@ -70,3 +70,28 @@ fn a_valid_intent_after_a_rejected_one_is_still_accepted() {
     assert_eq!(accepted["accepted"], true);
     assert_eq!(engine.status()["open_orders"].as_array().unwrap().len(), 1);
 }
+
+/// Protocol v1.3: the request reports risk's own daily notional headroom, and an accepted
+/// order is charged at acceptance even while it rests unfilled.
+#[test]
+fn remaining_daily_notional_drops_when_an_order_is_accepted_unfilled() {
+    let csv = format!("{}D,1,12,B,99.7,1,3000,3000\n", support::small_book_csv());
+    let mut engine = support::engine_from(&csv, 1);
+    let first = engine.next_decision_request().expect("book is synced");
+    // config/limits/default.toml: max_daily_notional 50.
+    assert_eq!(first["limits"]["remaining_daily_notional"], "50.00000000");
+
+    // A buy at 99.8 rests below the 100.2 ask: accepted, not filled.
+    let accepted = engine.submit_order_intent(
+        "dr-1",
+        Side::Buy,
+        "0.001".parse().unwrap(),
+        "99.8".parse().unwrap(),
+        OrderType::Limit,
+    );
+    assert_eq!(accepted["accepted"], true);
+    assert_eq!(engine.status()["position"], "0.00000000");
+
+    let second = engine.next_decision_request().expect("one more record");
+    assert_eq!(second["limits"]["remaining_daily_notional"], "49.90020000");
+}

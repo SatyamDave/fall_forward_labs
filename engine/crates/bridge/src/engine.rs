@@ -814,6 +814,9 @@ impl BridgeEngine {
                 "max_notional": limits.max_notional.to_string(),
                 "max_order_rate_per_sec": limits.max_order_rate_per_sec,
                 "remaining_daily_loss": self.remaining_daily_loss().to_string(),
+                // Protocol v1.3: risk charges an order against max_daily_notional
+                // when it accepts it, filled or not, so this is the room left today.
+                "remaining_daily_notional": self.risk.remaining_daily_notional(self.clock.now()).to_string(),
             },
             "allowed_actions": allowed_actions,
         })

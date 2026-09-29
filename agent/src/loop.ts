@@ -83,6 +83,7 @@ export async function runLoop(opts: LoopOptions): Promise<LoopCounts> {
     const intentResult = isTradeDecision(decision)
       ? await submitOrder(opts.bridge, request, decision, counts, opts.external)
       : await submitNoTrade(opts.bridge, decision.request_id, decision.rationale, counts);
+    opts.decider.observe?.(intentResult);
 
     appendLedgerEntry(
       {
