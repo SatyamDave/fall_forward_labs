@@ -15,7 +15,7 @@
   # when autonomy/PAUSE exists on main, or when the repo variable
   # AUTONOMY_ENABLED is "false". Off by default: no loop may run before the
   # bootstrap PRs merge and the Phase H breakers exist.
-  "enabled": false,
+  "enabled": true,
   "pause_file": "autonomy/PAUSE",
   "pause_repo_variable": "AUTONOMY_ENABLED",
 
@@ -197,7 +197,7 @@
     # decider. To enable, a founder sets enabled:true and small positive numbers (ai_gate.py denies
     # zeros), e.g. daily_usd 0.01, max_turns 1, timeout_minutes 1; the decider's real spend cap is
     # min(daily_usd, QC_OPENROUTER_MAX_USD_PER_DAY), default 0.
-    "loop-agent-openrouter": {"enabled": false, "daily_usd": 0, "max_turns": 0, "timeout_minutes": 0, "open_pr_cap": 0}
+    "loop-agent-openrouter": {"enabled": true, "daily_usd": 0.01, "max_turns": 1, "timeout_minutes": 1, "open_pr_cap": 0}
   },
 
   # Backlog ranking (Phase C): rank = expected_value * confidence / cost,

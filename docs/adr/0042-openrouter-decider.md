@@ -2,7 +2,7 @@
 
 ## Status
 
-Proposed, 2026-09-28. Needs a founder to accept. Amends [ADR-0040](0040-agentic-decision.md)
+Accepted by Satyam (@SatyamDave), 2026-09-29. Amends [ADR-0040](0040-agentic-decision.md)
 §5 (fake and live modes) for the model that makes the decision; everything else in ADR-0040 stands.
 
 ## Context
