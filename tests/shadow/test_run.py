@@ -144,7 +144,23 @@ def test_live_gate_denies_today_because_loop_agent_eval_is_disabled_zero_budget(
     assert "loop-agent-eval" in reason or "POLICY" in reason
 
 
-def test_main_refuses_openrouter_while_its_gate_is_disabled() -> None:
+def test_main_refuses_openrouter_while_its_gate_is_disabled(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The real ai_gate.py over a copy of the real POLICY with only this loop switched off: #114
+    # turned it on, and main() must never reach a real run from this test.
+    (tmp_path / "scripts/ci").mkdir(parents=True)
+    shutil.copy(ROOT / "scripts/ci/ai_gate.py", tmp_path / "scripts/ci/ai_gate.py")
+    (tmp_path / "autonomy").mkdir()
+    on = '"loop-agent-openrouter": {"enabled": true,'
+    policy = (ROOT / "autonomy/POLICY.yaml").read_text()
+    assert on in policy
+    off = policy.replace(on, '"loop-agent-openrouter": {"enabled": false,')
+    (tmp_path / "autonomy/POLICY.yaml").write_text(off)
+    real_gate = shadow_run.check_live_gate
+    monkeypatch.setattr(
+        shadow_run, "check_live_gate", lambda loop: real_gate(root=tmp_path, loop=loop)
+    )
     exit_code = shadow_run.main(["--dry-run", "--decider", "openrouter", "--date", "2026-09-17"])
     assert exit_code == 1
     assert not shadow_run.paths_for("2026-09-17", root=ROOT).ledger.exists()
