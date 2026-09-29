@@ -10,7 +10,7 @@ Updated 2026-09-28. Draft for both founders to edit; the process spec is
 | Person | GitHub | Status | Evidence |
 |---|---|---|---|
 | Satyam Dave | @SatyamDave | Confirmed. Repository owner. | `gh api repos/SatyamDave/fall_forward_labs/collaborators`, 2026-09-27 |
-| Rohit | @rovivek | Assumed from the collaborator list — **confirm**: `gh api repos/SatyamDave/fall_forward_labs/collaborators` now lists two logins, `SatyamDave` and `rovivek`, but `rovivek` has not yet added themselves to this file, and no PR in the repository is authored by that login as of this update. Treat the name "Rohit" and the ownership split below as the docs lane's working assumption, not a confirmed fact, until Rohit edits this row themselves. | `gh api repos/SatyamDave/fall_forward_labs/collaborators` lists `rovivek`, checked 2026-09-27 |
+| Rohit Vivek | @rovivek | **Confirmed** — added by Rohit in PR rohit/confirm-team-entry, 2026-09-28. | Self-confirmed in this PR |
 
 No document in this repository should name, describe or assign work to a second founder beyond
 what this file states, until they add themselves here in their own PR.
@@ -31,7 +31,7 @@ assumed, same caveat as the People table above.
 | CI and security (workflows protected) | `.github/`, `scripts/`, `SECURITY.md` | @SatyamDave | none |
 | Autonomy policy (protected) | `autonomy/` | @SatyamDave | none |
 | Docs and process | `docs/`, `README.md`, `CONTRIBUTING.md` | @SatyamDave | none |
-| **Agentic: bridge, `qc-bridge`, approval-token protocol, Robinhood Agentic MCP gateway adapter, external kill switch, reconciliation** | `engine/crates/bridge/`, `schemas/decision/`, `agent/src/broker/` (gateway shell) | @rovivek (assumed — confirm) | @SatyamDave |
+| **Agentic: bridge, `qc-bridge`, approval-token protocol, Robinhood Agentic MCP gateway adapter, external kill switch, reconciliation** | `engine/crates/bridge/`, `schemas/decision/`, `agent/src/broker/` (gateway shell) | @rovivek (ownership split **to be discussed with Satyam**) | @SatyamDave |
 | **Agentic: agent service, prompts, decision-schema consumer, eval suite and workflow, decision-ledger analysis, Robinhood account/legal/counsel liaison** | `agent/` (TypeScript, minus `src/broker/`), `evals/`, `scripts/eval/`, `tests/evals/` | @SatyamDave | none |
 | **Agentic: shared data recorder, classifier on real data, shadow/canary review** | `data/recorders/`, `ml/` (real-data path) | Shared (both approve) | — |
 
