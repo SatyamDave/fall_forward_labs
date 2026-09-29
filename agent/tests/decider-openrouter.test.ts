@@ -1,7 +1,7 @@
 // OpenRouter decider against a local mock HTTP server: no real network call, no real key.
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { type OpenRouterConfig, OpenRouterDecider, resolveOpenRouterConfig } from "../src/decider/openrouter.js";
 import type { DecisionRequest } from "../src/types.js";
 
@@ -58,7 +58,8 @@ function reply(content: string, cost: number | null = 0, status = 200): Handler 
 }
 
 function config(overrides: Partial<OpenRouterConfig> = {}): OpenRouterConfig {
-  return { apiKey: FAKE_KEY, model: "test/model:free", timeoutMs: 2000, maxUsdPerDay: 0n, ...overrides };
+  const model = overrides.model ?? "test/model:free";
+  return { apiKey: FAKE_KEY, model, timeoutMs: 2000, maxUsdPerDay: 0n, verifiedZeroPrice: model.endsWith(":free"), ...overrides };
 }
 
 function decider(overrides: Partial<OpenRouterConfig> = {}): OpenRouterDecider {
@@ -123,6 +124,13 @@ describe("OpenRouterDecider.decide", () => {
     await expect(decider({ model: "test/paid", maxUsdPerDay: 100n }).decide(request())).rejects.toThrow(/no usable cost/);
   });
 
+  it("unknown cost on a non-\":free\" model verified zero-price at startup is tolerated like \":free\"", async () => {
+    handler = reply(JSON.stringify(BUY), null);
+    const out = await decider({ model: "stealth/space-bunny-alpha", verifiedZeroPrice: true }).decide(request());
+    expect(out.costUsd).toBeUndefined();
+    expect((out.raw as Record<string, unknown>).cost_usd).toBe("unknown");
+  });
+
   const noTradeCases: Array<[string, Handler, Partial<DecisionRequest>, RegExp]> = [
     ["malformed JSON", reply("{not json"), {}, /non-JSON/],
     ["429 rate limit", reply("{}", 0, 429), {}, /HTTP 429 \(rate limited\)/],
@@ -161,21 +169,96 @@ describe("OpenRouterDecider.decide", () => {
 
 describe("resolveOpenRouterConfig refuses to start", () => {
   const base = { OPENROUTER_API_KEY: FAKE_KEY, QC_OPENROUTER_MODEL: "test/model:free" };
-  it("without OPENROUTER_API_KEY", () => {
-    expect(() => resolveOpenRouterConfig({ QC_OPENROUTER_MODEL: "x:free" })).toThrow(/OPENROUTER_API_KEY is not set/);
+  it("without OPENROUTER_API_KEY", async () => {
+    await expect(resolveOpenRouterConfig({ QC_OPENROUTER_MODEL: "x:free" })).rejects.toThrow(/OPENROUTER_API_KEY is not set/);
   });
-  it("without QC_OPENROUTER_MODEL", () => {
-    expect(() => resolveOpenRouterConfig({ OPENROUTER_API_KEY: FAKE_KEY })).toThrow(/QC_OPENROUTER_MODEL is not set/);
+  it("without QC_OPENROUTER_MODEL", async () => {
+    await expect(resolveOpenRouterConfig({ OPENROUTER_API_KEY: FAKE_KEY })).rejects.toThrow(/QC_OPENROUTER_MODEL is not set/);
   });
-  it("with a bad timeout", () => {
-    expect(() => resolveOpenRouterConfig({ ...base, QC_OPENROUTER_TIMEOUT_MS: "soon" })).toThrow(/positive integer/);
+  it("with a bad timeout", async () => {
+    await expect(resolveOpenRouterConfig({ ...base, QC_OPENROUTER_TIMEOUT_MS: "soon" })).rejects.toThrow(/positive integer/);
   });
-  it("with a paid model and the default zero spend cap", () => {
-    expect(() => resolveOpenRouterConfig({ ...base, QC_OPENROUTER_MODEL: "test/paid" })).toThrow(/not a ":free" model/);
+  it("while ai_gate.py denies loop-agent-openrouter (POLICY.yaml default: disabled)", async () => {
+    await expect(
+      resolveOpenRouterConfig({ ...process.env, ...base, AUTONOMY_ENABLED: "true" }),
+    ).rejects.toThrow(/ai_gate\.py denied loop-agent-openrouter/);
   });
-  it("while ai_gate.py denies loop-agent-openrouter (POLICY.yaml default: disabled)", () => {
-    expect(() => resolveOpenRouterConfig({ ...process.env, ...base, AUTONOMY_ENABLED: "true" })).toThrow(
-      /ai_gate\.py denied loop-agent-openrouter/,
+  it("a \":free\" model never fetches the models list, even pointed at an address that would fail", async () => {
+    // Any URL works here since it must never be requested; a bad one proves it.
+    await expect(
+      resolveOpenRouterConfig({ ...process.env, ...base, AUTONOMY_ENABLED: "true" }, "http://127.0.0.1:1/unused"),
+    ).rejects.toThrow(/ai_gate\.py denied loop-agent-openrouter/);
+  });
+});
+
+// A non-":free" model id at the default zero spend cap (stealth/space-bunny-alpha: OpenRouter
+// lists it at pricing.prompt/completion "0" with no ":free" suffix) is verified against a local
+// mock of GET /api/v1/models -- never the real OpenRouter endpoint.
+describe("resolveOpenRouterConfig verifies a zero-priced model without \":free\" in its id", () => {
+  type ModelsHandler = (req: IncomingMessage, res: ServerResponse) => void;
+  let modelsHandler: ModelsHandler;
+  let modelsCalls: number;
+  let modelsServer: Server;
+  let modelsEndpoint: string;
+  const env = { OPENROUTER_API_KEY: FAKE_KEY, QC_OPENROUTER_MODEL: "stealth/space-bunny-alpha" };
+
+  beforeAll(async () => {
+    modelsServer = createServer((req, res) => {
+      modelsCalls++;
+      modelsHandler(req, res);
+    });
+    await new Promise<void>((resolve) => modelsServer.listen(0, "127.0.0.1", resolve));
+    modelsEndpoint = `http://127.0.0.1:${(modelsServer.address() as AddressInfo).port}/api/v1/models`;
+  });
+  afterAll(() => {
+    modelsServer.closeAllConnections();
+    modelsServer.close();
+  });
+  beforeEach(() => {
+    modelsCalls = 0;
+  });
+
+  function modelsList(entries: Array<{ id: string; pricing?: Record<string, string> }>): ModelsHandler {
+    return (_req, res) => {
+      res.writeHead(200, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ data: entries }));
+    };
+  }
+
+  it("accepts a model OpenRouter lists at pricing.prompt/completion \"0\" (reaches ai_gate's own denial)", async () => {
+    modelsHandler = modelsList([{ id: "stealth/space-bunny-alpha", pricing: { prompt: "0", completion: "0", request: "0" } }]);
+    await expect(resolveOpenRouterConfig(env, modelsEndpoint)).rejects.toThrow(/ai_gate\.py denied loop-agent-openrouter/);
+    expect(modelsCalls).toBe(1);
+  });
+
+  it("refuses a model with a nonzero price field other than prompt/completion", async () => {
+    modelsHandler = modelsList([
+      { id: "stealth/space-bunny-alpha", pricing: { prompt: "0", completion: "0", request: "0.0000004" } },
+    ]);
+    await expect(resolveOpenRouterConfig(env, modelsEndpoint)).rejects.toThrow(
+      /pricing\.request is "0\.0000004", not "0"/,
     );
+  });
+
+  it("refuses a model with a nonzero prompt or completion price", async () => {
+    modelsHandler = modelsList([{ id: "stealth/space-bunny-alpha", pricing: { prompt: "0.000001", completion: "0" } }]);
+    await expect(resolveOpenRouterConfig(env, modelsEndpoint)).rejects.toThrow(/not both "0"/);
+  });
+
+  it("refuses a model missing from the models list", async () => {
+    modelsHandler = modelsList([{ id: "other/model", pricing: { prompt: "0", completion: "0" } }]);
+    await expect(resolveOpenRouterConfig(env, modelsEndpoint)).rejects.toThrow(/not found in the OpenRouter models list/);
+  });
+
+  it("refuses when the models list fetch fails", async () => {
+    // Open then immediately close a local port: connecting to it fails fast (ECONNREFUSED),
+    // simulating a fetch error without any real network call.
+    const probe = createServer(() => {});
+    await new Promise<void>((resolve) => probe.listen(0, "127.0.0.1", resolve));
+    const port = (probe.address() as AddressInfo).port;
+    await new Promise<void>((resolve) => probe.close(() => resolve()));
+    await expect(
+      resolveOpenRouterConfig(env, `http://127.0.0.1:${port}/api/v1/models`),
+    ).rejects.toThrow(/verifying it against the OpenRouter models list failed/);
   });
 });

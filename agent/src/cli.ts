@@ -22,7 +22,7 @@ import { BridgeClient } from "./bridge.js";
 import { EnsembleDecider, type EnsembleMember, parseEnsembleEnv, splitBudgetEqually } from "./decider/ensemble.js";
 import { FakeDecider } from "./decider/fake.js";
 import { LiveDecider, PROMPT_VERSION, resolveLivePolicy, resolvePromptVersion } from "./decider/live.js";
-import { OpenRouterDecider } from "./decider/openrouter.js";
+import { OpenRouterDecider, resolveOpenRouterConfig } from "./decider/openrouter.js";
 import { loadReplayFixtures, ReplayDecider } from "./decider/replay.js";
 import type { Decider } from "./decider/types.js";
 import { ledgerSha256 } from "./ledger.js";
@@ -176,7 +176,7 @@ async function main(): Promise<void> {
     // prompt file at all, so PROMPT_VERSION is today's unchanged static label for them either way.
     if (process.env.QC_AGENT_MODE === "openrouter") {
       if (ensembleConfig) throw new Error("QC_ENSEMBLE_SIZE is not supported with QC_AGENT_MODE=openrouter");
-      const openrouter = new OpenRouterDecider();
+      const openrouter = new OpenRouterDecider({ config: await resolveOpenRouterConfig() });
       decider = openrouter;
       model = `openrouter:${openrouter.config.model}`;
       promptVersion = openrouter.promptVersion;
