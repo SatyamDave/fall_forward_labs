@@ -8,4 +8,4 @@ in config/limits/default.toml and config/limits/spy.toml. No starter-phase
 ramp — both founders start at these limits from day one.
 
 Approved by: Rohit Vivek (@rovivek) — 2026-09-29
-Approved by: <Satyam Dave (@SatyamDave) — YYYY-MM-DD>
+Approved by: <Satyam Dave (@SatyamDave) — 2026-09-29
