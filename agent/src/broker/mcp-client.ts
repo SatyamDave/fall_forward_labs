@@ -5,8 +5,7 @@
 // connection). Never imported by agent/src/decider/**: enforced by
 // agent/tests/broker/no-decider-import.test.ts.
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
-import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
-import { storedAuthProvider } from "./robinhood-oauth.js";
+import { storedAuthTransport } from "./robinhood-oauth.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
@@ -39,5 +38,5 @@ async function defaultTransport(): Promise<Transport> {
   if (!url) {
     throw new Error(`${ROBINHOOD_MCP_URL_ENV} is not set -- refusing to guess a broker URL`);
   }
-  return new StreamableHTTPClientTransport(new URL(url), { authProvider: await storedAuthProvider(url) });
+  return storedAuthTransport(url);
 }
