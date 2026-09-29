@@ -143,12 +143,12 @@ def write_mock_fixtures(root: Path, symbol: str) -> tuple[Path, dict[str, str], 
     instrument = new_equity_instrument.write_instrument(symbol, root / "config")
     (root / "autonomy").mkdir()
     policy = (ROOT / "autonomy/POLICY.yaml").read_text()
-    disabled = '"loop-agent-openrouter": {"enabled": false, "daily_usd": 0,'
-    if disabled not in policy:
+    # The fixture copy has the loop on whether or not the real file does (#114 turned it on).
+    enabled = '"loop-agent-openrouter": {"enabled": true, "daily_usd": 0.01,'
+    policy = policy.replace('"loop-agent-openrouter": {"enabled": false, "daily_usd": 0,', enabled)
+    if enabled not in policy:
         raise RuntimeError("autonomy/POLICY.yaml's loop-agent-openrouter line changed shape")
-    (root / "autonomy/POLICY.yaml").write_text(
-        policy.replace(disabled, '"loop-agent-openrouter": {"enabled": true, "daily_usd": 0.01,')
-    )
+    (root / "autonomy/POLICY.yaml").write_text(policy)
     state = root / preflight.DEFAULT_RECONCILE_STATUS
     state.parent.mkdir(parents=True)
     state.write_text(json.dumps({"ts_ns": MOCK_NOW_NS - 60 * 10**9, "ok": True}))
