@@ -4,6 +4,13 @@ Status: [docs/reports/base-status.md](reports/base-status.md). ADR-0040:
 [docs/adr/0040-agentic-decision.md](adr/0040-agentic-decision.md). Milestones:
 [ROADMAP](ROADMAP.md#a0-a7-the-agentic-pipeline-blocked-on-human-decisions).
 
+## Founder target (set by Satyam, 2026-09-29)
+Grow the $50 Agentic account to at least $500 by 2026-10-29. This is a scoreboard, not an
+instruction: it never loosens a limit, skips a gate, or justifies a bigger bet. The caps in
+`config/limits/` (currently $25 per order, $50 a day, $5 daily loss) and every preflight gate
+stay in force; changing them is a founder edit to those protected files. Progress is read from
+the broker-sourced daily P&L in `fund/track-record/daily/`.
+
 ## Where we are
 - [x] M0 offline foundation met 2026-09-28; ADR-0040 written, Accepted by Satyam only.
 - [x] A1 Handoff contract and A2 Evals met (fake/replay mode; `just agent-sim`, `just eval` green).
