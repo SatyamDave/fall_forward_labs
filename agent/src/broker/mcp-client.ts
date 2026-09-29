@@ -6,6 +6,7 @@
 // agent/tests/broker/no-decider-import.test.ts.
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
+import { storedAuthProvider } from "./robinhood-oauth.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
@@ -28,15 +29,15 @@ export interface ConnectOptions {
  *  purpose -- a missing env var must be a startup error, not a silently-wrong connection. */
 export async function connectRobinhoodMcp(opts: ConnectOptions = {}): Promise<Client> {
   const client = new Client({ name: "fall-forward-labs-broker-gateway", version: opts.clientVersion ?? "0.1.0" });
-  const transport = opts.transport ?? defaultTransport();
+  const transport = opts.transport ?? (await defaultTransport());
   await client.connect(transport);
   return client;
 }
 
-function defaultTransport(): Transport {
+async function defaultTransport(): Promise<Transport> {
   const url = process.env[ROBINHOOD_MCP_URL_ENV];
   if (!url) {
     throw new Error(`${ROBINHOOD_MCP_URL_ENV} is not set -- refusing to guess a broker URL`);
   }
-  return new StreamableHTTPClientTransport(new URL(url));
+  return new StreamableHTTPClientTransport(new URL(url), { authProvider: await storedAuthProvider(url) });
 }

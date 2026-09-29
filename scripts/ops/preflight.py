@@ -24,6 +24,9 @@ Gates, in the order the spec lists them:
                                         and within --max-reconcile-age-min.
   8. required_secrets_present        -- the secret *names* ops/live/bin/load-secrets.sh expects
                                         are set in the environment (values are never read here).
+     robinhood_signin                -- the sign-in `just robinhood-login` stored exists, is mode
+                                        0600, and has a refresh token or an unexpired access
+                                        token (no token value is ever printed).
   9. latency_p99_under_approval_ttl  -- the last latency bench's full-loop p99 is under protocol
                                         v1.1's approval-stamp TTL (out/bench/latency-results.json).
 
@@ -83,9 +86,14 @@ CAP_KEYS = (
     "max_daily_notional",
 )
 
-# ops/live/bin/load-secrets.sh is the one place these two names are decided; this list must track
-# that file's `case` statement, not invent a second list.
-REQUIRED_SECRET_NAMES = ("ROBINHOOD_SESSION_TOKEN", "ANTHROPIC_API_KEY")
+# ops/live/bin/load-secrets.sh is the one place these names are decided; this list must track
+# that file's `case` statement, not invent a second list. Robinhood issues no static session
+# token: its credential is the OAuth sign-in file checked by check_robinhood_signin below.
+REQUIRED_SECRET_NAMES = ("ANTHROPIC_API_KEY",)
+
+# Must match agent/src/broker/robinhood-oauth.ts's tokenPath().
+ROBINHOOD_TOKEN_PATH_ENV = "QC_ROBINHOOD_TOKEN_PATH"  # noqa: S105 -- a variable name, not a secret
+DEFAULT_ROBINHOOD_TOKEN_PATH = Path("~/.config/fall_forward_labs/robinhood-oauth.json")
 
 # Written after every reconcile pass by agent/src/broker/reconcile.ts (default path in
 # agent/src/paths.ts's reconcileStatusPath(), overridable with QC_RECONCILE_STATUS_PATH).
@@ -363,6 +371,41 @@ def check_secrets_present(
     return GateResult(name, True, f"present: {', '.join(names)}")
 
 
+def robinhood_token_path(env: Mapping[str, str]) -> Path:
+    return Path(env.get(ROBINHOOD_TOKEN_PATH_ENV) or DEFAULT_ROBINHOOD_TOKEN_PATH).expanduser()
+
+
+def check_robinhood_signin(path: Path, now_ns: int) -> GateResult:
+    name = "robinhood_signin"
+    relogin = "run `just robinhood-login` on a desktop"
+    if not path.is_file():
+        return GateResult(name, False, f"{path} does not exist -- {relogin}")
+    mode = path.stat().st_mode & 0o777
+    if mode != 0o600:
+        return GateResult(name, False, f"{path} has mode {mode:o}, must be 600")
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError:
+        return GateResult(name, False, f"{path} is not valid JSON -- {relogin}")
+    tokens = data.get("tokens") if isinstance(data, dict) else None
+    if not isinstance(tokens, dict):
+        return GateResult(name, False, f"{path} holds no tokens -- {relogin}")
+    if isinstance(tokens.get("refresh_token"), str) and tokens["refresh_token"]:
+        return GateResult(name, True, f"{path} is 0600 and has a refresh token")
+    expires_at_ms = data.get("expires_at_ms")
+    if not (isinstance(tokens.get("access_token"), str) and tokens["access_token"]):
+        return GateResult(name, False, f"{path} has no access or refresh token -- {relogin}")
+    # No recorded expiry means we cannot tell it is still valid, which is not a pass.
+    if not isinstance(expires_at_ms, int) or expires_at_ms * 1_000_000 <= now_ns:
+        return GateResult(
+            name,
+            False,
+            f"{path}'s access token is expired or has no expiry, and there is no refresh "
+            f"token -- {relogin}",
+        )
+    return GateResult(name, True, f"{path} is 0600 and its access token has not expired")
+
+
 def check_latency_under_ttl(root: Path, results_path: Path) -> GateResult:
     name = "latency_p99_under_approval_ttl"
     path = results_path if results_path.is_absolute() else root / results_path
@@ -407,6 +450,7 @@ def run_all_gates(
     max_reconcile_age_min: float,
     now_ns: int,
     env: Mapping[str, str],
+    robinhood_token: Path | None = None,
     kill_test_cmd: tuple[str, ...] = DEFAULT_KILL_TEST_CMD,
     kill_test_runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
 ) -> list[GateResult]:
@@ -428,6 +472,8 @@ def run_all_gates(
     )
     results.append(check_reconcile_recent(root, reconcile_status, now_ns, max_reconcile_age_min))
     results.append(check_secrets_present(env))
+    token_path = robinhood_token if robinhood_token is not None else robinhood_token_path(env)
+    results.append(_gate("robinhood_signin", lambda: check_robinhood_signin(token_path, now_ns)))
     results.append(check_latency_under_ttl(root, latency_results))
     return results
 

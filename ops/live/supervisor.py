@@ -41,12 +41,12 @@ Usage (today's real topology -- the agent spawns its own qc-bridge child):
   QC_BRIDGE_BIN=/opt/quant-core/engine/target/release/qc-bridge \\
   QC_BRIDGE_ARGS="--venue sim" \\
   supervisor.py --agent-cmd 'npx --prefix agent tsx src/cli.ts' \\
-      --require-env ROBINHOOD_SESSION_TOKEN --require-env ANTHROPIC_API_KEY
+      --require-env ANTHROPIC_API_KEY
 
 Usage (a future standalone qc-bridge daemon, supervised as its own sibling process):
   supervisor.py --bridge-cmd 'qc-bridge --venue sim' \\
       --agent-cmd 'npx --prefix agent tsx src/cli.ts' \\
-      --require-env ROBINHOOD_SESSION_TOKEN --require-env ANTHROPIC_API_KEY
+      --require-env ANTHROPIC_API_KEY
 """
 
 from __future__ import annotations

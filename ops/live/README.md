@@ -65,7 +65,8 @@ it is applied; until then, a manually-provisioned host must still follow those s
 
 ## Secrets: environment or secret manager only, never in this repo
 
-The Robinhood agent session and `ANTHROPIC_API_KEY` are read from the process environment only.
+`ANTHROPIC_API_KEY` is read from the process environment only. Robinhood's credential is not an
+environment variable: it is the OAuth sign-in file described under "Robinhood sign-in" below.
 `ops/live/bin/load-secrets.sh` is the one hook that populates it, selected by
 `QC_SECRETS_PROVIDER`:
 
@@ -86,6 +87,24 @@ The Robinhood agent session and `ANTHROPIC_API_KEY` are read from the process en
 
 Each unimplemented provider's function in `load-secrets.sh` prints which one it is and exits
 non-zero rather than pretending to succeed -- fail closed, not a silent no-op.
+
+### Robinhood sign-in
+
+Robinhood's trading MCP uses the standard MCP OAuth sign-in in a desktop browser; there is no
+token to paste. The founder, on a desktop with a browser:
+
+1. `ROBINHOOD_MCP_URL=https://agent.robinhood.com/mcp/trading just robinhood-login`
+2. Sign in to Robinhood in the browser tab it opens, and finish Agentic account onboarding there.
+   The terminal then prints how many tools the server lists (it calls none).
+3. `ROBINHOOD_MCP_URL=https://agent.robinhood.com/mcp/trading just robinhood-schema-check --target real`
+
+The sign-in is stored at `~/.config/fall_forward_labs/robinhood-oauth.json`, mode 0600
+(`QC_ROBINHOOD_TOKEN_PATH` overrides). For the live host, copy that file to
+`QC_ROBINHOOD_TOKEN_PATH` there (mode 0600, owned by `quant-live`) and stop using the desktop copy:
+a refresh on one machine can invalidate the other's refresh token. When it expires and cannot be
+refreshed, every connection fails with "run `just robinhood-login`"; repeat the steps above.
+`just preflight-live` checks the file exists, is 0600, and has a refresh token or an unexpired
+access token.
 
 ## Off-host log shipping (documented, pluggable)
 

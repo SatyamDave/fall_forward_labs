@@ -362,17 +362,86 @@ def test_reconcile_passes_when_clean_and_recent(tmp_path: Path) -> None:
 
 
 def test_secrets_fails_when_missing() -> None:
-    result = preflight.check_secrets_present({"ROBINHOOD_SESSION_TOKEN": "x"})
+    result = preflight.check_secrets_present({"OTHER": "x"})
     assert not result.ok
     assert "ANTHROPIC_API_KEY" in result.detail
     assert "x" not in result.detail  # never the value, even accidentally
 
 
 def test_secrets_passes_when_present() -> None:
-    result = preflight.check_secrets_present(
-        {"ROBINHOOD_SESSION_TOKEN": "x", "ANTHROPIC_API_KEY": "y"}
-    )
+    result = preflight.check_secrets_present({"ANTHROPIC_API_KEY": "y"})
     assert result.ok
+
+
+def test_secrets_no_longer_demand_a_robinhood_session_token() -> None:
+    # Robinhood never issues one; its credential is the OAuth sign-in file (next gate).
+    assert "ROBINHOOD_SESSION_TOKEN" not in preflight.REQUIRED_SECRET_NAMES
+
+
+# --------------------------------------------------------------------------------------
+# 8b. Robinhood OAuth sign-in file
+# --------------------------------------------------------------------------------------
+
+NOW_MS = NOW_NS // 1_000_000
+SECRET = "SYNTHETIC-token-value"  # noqa: S105 -- synthetic fixture
+
+
+def write_signin(
+    tmp_path: Path, tokens: dict, expires_at_ms: int | None, mode: int = 0o600
+) -> Path:
+    path = tmp_path / "robinhood-oauth.json"
+    body: dict = {"server_url": "http://127.0.0.1/mcp", "client_information": {}, "tokens": tokens}
+    if expires_at_ms is not None:
+        body["expires_at_ms"] = expires_at_ms
+    path.write_text(json.dumps(body))
+    path.chmod(mode)
+    return path
+
+
+def test_signin_fails_when_missing(tmp_path: Path) -> None:
+    result = preflight.check_robinhood_signin(tmp_path / "nope.json", NOW_NS)
+    assert not result.ok
+    assert "just robinhood-login" in result.detail
+
+
+def test_signin_fails_when_not_0600(tmp_path: Path) -> None:
+    path = write_signin(tmp_path, {"refresh_token": SECRET}, None, mode=0o644)
+    result = preflight.check_robinhood_signin(path, NOW_NS)
+    assert not result.ok
+    assert "644" in result.detail
+
+
+def test_signin_fails_when_expired_without_refresh(tmp_path: Path) -> None:
+    path = write_signin(tmp_path, {"access_token": SECRET}, NOW_MS - 1)
+    result = preflight.check_robinhood_signin(path, NOW_NS)
+    assert not result.ok
+    assert SECRET not in result.detail
+
+
+def test_signin_fails_when_access_token_has_no_expiry(tmp_path: Path) -> None:
+    path = write_signin(tmp_path, {"access_token": SECRET}, None)
+    assert not preflight.check_robinhood_signin(path, NOW_NS).ok
+
+
+def test_signin_passes_with_refresh_token(tmp_path: Path) -> None:
+    path = write_signin(tmp_path, {"access_token": SECRET, "refresh_token": SECRET}, NOW_MS - 1)
+    result = preflight.check_robinhood_signin(path, NOW_NS)
+    assert result.ok
+    assert SECRET not in result.detail
+
+
+def test_signin_passes_with_unexpired_access_token(tmp_path: Path) -> None:
+    path = write_signin(tmp_path, {"access_token": SECRET}, NOW_MS + 60_000)
+    assert preflight.check_robinhood_signin(path, NOW_NS).ok
+
+
+def test_signin_path_honours_env_override(tmp_path: Path) -> None:
+    override = tmp_path / "x.json"
+    assert preflight.robinhood_token_path({"QC_ROBINHOOD_TOKEN_PATH": str(override)}) == override
+    assert (
+        preflight.robinhood_token_path({})
+        == Path.home() / ".config/fall_forward_labs/robinhood-oauth.json"
+    )
 
 
 # --------------------------------------------------------------------------------------
@@ -455,13 +524,14 @@ def test_run_all_gates_all_pass_with_fixtures(tmp_path: Path) -> None:
         latency_results=latency_path,
         max_reconcile_age_min=60.0,
         now_ns=NOW_NS,
-        env={"ROBINHOOD_SESSION_TOKEN": "x", "ANTHROPIC_API_KEY": "y"},
+        env={"ANTHROPIC_API_KEY": "y"},
+        robinhood_token=write_signin(tmp_path, {"refresh_token": SECRET}, None),
         kill_test_runner=lambda *a, **k: completed(0, stdout="test result: ok. 1 passed"),
     )
 
     failed = [r for r in results if not r.ok]
     assert not failed, failed
-    assert len(results) == 1 + len(preflight.REQUIRED_SIGNOFFS) + 7
+    assert len(results) == 1 + len(preflight.REQUIRED_SIGNOFFS) + 8
 
 
 def test_run_all_gates_all_fail_on_empty_root(tmp_path: Path) -> None:
@@ -474,7 +544,7 @@ def test_run_all_gates_all_fail_on_empty_root(tmp_path: Path) -> None:
         latency_results=tmp_path / "out/bench/latency-results.json",
         max_reconcile_age_min=60.0,
         now_ns=NOW_NS,
-        env={},
+        env={"QC_ROBINHOOD_TOKEN_PATH": str(tmp_path / "robinhood-oauth.json")},
         kill_test_runner=lambda *a, **k: completed(1, stderr="qc-bridge: not found"),
     )
     assert all(not r.ok for r in results)

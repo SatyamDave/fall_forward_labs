@@ -257,6 +257,13 @@ record-quotes *args:
 robinhood-schema-check *args:
     cd {{agent}} && node_modules/.bin/tsx src/broker/schema-check-cli.ts {{args}}
 
+# Signs in to the Robinhood trading MCP at ROBINHOOD_MCP_URL (required) in the desktop browser
+# (OAuth 2.1 + PKCE via @modelcontextprotocol/sdk), stores the sign-in 0600 outside the repo at
+# ~/.config/fall_forward_labs/robinhood-oauth.json (QC_ROBINHOOD_TOKEN_PATH overrides), then only
+# lists tools to confirm. Never calls a tool. The schema check, gateway and recorder reuse it.
+robinhood-login:
+    cd {{agent}} && node_modules/.bin/tsx src/broker/login-cli.ts
+
 # Issues #31/#55: per-decision latency (raw bridge round trip, agent decide step, full loop) in
 # fake and replay mode, N decisions each (default 1000). Prints p50/p95/p99/max/throughput and
 # writes out/bench/latency-results.json (gitignored). See docs/reports/latency.md for the last
