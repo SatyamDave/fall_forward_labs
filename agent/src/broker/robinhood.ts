@@ -506,7 +506,13 @@ function normalizeBookLevels(tool: string, side: "bids" | "asks", raw: unknown):
       throw new RobinhoodToolError(tool, `book response ${side}[${i}] is not an object: ${JSON.stringify(entry)}`);
     }
     const price = asDecimalString((entry as Record<string, unknown>).price);
-    const qty = asDecimalString((entry as Record<string, unknown>).quantity);
+    // The real book sends quantity as a JSON integer share count (observed 2026-09-29), price as a
+    // string. Accept only safe integers so a fractional float can never enter as a decimal.
+    const rawQty = (entry as Record<string, unknown>).quantity;
+    const qty =
+      typeof rawQty === "number" && Number.isSafeInteger(rawQty) && rawQty >= 0
+        ? String(rawQty)
+        : asDecimalString(rawQty);
     if (price === undefined || qty === undefined) {
       throw new RobinhoodToolError(tool, `book response ${side}[${i}] missing string price/quantity: ${JSON.stringify(entry)}`);
     }

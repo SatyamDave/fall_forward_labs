@@ -68,6 +68,16 @@ describe("real Robinhood response envelopes", () => {
     await expect(getQuote(fixtureClient({ get_equity_quotes: noBid }), "equity", "SPY")).rejects.toThrow(/bid_price/);
   });
 
+  it("get_equity_price_book: real levels carry quantity as an integer share count", async () => {
+    const book = (bids: unknown[]) => ({ data: { books: [{ symbol: "SPY", updated_at: "t", asks: [], bids }] }, guide: "g" });
+    await expect(getBook(fixtureClient({ get_equity_price_book: book([{ price: "15.880000", quantity: 30957 }]) }), "equity", "SPY")).resolves.toMatchObject({
+      bids: [{ price: "15.880000", qty: "30957" }],
+    });
+    for (const quantity of [1.5, -1, Number.MAX_SAFE_INTEGER + 1]) {
+      await expect(getBook(fixtureClient({ get_equity_price_book: book([{ price: "15.88", quantity }]) }), "equity", "SPY")).rejects.toThrow(/price\/quantity/);
+    }
+  });
+
   it("get_equity_price_book: empty real levels fall back to the flagged top of book from the quote, never invented levels", async () => {
     await expect(getBook(fixtureClient(), "equity", "SPY")).resolves.toMatchObject({ bids: [], asks: [] });
     const sample = await pollBook(fixtureClient(), "equity", "SPY");
