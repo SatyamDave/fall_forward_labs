@@ -148,6 +148,12 @@ report-ledger *args:
 report-pnl *args:
     python3 scripts/reports/pnl_report.py {{args}}
 
+# Live-account progress: starting capital, broker-confirmed P&L, decision/intent/fill/hold counts,
+# today's risk budget against config/limits, and equity / the $5,000 target (never projected).
+# Live-mode ledger entries only. Prints to stdout, writes nothing.
+report-progress *args:
+    python3 scripts/reports/progress_report.py {{args}}
+
 # Issue #45 (scheduling) + #70: the once-a-day close. Runs (or checks) the day's broker
 # reconciliation, writes the broker-sourced daily P&L (report-pnl --source broker) with that
 # verdict embedded, and alerts (scripts/ops/alerts.py) on a reconcile mismatch or a stop-rule

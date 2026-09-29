@@ -26,3 +26,12 @@ max_consecutive_days_behind_buy_and_hold = 5
 # the $50 Agentic account reaches $400. Loosening this number needs the same founder sign-off as
 # any other protected limit (root CLAUDE.md rule 4); tightening it does not.
 take_profit_usd = "400"
+
+[account]
+# Read by `just report-progress` (scripts/reports/progress_report.py). Not a risk limit: nothing
+# here changes what the engine allows. Starting capital is the founder-stated funding of the
+# Robinhood Agentic account (2026-09-28, docs/decisions/0023-budget-and-caps.md). The target is
+# the owner's $5,000 goal, reported only as a ratio of confirmed equity, never projected;
+# docs/NOW.md's "Founder target" section still says $500 by 2026-10-29.
+starting_capital_usd = "50"
+target_equity_usd = "5000"
