@@ -3,8 +3,9 @@
 watching real/live prices and deciding every time, with every order routed only to the
 simulated venue, never to Robinhood.
 
-  scripts/shadow/run.py [--dry-run] [--date YYYY-MM-DD] [--live] [...]
-  just shadow [--dry-run]
+  scripts/shadow/run.py [--dry-run] [--date YYYY-MM-DD] [--decider fake|live|openrouter]
+      [--symbol SPY] [...]
+  just shadow [--dry-run] [--decider openrouter --symbol F]
 
 Starts four things for one calendar day's session (`--date`, default: today UTC):
   1. the recorder (`agent/src/recorder/cli.ts`; the mock Robinhood MCP server in `--dry-run`,
@@ -12,12 +13,14 @@ Starts four things for one calendar day's session (`--date`, default: today UTC)
      non-dry-run invocation needs real credentials this build never has), writing to
      data/raw/shadow/<date>.csv;
   2. the real `qc-bridge` binary in `--follow --venue sim` mode on that same, still-growing file
-     (protocol v1.2, `engine/crates/bridge/src/feed.rs`) -- every decision is simulated, never
-     routed to a real venue;
-  3. the agent service (`agent/src/cli.ts`), QC_AGENT_MODE=fake unless `--live` and
-     `scripts/ci/ai_gate.py`'s `loop-agent-eval` gate allows it (today: disabled, zero budget --
-     see autonomy/POLICY.yaml -- so `--live` refuses; this script never falls back to fake
-     silently when the operator asked for live);
+     (protocol v1.2, `engine/crates/bridge/src/feed.rs`), with `--instrument` naming
+     config/instruments/<symbol>.toml (tick, whole shares, trading hours, and that file's own
+     limits) -- every decision is simulated, never routed to a real venue;
+  3. the agent service (`agent/src/cli.ts`) with the `--decider` mode: fake (default), live
+     (Claude, gated by `scripts/ci/ai_gate.py loop-agent-eval`) or openrouter (ADR-0042, gated by
+     `loop-agent-openrouter`). Both gates are disabled with a zero budget in autonomy/POLICY.yaml
+     until a founder enables one, so those modes refuse; this script never falls back to fake
+     silently when the operator asked for a model (`--live` is kept as `--decider live`);
   4. this script's own heartbeat: a liveness line every few seconds to
      out/shadow/<date>/heartbeat.jsonl, and a distinct event the moment one child exits
      unexpectedly (non-zero) while the other is still running -- issue #48's "any downtime
@@ -56,13 +59,20 @@ import signal
 import subprocess
 import sys
 import time
+import tomllib
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 AGENT_DIR = ROOT / "agent"
-DEFAULT_LIMITS = ROOT / "config/limits/default.toml"
+INSTRUMENTS_DIR = ROOT / "config" / "instruments"
+# --decider -> (QC_AGENT_MODE, the scripts/ci/ai_gate.py loop that must allow it, or None).
+DECIDERS = {
+    "fake": ("fake", None),
+    "live": ("live", "loop-agent-eval"),
+    "openrouter": ("openrouter", "loop-agent-openrouter"),
+}
 # One decision per 900 synced records: ~15 min at the recorder's 1 s poll, ~26 per 6.5 h session,
 # so a free model's daily request limit is not exceeded. qc-bridge's own default (50) is left
 # alone; ops/live/live.env.example passes the same value.
@@ -112,10 +122,32 @@ def paths_for(date: str, root: Path = ROOT) -> ShadowPaths:
     )
 
 
-def check_live_gate(root: Path = ROOT) -> tuple[bool, str]:
-    """scripts/eval/live_agent.py's own `loop-agent-eval` gate check (read-only, fail closed on
+def check_live_gate(root: Path = ROOT, loop: str = "loop-agent-eval") -> tuple[bool, str]:
+    """scripts/eval/live_agent.py's own ai_gate.py check for `loop` (read-only, fail closed on
     any error running it)."""
-    return live_agent.gate_allows(root)
+    return live_agent.gate_allows(root, loop)
+
+
+@dataclass(frozen=True)
+class InstrumentConfig:
+    path: Path
+    id: int
+    symbol: str
+
+
+def load_instrument(symbol: str, path: Path | None = None) -> InstrumentConfig:
+    """config/instruments/<symbol>.toml (or `path`), checked to be the same symbol. qc-bridge's
+    order book rejects a record whose instrument id differs from its config's, so the recorder
+    takes its id from here rather than from a second flag."""
+    path = (path or INSTRUMENTS_DIR / f"{symbol.lower()}.toml").resolve()
+    if not path.is_file():
+        raise ValueError(
+            f"{path} does not exist; create it with `just new-equity-instrument {symbol}`"
+        )
+    data = tomllib.loads(path.read_text(encoding="utf-8"))
+    if data.get("symbol") != symbol:
+        raise ValueError(f"{path} is for symbol {data.get('symbol')!r}, not {symbol!r}")
+    return InstrumentConfig(path=path, id=int(data["id"]), symbol=symbol)
 
 
 def build_bridge_binary(root: Path = ROOT) -> Path:
@@ -186,10 +218,12 @@ def run_children(
     heartbeat_log: Path,
     poll_interval_sec: float = DEFAULT_HEARTBEAT_INTERVAL_SEC,
     on_heartbeat: Callable[[], list[dict[str, object]]] | None = None,
+    should_stop: Callable[[], bool] | None = None,
 ) -> RunResult:
     """Starts every child, heartbeats (poll + sleep, never busy-spin) until all of them have
     exited, and documents (issue #48's "any downtime documented") the moment any one of them
-    exits non-zero while another is still running. Returns exit_code 0 only if every child
+    exits non-zero while another is still running. `should_stop` (checked every heartbeat) ends
+    the run the same way SIGINT/SIGTERM does. Returns exit_code 0 only if every child
     exited zero -- a child that never started at all (e.g. a missing binary) surfaces as an
     exception from spawning it, not a silent success."""
     heartbeat_log.parent.mkdir(parents=True, exist_ok=True)
@@ -250,7 +284,7 @@ def run_children(
                             _write_line(heartbeat_log, event)
                 if not still_running:
                     break
-                if stop_requested:
+                if stop_requested or (should_stop is not None and should_stop()):
                     for proc in procs.values():
                         if proc.poll() is None:
                             proc.terminate()
@@ -277,7 +311,11 @@ def run_children(
 
 
 def build_specs(
-    args: argparse.Namespace, paths: ShadowPaths, mode: str, bridge_bin: Path
+    args: argparse.Namespace,
+    paths: ShadowPaths,
+    mode: str,
+    bridge_bin: Path,
+    instrument: InstrumentConfig,
 ) -> list[ChildSpec]:
     paths.recording.parent.mkdir(parents=True, exist_ok=True)
     paths.out_dir.mkdir(parents=True, exist_ok=True)
@@ -287,7 +325,7 @@ def build_specs(
         "src/recorder/cli.ts",
         *(["--dry-run"] if args.dry_run else []),
         "--instrument-id",
-        str(args.instrument_id),
+        str(instrument.id),
         "--symbol",
         args.symbol,
         "--asset-class",
@@ -308,8 +346,8 @@ def build_specs(
         str(paths.recording),
         "--venue",
         "sim",
-        "--limits",
-        str(DEFAULT_LIMITS),
+        "--instrument",
+        str(instrument.path),
         "--follow",
     ]
     if args.decide_every is not None:
@@ -319,6 +357,7 @@ def build_specs(
 
     agent_env = dict(os.environ)
     agent_env["QC_AGENT_MODE"] = mode
+    agent_env["QC_INSTRUMENT"] = instrument.symbol
     agent_env["QC_BRIDGE_BIN"] = str(bridge_bin)
     agent_env["QC_BRIDGE_ARGS"] = " ".join(bridge_args)
     agent_env["QC_AGENT_LEDGER_PATH"] = str(paths.ledger)
@@ -383,13 +422,14 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--dry-run", action="store_true")
     p.add_argument("--date", default=None, help="default: today, UTC, YYYY-MM-DD")
     p.add_argument(
-        "--live",
-        action="store_true",
-        help="QC_AGENT_MODE=live, gated by scripts/ci/ai_gate.py's loop-agent-eval "
-        "(disabled/zero-budget as of ADR-0040; refuses rather than silently running fake)",
+        "--decider",
+        choices=sorted(DECIDERS),
+        default=None,
+        help="fake (default); live = Claude, gated by ai_gate.py loop-agent-eval; openrouter = "
+        "ADR-0042, gated by loop-agent-openrouter. A denied gate refuses, never runs fake.",
     )
+    p.add_argument("--live", action="store_true", help="same as --decider live")
     p.add_argument("--symbol", default="SPY")
-    p.add_argument("--instrument-id", type=int, default=1)
     p.add_argument("--asset-class", default="equity", choices=["equity", "crypto"])
     p.add_argument("--poll-interval-ms", type=int, default=None)
     p.add_argument("--request-budget", type=int, default=None)
@@ -398,12 +438,18 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument(
         "--instrument-config",
         type=Path,
-        default=alerts.DEFAULT_INSTRUMENT,
-        help="instrument TOML whose trading_hours/calendar decide when a stalled recording alerts",
+        default=None,
+        help="instrument TOML for qc-bridge --instrument and the stalled-recording alert's "
+        "trading hours (default: config/instruments/<symbol>.toml)",
     )
     p.add_argument("--stall-after-sec", type=float, default=alerts.DEFAULT_STALL_AFTER_SEC)
     args = p.parse_args(argv)
 
+    if args.live:
+        if args.decider not in (None, "live"):
+            p.error(f"--live conflicts with --decider {args.decider}")
+        args.decider = "live"
+    args.decider = args.decider or "fake"
     if args.poll_interval_ms is None:
         args.poll_interval_ms = 100 if args.dry_run else 1000
     if args.request_budget is None:
@@ -428,14 +474,18 @@ def main(argv: list[str] | None = None) -> int:
     date = args.date or today_utc()
     paths = paths_for(date)
 
-    mode = "fake"
-    if args.live:
-        allowed, reason = check_live_gate()
+    mode, loop = DECIDERS[args.decider]
+    if loop is not None:
+        allowed, reason = check_live_gate(loop=loop)
         if not allowed:
-            print(f"refusing --live: {reason}", file=sys.stderr)
+            print(f"refusing --decider {args.decider}: {reason}", file=sys.stderr)
             return 1
-        mode = "live"
-        print(f"ai-gate allowed --live: {reason}")
+        print(f"ai-gate allowed --decider {args.decider}: {reason}")
+    try:
+        instrument = load_instrument(args.symbol, args.instrument_config)
+    except (ValueError, KeyError, tomllib.TOMLDecodeError) as e:
+        print(f"refusing: {e}", file=sys.stderr)
+        return 1
 
     try:
         bridge_bin = build_bridge_binary()
@@ -445,12 +495,10 @@ def main(argv: list[str] | None = None) -> int:
 
     # Read the instrument calendar once before any child starts: a bad file must fail here, not
     # raise mid-run from the heartbeat loop and orphan the children.
-    alerts.market_open(args.instrument_config, time.time_ns())
-    specs = build_specs(args, paths, mode, bridge_bin)
+    alerts.market_open(instrument.path, time.time_ns())
+    specs = build_specs(args, paths, mode, bridge_bin, instrument)
     print(f"shadow {date}: mode={mode} recording={paths.recording} ledger={paths.ledger}")
-    stall_watch = recording_stall_watch(
-        paths.recording, args.instrument_config, args.stall_after_sec
-    )
+    stall_watch = recording_stall_watch(paths.recording, instrument.path, args.stall_after_sec)
     result = run_children(specs, paths.heartbeat_log, on_heartbeat=stall_watch)
     if result.downtime:
         print(f"downtime documented: {len(result.downtime)} event(s) -- see {paths.heartbeat_log}")

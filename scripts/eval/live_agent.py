@@ -69,11 +69,11 @@ import bridge_sessions  # noqa: E402
 import pnl_report  # noqa: E402
 
 
-def gate_allows(root: Path) -> tuple[bool, str]:
+def gate_allows(root: Path, loop: str = LOOP) -> tuple[bool, str]:
     """Fail closed: any error, or ai_gate.py denying, means "do not run" (same contract as
     scripts/ci/ai_gate.py itself: a check that could not run is not a check that passed)."""
     proc = subprocess.run(  # noqa: S603 - fixed local ai_gate.py invocation
-        [sys.executable, str(root / "scripts/ci/ai_gate.py"), LOOP, "--root", str(root)],
+        [sys.executable, str(root / "scripts/ci/ai_gate.py"), loop, "--root", str(root)],
         capture_output=True,
         text=True,
         check=False,
