@@ -26,7 +26,7 @@ async function check(listTools?: MockRobinhoodOptions["listTools"]) {
 }
 
 describe("robinhood schema check", () => {
-  it("passes against the matching mock and writes only names and input schemas", async () => {
+  it("passes against the matching mock and writes names, input schemas and, when present, output schemas and annotations", async () => {
     const { problems, toolCalls, outPath, toolCount } = await check();
     expect(problems).toEqual([]);
     expect(toolCalls).toEqual([]);
@@ -35,7 +35,31 @@ describe("robinhood schema check", () => {
     expect(dump.tools).toHaveLength(toolCount);
     for (const tool of dump.tools) expect(Object.keys(tool).sort()).toEqual(["inputSchema", "name"]);
     // Every tool robinhood.ts calls is checked, not just the order tools.
-    expect(expectedToolParams().size).toBe(14);
+    expect([...expectedToolParams().keys()].sort()).toEqual([
+      "cancel_equity_order",
+      "get_accounts",
+      "get_crypto_quotes",
+      "get_equity_orders",
+      "get_equity_positions",
+      "get_equity_price_book",
+      "get_equity_quotes",
+      "place_equity_order",
+      "review_equity_order",
+    ]);
+  });
+
+  it("keeps outputSchema and annotations when the server sends them", async () => {
+    const { outPath } = await check((tools) =>
+      tools.map((t) =>
+        t.name === "get_accounts"
+          ? { ...t, outputSchema: { type: "object" as const, properties: { accounts: { type: "array" } } }, annotations: { readOnlyHint: true } }
+          : t,
+      ),
+    );
+    const accounts = JSON.parse(readFileSync(outPath, "utf8")).tools.find((t: { name: string }) => t.name === "get_accounts");
+    expect(accounts.outputSchema).toEqual({ type: "object", properties: { accounts: { type: "array" } } });
+    expect(accounts.annotations).toEqual({ readOnlyHint: true });
+    expect(accounts).not.toHaveProperty("description");
   });
 
   it("fails naming a tool the server renamed", async () => {
@@ -64,12 +88,12 @@ describe("robinhood schema check", () => {
   it("fails on a type mismatch", async () => {
     const { problems } = await check((tools) =>
       tools.map((t) =>
-        t.name === "place_crypto_order"
+        t.name === "place_equity_order"
           ? { ...t, inputSchema: { ...t.inputSchema, properties: { ...t.inputSchema.properties, quantity: { type: "number" } } } }
           : t,
       ),
     );
-    expect(problems).toEqual(['place_crypto_order: parameter "quantity" is sent as string, but the server expects number']);
+    expect(problems).toEqual(['place_equity_order: parameter "quantity" is sent as string, but the server expects number']);
   });
 
   it("defaults to the mock and reaches the real server only with an explicit flag", () => {

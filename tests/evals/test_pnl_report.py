@@ -327,6 +327,32 @@ def test_broker_resolver_drops_a_rejected_or_canceled_order() -> None:
     assert result.fills == {"accepted_orders": 1, "matched_fills": 0}
 
 
+def test_broker_resolver_counts_the_filled_part_of_a_canceled_order() -> None:
+    # The gateway emulates IOC as gfd + cancel, so a partial fill ends "canceled" with a fill.
+    entries = [
+        _entry(
+            "dr-1",
+            0,
+            "buy",
+            "20",
+            {"accepted": True, "client_order_id": 1},
+            0.0,
+            qty="1",
+            limit_price="20",
+        ),
+    ]
+    journal = {1: {"status": "canceled", "filled_qty": "0.5", "avg_price": "20"}}
+    resolver = pnl_report.make_broker_fill_resolver(journal)
+    result, _curve = pnl_report.compute(entries, fee_bps=D(0), resolve_fill=resolver)
+    assert result.fills == {"accepted_orders": 1, "matched_fills": 1}
+
+    unfilled = {1: {"status": "canceled", "filled_qty": "0"}}
+    result, _curve = pnl_report.compute(
+        entries, fee_bps=D(0), resolve_fill=pnl_report.make_broker_fill_resolver(unfilled)
+    )
+    assert result.fills == {"accepted_orders": 1, "matched_fills": 0}
+
+
 def test_broker_resolver_uses_partial_fill_quantity() -> None:
     entries = [
         _entry(

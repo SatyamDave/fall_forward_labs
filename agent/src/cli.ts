@@ -14,7 +14,9 @@
 // names it rather than this file guessing.
 import path from "node:path";
 import { createExternalModeGateway } from "./broker/external-mode.js";
+import { iocCancelAfterMsFromEnv } from "./broker/gateway.js";
 import { connectRobinhoodMcp } from "./broker/mcp-client.js";
+import { accountNumberFromEnv } from "./broker/robinhood.js";
 import type { AssetClass } from "./broker/types.js";
 import { BridgeClient } from "./bridge.js";
 import { EnsembleDecider, type EnsembleMember, parseEnsembleEnv, splitBudgetEqually } from "./decider/ensemble.js";
@@ -52,12 +54,15 @@ async function maybeBuildExternalMode(bridge: BridgeClient): Promise<ExternalMod
     throw new Error("bridge reported venue_mode external but QC_INSTRUMENT is not set: refusing to guess an instrument");
   }
   const assetClass = resolveAssetClass(process.env.QC_ASSET_CLASS);
+  const accountNumber = accountNumberFromEnv(); // before any connection: no account, no start
   const mcp = await connectRobinhoodMcp();
   const { gateway, reconcile, heartbeat } = await createExternalModeGateway({
     bridge,
     mcp,
     assetClass,
     instrument,
+    accountNumber,
+    iocCancelAfterMs: iocCancelAfterMsFromEnv(process.env.QC_IOC_CANCEL_AFTER_MS),
     reconcileStatusPath: reconcileStatusPath(),
     onHalted: (reason) => {
       // No logging convention exists in agent/ yet (cli.ts's own broker/gateway.ts precedent);

@@ -51,7 +51,11 @@ export interface ReconcileDeps {
   mcp: McpClient;
   bridge: BridgeReconciler;
   assetClass: AssetClass;
+  accountNumber: string;
   instrument: string;
+  /** Maps a venue order's ref_id back to our client_order_id (BrokerGateway's journal); a venue
+   *  order without one is unknown to us, and the bridge flags it if it is open. */
+  clientOrderIdForRefId: (refId: string) => number | null;
   callOpts?: CallOptions;
   /** Where each pass records its verdict for scripts/ops/preflight.py's reconcile_recent gate
    *  (its DEFAULT_RECONCILE_STATUS). Omitted, nothing is written, and preflight fails closed on
@@ -72,15 +76,15 @@ export function writeReconcileStatus(statusPath: string, ok: boolean, discrepanc
   renameSync(tmp, statusPath);
 }
 
-/** The bridge's reconcile schema only knows about live ("open") or terminal venue states;
- *  "not_found" isn't a venue order at all, so it's dropped rather than mapped into something
- *  that would look like a phantom order the bridge has never heard of. */
-function toVenueOrderSnapshot(order: robinhood.VenueOrder): VenueOrderSnapshot | null {
-  if (order.status === "not_found") return null;
+/** The bridge's reconcile schema knows live ("open") or terminal venue states, and a u64 venue
+ *  order id (robinhood.ts's bridgeVenueOrderId, the same id the gateway reports on accept). An
+ *  order with no id is not something the bridge can compare, so it fails the pass. */
+function toVenueOrderSnapshot(order: robinhood.VenueOrderRecord, clientOrderIdForRefId: ReconcileDeps["clientOrderIdForRefId"]): VenueOrderSnapshot {
+  if (!order.venue_order_id) throw new Error("the broker listed an order with no id");
   const state = order.status === "accepted" || order.status === "partially_filled" ? "open" : order.status;
   return {
-    client_order_id: order.client_order_id,
-    venue_order_id: order.venue_order_id ?? "",
+    client_order_id: order.ref_id === undefined ? null : clientOrderIdForRefId(order.ref_id),
+    venue_order_id: robinhood.bridgeVenueOrderId(order.venue_order_id),
     state,
     filled_qty: order.filled_qty ?? "0",
   };
@@ -110,12 +114,12 @@ export async function reconcileWithBroker(deps: ReconcileDeps): Promise<void> {
 
 async function compareWithBroker(deps: ReconcileDeps): Promise<void> {
   const [orders, account] = await Promise.all([
-    robinhood.listOrders(deps.mcp, deps.assetClass, deps.callOpts),
-    robinhood.getAccountState(deps.mcp, deps.assetClass, deps.instrument, deps.callOpts),
+    robinhood.listAgenticOrders(deps.mcp, deps.assetClass, deps.accountNumber, deps.callOpts),
+    robinhood.getAccountState(deps.mcp, deps.assetClass, deps.accountNumber, deps.instrument, deps.callOpts),
   ]);
 
   const venue: VenueSnapshot = {
-    orders: orders.map(toVenueOrderSnapshot).filter((o): o is VenueOrderSnapshot => o !== null),
+    orders: orders.map((o) => toVenueOrderSnapshot(o, deps.clientOrderIdForRefId)),
     position: account.position,
     cash: account.cash,
   };

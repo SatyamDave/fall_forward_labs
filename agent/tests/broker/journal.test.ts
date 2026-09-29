@@ -14,7 +14,9 @@ function tempJournalPath(): string {
   return path.join(dir, "broker-journal.jsonl");
 }
 
-const FILLED: PlaceOrderResult = { status: "filled", venue_order_id: "SYN-1", filled_qty: "10", avg_price: "500.00", raw: {} };
+const FILLED: PlaceOrderResult = { status: "filled", venue_order_id: "00000000-0000-4000-8000-000000000001", filled_qty: "1", avg_price: "20.00", raw: {} };
+const REF = "11111111-1111-5111-8111-111111111111";
+const SENT = "2026-09-29T14:30:00.000Z";
 
 describe("broker journal", () => {
   it("replays empty for a journal that was never written", () => {
@@ -23,38 +25,55 @@ describe("broker journal", () => {
 
   it("an attempt with no resolved entry replays as unknown -- the crash-after-send case", () => {
     const filePath = tempJournalPath();
-    openJournal(filePath).recordAttempt(1);
+    openJournal(filePath).recordAttempt(1, REF, SENT);
 
-    expect(replayJournal(filePath)).toEqual(new Map([[1, { state: "unknown" }]]));
+    expect(replayJournal(filePath)).toEqual(new Map([[1, { state: "unknown", refId: REF, sentAt: SENT, sends: 1 }]]));
+  });
+
+  it("counts every send across a restart and keeps the first send time as the lookup bound", () => {
+    const filePath = tempJournalPath();
+    const journal = openJournal(filePath);
+    journal.recordAttempt(1, REF, SENT);
+    journal.recordAttempt(1, REF, "2026-09-29T14:30:05.000Z");
+
+    expect(replayJournal(filePath).get(1)).toEqual({ state: "unknown", refId: REF, sentAt: SENT, sends: 2 });
+  });
+
+  it("an entry without a ref_id fails closed: it could not be looked up", () => {
+    const filePath = tempJournalPath();
+    appendFileSync(filePath, `${JSON.stringify({ phase: "attempt", client_order_id: 1, sent_at: SENT })}\n`);
+
+    expect(() => replayJournal(filePath)).toThrow(/unrecognized shape/);
   });
 
   it("an attempt followed by resolved replays as terminal with the resolved result", () => {
     const filePath = tempJournalPath();
     const journal = openJournal(filePath);
-    journal.recordAttempt(2);
-    journal.recordResolved(2, FILLED);
+    journal.recordAttempt(2, REF, SENT);
+    journal.recordResolved(2, REF, FILLED);
 
-    expect(replayJournal(filePath)).toEqual(new Map([[2, { state: "terminal", result: FILLED }]]));
+    // The venue order id survives the restart: cancels and status reads use it.
+    expect(replayJournal(filePath)).toEqual(new Map([[2, { state: "terminal", refId: REF, result: FILLED }]]));
   });
 
   it("keeps only the last entry per client_order_id across multiple ids", () => {
     const filePath = tempJournalPath();
     const journal = openJournal(filePath);
-    journal.recordAttempt(1);
-    journal.recordAttempt(2);
-    journal.recordResolved(1, FILLED);
+    journal.recordAttempt(1, REF, SENT);
+    journal.recordAttempt(2, "r2", SENT);
+    journal.recordResolved(1, REF, FILLED);
     // 2 never resolves -- still unknown after replay.
 
     const replayed = replayJournal(filePath);
-    expect(replayed.get(1)).toEqual({ state: "terminal", result: FILLED });
-    expect(replayed.get(2)).toEqual({ state: "unknown" });
+    expect(replayed.get(1)).toEqual({ state: "terminal", refId: REF, result: FILLED });
+    expect(replayed.get(2)).toEqual({ state: "unknown", refId: "r2", sentAt: SENT, sends: 1 });
   });
 
   it("writes one JSON line per entry and fsyncs (readable immediately, never truncates)", () => {
     const filePath = tempJournalPath();
     const journal = openJournal(filePath);
-    journal.recordAttempt(1);
-    journal.recordResolved(1, FILLED);
+    journal.recordAttempt(1, REF, SENT);
+    journal.recordResolved(1, REF, FILLED);
 
     const lines = readFileSync(filePath, "utf8").trim().split("\n");
     expect(lines).toHaveLength(2);
@@ -64,7 +83,7 @@ describe("broker journal", () => {
 
   it("fails closed on a corrupt line rather than silently dropping it", () => {
     const filePath = tempJournalPath();
-    openJournal(filePath).recordAttempt(1);
+    openJournal(filePath).recordAttempt(1, REF, SENT);
     appendFileSync(filePath, "not json\n");
 
     expect(() => replayJournal(filePath)).toThrow(/corrupt/);

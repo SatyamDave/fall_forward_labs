@@ -33,16 +33,17 @@ describe("agent-sim-external: the full external-mode pipeline, twice", () => {
     expect(results.some((r) => r.client_order_id === 1 && r.accepted === true)).toBe(true); // filled, exercised via journal below
     expect(results.some((r) => r.client_order_id === 3 && r.accepted === true)).toBe(true); // accepted at the bridge; rejected by the broker
 
-    const resolvedByOrder = new Map<number, string>();
+    const resolvedByOrder = new Map<number, { status: string; filled_qty?: string }>();
     for (const line of journalLines) {
       if (line.phase !== "resolved") continue;
-      const result = line.result as { status: string };
-      resolvedByOrder.set(line.client_order_id as number, result.status);
+      resolvedByOrder.set(line.client_order_id as number, line.result as { status: string; filled_qty?: string });
     }
-    expect(resolvedByOrder.get(1)).toBe("filled");
-    expect(resolvedByOrder.get(2)).toBe("partially_filled");
-    expect(resolvedByOrder.get(3)).toBe("rejected");
-    expect(resolvedByOrder.get(4)).toBe("canceled"); // accepted, then explicitly cancelled
+    expect(resolvedByOrder.get(1)?.status).toBe("filled");
+    // Emulated IOC: half filled, the rest cancelled by the gateway after its rest window.
+    expect(resolvedByOrder.get(2)?.status).toBe("canceled");
+    expect(resolvedByOrder.get(2)?.filled_qty).not.toBe("0");
+    expect(resolvedByOrder.get(3)?.status).toBe("rejected");
+    expect(resolvedByOrder.get(4)).toMatchObject({ status: "canceled", filled_qty: "0" }); // rested, then the IOC cancel
 
     // real-bridge-fixtures.ts's RECORDING spends its first FIRST_TRADE_DECISION-1 decisions
     // warming up the classifier's feature window (always no_trade) before the 4 trading

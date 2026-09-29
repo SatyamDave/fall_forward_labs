@@ -82,8 +82,9 @@ export interface SchemaCheckResult {
   problems: string[];
 }
 
-/** Lists tools, writes their names and input schemas (nothing else: no descriptions, no URL, no
- *  account data) to out/robinhood/, and compares them with robinhood.ts's expectations. */
+/** Lists tools, writes their names, input schemas and, when the server sends them, output
+ *  schemas and annotations (nothing else: no descriptions, no URL, no account data) to
+ *  out/robinhood/, and compares them with robinhood.ts's expectations. */
 export async function runSchemaCheck(client: ListOnlyClient, target: Target, outDir: string, now = new Date()): Promise<SchemaCheckResult> {
   const tools = await listAllTools(client);
   const date = now.toISOString().slice(0, 10);
@@ -93,7 +94,14 @@ export async function runSchemaCheck(client: ListOnlyClient, target: Target, out
   const dump = {
     target,
     listed_at: now.toISOString(),
-    tools: tools.map((t) => ({ name: t.name, inputSchema: t.inputSchema })).sort((a, b) => a.name.localeCompare(b.name)),
+    tools: tools
+      .map((t) => ({
+        name: t.name,
+        inputSchema: t.inputSchema,
+        ...(t.outputSchema === undefined ? {} : { outputSchema: t.outputSchema }),
+        ...(t.annotations === undefined ? {} : { annotations: t.annotations }),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name)),
   };
   writeFileSync(outPath, `${JSON.stringify(dump, null, 2)}\n`);
   return { outPath, toolCount: tools.length, problems: compareToolSchemas(tools, expectedToolParams()) };

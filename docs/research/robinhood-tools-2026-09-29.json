@@ -1,0 +1,2663 @@
+{
+  "target": "real",
+  "listed_at": "2026-09-29T01:15:19.222Z",
+  "tools": [
+    {
+      "name": "add_option_to_watchlist",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "option_ids": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "Option contract UUIDs to add. Each becomes a single-leg position on the user's options watchlist. Source from get_option_instruments."
+          },
+          "position_type": {
+            "type": "string",
+            "description": "\"long\" (default) or \"short\". Applies to every option_id in this call. For mixed long/short adds, issue two calls."
+          }
+        },
+        "required": [
+          "option_ids"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "add_to_watchlist",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "list_id": {
+            "type": "string",
+            "description": "UUID of the watchlist to add items to."
+          },
+          "symbols": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "Stock symbols to add (e.g. ['AAPL', 'NVDA']). US stocks and ETFs only. Mutually exclusive with currency_pair_ids and index_ids."
+          },
+          "currency_pair_ids": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "Currency-pair UUIDs to add (e.g. the object_id from get_watchlist_items where object_type=currency_pair, or the id from get_currency_pairs). Mutually exclusive with symbols and index_ids."
+          },
+          "index_ids": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "Market-index UUIDs to add (the id field from get_indexes; SPX, NDX, DJI, etc.). Mutually exclusive with symbols and currency_pair_ids."
+          }
+        },
+        "required": [
+          "list_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "cancel_crypto_order",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "rhs_account_number": {
+            "type": "string",
+            "description": "Numeric brokerage account number (the 'rhs_account_number' field on get_accounts entries — distinct from the alphanumeric 'account_number'). The order must belong to this account. Required."
+          },
+          "order_id": {
+            "type": "string",
+            "description": "Order UUID from get_crypto_orders. Must belong to rhs_account_number. Required."
+          }
+        },
+        "required": [
+          "rhs_account_number",
+          "order_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "cancel_equity_order",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "account_number": {
+            "type": "string",
+            "description": "Brokerage account that owns the order. Must come from the user or be clearly implied — never default from get_accounts. Must be agentic_allowed=true. The upstream rejects mismatches against the order's owning account."
+          },
+          "order_id": {
+            "type": "string",
+            "description": "Order UUID from get_equity_orders. Must live in account_number."
+          }
+        },
+        "required": [
+          "account_number",
+          "order_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "cancel_option_exercise",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "account_number": {
+            "type": "string",
+            "description": "Brokerage account that owns the exercise. Must be agentic_allowed=true."
+          },
+          "option_id": {
+            "type": "string",
+            "description": "Option instrument UUID — the same option_id used for exercise_option. The tool looks up the queued exercise for this option and cancels it."
+          }
+        },
+        "required": [
+          "account_number",
+          "option_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "cancel_option_order",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "account_number": {
+            "type": "string",
+            "description": "Brokerage account that owns the order. Must come from the user or be clearly implied — never default from get_accounts. Must be agentic_allowed=true. Mismatches against the order's owning account are rejected."
+          },
+          "order_id": {
+            "type": "string",
+            "description": "Order UUID from get_option_orders. Must live in account_number."
+          }
+        },
+        "required": [
+          "account_number",
+          "order_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "create_alert",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "symbol": {
+            "type": "string",
+            "description": "The equity symbol or crypto asset the alert watches, e.g. AAPL or BTC."
+          },
+          "asset_class": {
+            "type": "string",
+            "description": "Optional: equity or crypto, pinning which asset the symbol names. When omitted the symbol is resolved as an equity first, then as crypto."
+          },
+          "condition_type": {
+            "type": "string",
+            "description": "The alert condition: price_above, price_below, price_crosses, sma_above, sma_below, sma_crosses, ema_above, ema_below, ema_crosses, vwap_above, vwap_below, vwap_crosses, rsi_above, rsi_below, rsi_crosses, price_above_sma, price_below_sma, price_crosses_sma, price_above_ema, price_below_ema, price_crosses_ema, price_above_vwap, price_below_vwap, price_crosses_vwap, price_above_boll_upper, price_below_boll_lower, price_crosses_boll_mid, macd_above_signal, macd_below_signal, or macd_crosses_signal. Same vocabulary get_alerts returns in condition_type."
+          },
+          "threshold": {
+            "type": "string",
+            "description": "Decimal string: the trigger price for price conditions, or the target indicator value for sma_above-style conditions. Not used for price-vs-indicator-line conditions."
+          },
+          "indicator": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "properties": {
+              "period": {
+                "type": "integer",
+                "description": "Lookback window in bars. Required for sma/ema/rsi/boll conditions.",
+                "minimum": -2147483648,
+                "maximum": 2147483647
+              },
+              "interval_secs": {
+                "type": "integer",
+                "description": "Bar size in seconds — one of 300 (5m), 600 (10m), 3600 (1h), 86400 (1d), 604800 (1w), or 2592000 (30d). Required for every indicator condition; vwap conditions support 300 only.",
+                "minimum": -2147483648,
+                "maximum": 2147483647
+              },
+              "fast_period": {
+                "type": "integer",
+                "description": "macd only: fast EMA period (commonly 12).",
+                "minimum": -2147483648,
+                "maximum": 2147483647
+              },
+              "slow_period": {
+                "type": "integer",
+                "description": "macd only: slow EMA period (commonly 26).",
+                "minimum": -2147483648,
+                "maximum": 2147483647
+              },
+              "signal_period": {
+                "type": "integer",
+                "description": "macd only: signal-line EMA period (commonly 9).",
+                "minimum": -2147483648,
+                "maximum": 2147483647
+              },
+              "std_dev": {
+                "type": "number",
+                "description": "boll only: number of standard deviations for the bands (commonly 2)."
+              },
+              "ma_type": {
+                "type": "string",
+                "description": "boll only: which moving average the bands are built on — sma or ema."
+              }
+            },
+            "description": "Indicator configuration. Required for every indicator condition; not used for price conditions.",
+            "required": [
+              "interval_secs"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "symbol",
+          "condition_type"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "create_scan",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "scan_id": {
+            "type": "string",
+            "description": "Optional. Update an existing scan by appending the given filters (and columns) as a NEW configuration version, which becomes the active one — earlier versions are preserved, never edited. The version holds exactly what is passed (REPLACE semantics, not merge): read the scan's current filters and columns with get_scans first and pass the complete intended set. This is how to change a scan that has expression filters, which update_scan_filters cannot carry. Cortex-managed scans are rejected. Omit to create a new scan."
+          },
+          "preset": {
+            "type": "string",
+            "description": "Starting preset for the new scan. One of: INITIAL (no preset; only valid if filters are provided), DAILY_GAINERS, DAILY_LOSERS, HIGH_OPTIONS_VOLUME_IV, UPCOMING_EARNINGS. Defaults to DAILY_GAINERS when no filters are provided, INITIAL when filters are provided. A non-INITIAL preset cannot be combined with expression filters, columns, or scan_id."
+          },
+          "filters": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "object",
+              "properties": {
+                "filter_type": {
+                  "type": "string",
+                  "description": "Wire-format enum name, e.g. \"FILTER_TYPE_RSI\". See the scanner-filter-specs resource for valid values. Omit when supplying expression."
+                },
+                "predicate": {
+                  "type": "string",
+                  "description": "Wire-format enum name, e.g. \"PREDICATE_GREATER_THAN\". See the scanner-filter-specs resource for the predicates supported by each filter."
+                },
+                "values": {
+                  "type": [
+                    "null",
+                    "array"
+                  ],
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Threshold values. Single-element for unary predicates, two-element for BETWEEN, multi-element for IN_LIST/ANY_OF. For a boolean expression screen, exactly [\"True\"]."
+                },
+                "interval": {
+                  "type": "string",
+                  "description": "Time granularity for time-series filters (e.g. \"1d\"). Use one of the supported_intervals from the filter's scanner-filter-specs entry. Not used with expression — encode granularity inside the expression."
+                },
+                "length": {
+                  "type": "integer",
+                  "description": "Lookback length for filters that need one (e.g. RSI period of 14). Use one of the supported_lengths from the filter's scanner-filter-specs entry. Not used with expression.",
+                  "minimum": -2147483648,
+                  "maximum": 2147483647
+                },
+                "plot": {
+                  "type": "string",
+                  "description": "Plot / price-field input for filters that have one (e.g. \"open\" or \"close\" for % Change). Use one of the supported_plots from the filter's scanner-filter-specs entry. Not used with expression."
+                },
+                "expression": {
+                  "type": "string",
+                  "description": "Raw market-data expression to screen on, e.g. \"dayVolume / volumeAvg(candleCount=30, candlePeriod=\\\"1d\\\", session=\\\"all\\\")\" with a numeric predicate, or a whole comparison like \"tradeAllDay.price > closeAvg(candleCount=50, candlePeriod=\\\"1d\\\", session=\\\"all\\\")\" with predicate \"=\" and values [\"True\"]. Accepted by preview_scan (validate without saving) and create_scan (save); update_scan_filters rejects expressions — to change an expression filter on a saved scan, call create_scan with that scan's scan_id and the full filter set (a new configuration version is appended; earlier versions are preserved). Omit filter_type when set. Prefer an enum filter_type whenever one covers the request."
+                },
+                "display_title": {
+                  "type": "string",
+                  "description": "Optional short label for an expression filter, shown as the results-column header (e.g. \"Relative volume (30D)\"). Only used with expression."
+                }
+              },
+              "required": [
+                "predicate",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Custom filters, enum-based and/or expression-based. Enum filter: filter_type (FILTER_TYPE_... enum from get_scanner_filter_specs) plus predicate/values and optional interval/length/plot. Expression filter: expression (built from get_scanner_datapoints; omit filter_type) plus predicate/values and an optional display_title. Required when scan_id is set. Prefer an enum filter_type whenever one covers the request; validate an expression with preview_scan before saving it here."
+          },
+          "columns": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "object",
+              "properties": {
+                "display_name": {
+                  "type": "string",
+                  "description": "Column header, and the column's identity: matching an existing column's name (case-insensitively) customizes that column instead of adding a duplicate, and two columns cannot share a name. A filter with non-default interval/length names its column with those parameters (e.g. a 5-minute RSI filter's column is \"RSI (14, 5M)\") — matching it requires that exact name; a bare \"RSI\" next to it adds a separate, default-parameters RSI column. Without expression, must name a standard column (e.g. \"Market cap\", \"RSI\", \"Volume\") — an unknown name is rejected with the full list of valid ones."
+                },
+                "expression": {
+                  "type": "string",
+                  "description": "Raw market-data expression computing the column's value, built from get_scanner_datapoints (same language as expression filters), e.g. \"optionsPutDayVolume / optionsCallDayVolume\". Omit to reference a standard column by display_name alone. If the expression equals a standard column's canonical form, the column is saved as that standard column and display_name is REPLACED by its canonical name (e.g. \"optionsPutDayVolume\" always saves as \"Total put volume\")."
+                },
+                "visible": {
+                  "type": [
+                    "null",
+                    "boolean"
+                  ],
+                  "description": "Whether the column shows in results. When omitted, a NEW column is visible, but a column customizing an existing filter-created column keeps that column's current visibility (some filter columns are deliberately hidden) — pass an explicit value to change it. A hidden column is still computed and saved."
+                },
+                "order": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ],
+                  "description": "Relative ordering among the columns passed in this call: lower comes first, columns without an order go last in the order given. The scan's standard default columns (Symbol, Name, price, Volume, ...) always come before these.",
+                  "minimum": -2147483648,
+                  "maximum": 2147483647
+                }
+              },
+              "required": [
+                "display_name"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Optional result columns to display on top of what the filters and the standard default columns already show. Each column: display_name plus either an expression (from get_scanner_datapoints) or nothing (a standard column referenced by name, e.g. \"Market cap\"). Columns display values, filters screen — to show a datapoint without restricting results, add a column here, never a no-op filter (e.g. >= 0). A couple of contextual columns supporting the filters make the scan read better in Legend."
+          },
+          "title": {
+            "type": "string",
+            "description": "Optional custom title for the saved scan. If omitted: a new scan gets Beacon's default title for the preset, and a scan_id update keeps the scan's existing title."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "create_watchlist",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "display_name": {
+            "type": "string",
+            "description": "Name for the new watchlist (e.g. 'Tech Stocks'). Must be unique among the user's watchlists."
+          },
+          "icon_emoji": {
+            "type": "string",
+            "description": "Emoji shown next to the name (one character)."
+          },
+          "display_description": {
+            "type": "string",
+            "description": "Short description shown under the name."
+          }
+        },
+        "required": [
+          "display_name"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "delete_alert",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "alert_id": {
+            "type": "string",
+            "description": "The alert to delete — take it from get_alerts or create_alert; never construct one."
+          },
+          "confirm": {
+            "type": "boolean",
+            "description": "Set true only after the user approved the preview returned by a prior call without confirm. Omitted or false = preview only: nothing is deleted."
+          }
+        },
+        "required": [
+          "alert_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "exercise_option",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "account_number": {
+            "type": "string",
+            "description": "Brokerage account number. Must be agentic_allowed=true with option_level_2 or option_level_3."
+          },
+          "option_id": {
+            "type": "string",
+            "description": "Option instrument UUID from get_option_positions or get_option_instruments. The position must be type=long."
+          },
+          "quantity": {
+            "type": "integer",
+            "description": "Number of contracts to exercise (positive integer, minimum 1)."
+          },
+          "ref_id": {
+            "type": "string",
+            "description": "Idempotency key (UUID). Generate once per logical exercise and re-send on retry. Omitting falls back to a server-generated key."
+          },
+          "reason": {
+            "type": "string",
+            "description": "Optional exercise reason: covering_early_assignment | buying_stocks | not_enough_liquidity_or_spread_too_wide | hedging_position."
+          },
+          "allow_shorts": {
+            "type": "boolean",
+            "description": "When true, allows a PUT exercise to proceed even when the account does not own enough shares to deliver — creating a short equity position. Requires explicit user confirmation that they intend to short the underlying stock. Default false."
+          }
+        },
+        "required": [
+          "account_number",
+          "option_id",
+          "quantity"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "follow_watchlist",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "list_id": {
+            "type": "string",
+            "description": "UUID of the Robinhood-curated list to follow. Obtain from get_popular_watchlists."
+          }
+        },
+        "required": [
+          "list_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_accounts",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_alert_log",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "asset_class": {
+            "type": "string",
+            "description": "Optional: equity or crypto, limiting the log to one asset class. Omitted = all classes."
+          },
+          "since": {
+            "type": "string",
+            "description": "Optional RFC3339 timestamp: only events triggered at or after this instant. Omitted = the full retention window."
+          },
+          "cursor": {
+            "type": "string",
+            "description": "Opaque pagination token from a prior response's next_cursor. Omit for the first page. When passing a cursor, repeat the same asset_class, since, and limit as the call that returned it — the token's shape depends on which index served that page, and changing filters between pages causes an upstream error."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Max events per page, 1-100. Omitted = 20. Raise it (e.g. to 100) to collect a full mark_alerts_read batch in one page.",
+            "minimum": -2147483648,
+            "maximum": 2147483647
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_alerts",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "symbol": {
+            "type": "string",
+            "description": "Filter to one asset's alerts, e.g. AAPL or BTC. Omit for all alerts."
+          },
+          "asset_class": {
+            "type": "string",
+            "description": "Only alongside symbol: equity or crypto, pinning which asset the symbol names. When omitted the symbol is resolved as an equity first, then as crypto. Cannot be used without symbol."
+          },
+          "cursor": {
+            "type": "string",
+            "description": "Pagination cursor from a previous response's next_cursor. Omit for the first page."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_crypto_account_onboarding_info",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_crypto_orders",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "rhs_account_number": {
+            "type": "string",
+            "description": "Numeric brokerage account number (the 'rhs_account_number' field on get_accounts entries — distinct from the alphanumeric 'account_number'). Required."
+          },
+          "order_id": {
+            "type": "string",
+            "description": "Filter to a single order by UUID. The response shape is unchanged (results[] with at most one entry); empty when the order does not belong to the account."
+          },
+          "state": {
+            "type": "string",
+            "description": "Filter by single state: queued, confirmed, partially_filled, filled, canceled, rejected, failed, voided. For open-vs-closed shortcuts, use state_group instead."
+          },
+          "state_group": {
+            "type": "string",
+            "description": "Filter by state group: 'open' or 'closed'. Quick shortcut — 'open' covers queued/confirmed/partially_filled, 'closed' covers filled/canceled/rejected/failed/voided. Mutually exclusive with state."
+          },
+          "side": {
+            "type": "string",
+            "description": "Filter by side: 'buy' or 'sell'."
+          },
+          "symbol": {
+            "type": "string",
+            "description": "Filter by crypto symbol (e.g. 'BTC', 'ETH', or 'BTC-USD'). Triggers a symbol→currency_pair_id lookup before the orders call."
+          },
+          "created_at_gte": {
+            "type": "string",
+            "description": "Lower bound (inclusive) on created_at. ISO 8601 UTC; naive values are interpreted as UTC."
+          },
+          "updated_at_gte": {
+            "type": "string",
+            "description": "Lower bound (inclusive) on updated_at. ISO 8601 UTC. Useful for polling for fills — each state transition bumps updated_at."
+          },
+          "cursor": {
+            "type": "string",
+            "description": "Pagination cursor. Omit for the first page; for the next page, pass the prior response's next value back verbatim."
+          }
+        },
+        "required": [
+          "rhs_account_number"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_crypto_positions",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "rhs_account_number": {
+            "type": "string",
+            "description": "Numeric brokerage account number (the 'rhs_account_number' field on get_accounts entries — distinct from the alphanumeric 'account_number'). Required. Do NOT pass rhc_account_number (the linked crypto account, labeled 'Crypto Account' on get_accounts) — that is a different identifier space and will return no positions."
+          },
+          "cursor": {
+            "type": "string",
+            "description": "Pagination cursor. Omit for the first page; for the next page, pass the prior response's next value back verbatim."
+          }
+        },
+        "required": [
+          "rhs_account_number"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_crypto_quotes",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "symbols": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "One or more crypto pair symbols (e.g. 'BTC-USD', 'ETH-USD'). Hyphenated and unhyphenated forms are both accepted on input; the response symbol field comes back unhyphenated."
+          },
+          "timezone": {
+            "type": "string",
+            "description": "Optional IANA timezone name (e.g. 'America/New_York', 'America/Los_Angeles') that anchors the previous-close (open_price) day boundary to the user's local midnight and sets the timezone the response timestamps (bid_time, ask_time, updated_at) are rendered in. Pass ONLY when the user's timezone is known from context — do NOT guess it, infer it from language, or default it. When omitted, the previous close is anchored to midnight US Eastern and timestamps are rendered in US Eastern. Must be a valid IANA name — not an abbreviation ('PST'), a UTC offset ('-08:00'), or 'Local'."
+          },
+          "rhs_account_number": {
+            "type": "string",
+            "description": "Optional numeric brokerage account number (the 'rhs_account_number' from get_accounts). When supplied, bid/ask/mark and the previous close are priced on this account's execution routing — the venues its orders actually fill at — and the applied routing is echoed in routing. When omitted, prices use the caller's own routing (it is set at the user level, so any of their crypto accounts yields the same routing). A caller with no crypto account, or an account that cannot be resolved, receives market-maker-routed pricing. Pairs that only trade on market-maker routing are always priced on it, whatever the account's routing, so routing can differ between results in one response."
+          }
+        },
+        "required": [
+          "symbols"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_currency_pairs",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "cursor": {
+            "type": "string",
+            "description": "Pagination cursor. Omit for the first page; for the next page, pass the prior response's next value back verbatim."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Maximum number of pairs to return on this page (clamped to [1, 700]). Defaults to 25 to keep the response sized for an agent's context window; raise it when the user wants the full catalog and is OK with a larger response."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_earnings_calendar",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "start_date": {
+            "type": "string",
+            "description": "Window anchor, YYYY-MM-DD. Defaults to today (US/Eastern) when omitted."
+          },
+          "days": {
+            "type": "integer",
+            "description": "Window length in days, measured from start_date. Defaults to 7. Positive = forward window (e.g. 7 = the next 7 days, inclusive of start_date); negative = look-back window (e.g. -7 = the 7 days ending at start_date). Must be a non-zero value between -31 and 31 — windows wider than 31 days are rejected."
+          },
+          "filter": {
+            "type": "string",
+            "description": "Optional result filter. Set to 'high_market_cap' to limit the calendar to high-market-cap names (market cap over $1B) — useful for 'what large-caps report this week' style questions. Omit for all names."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_earnings_results",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "symbol": {
+            "type": "string",
+            "description": "Stock symbol to look up (one symbol per call). Exact-ticker match — no name or partial-ticker resolution. Lowercase and whitespace-padded input is normalized to uppercase-trimmed before forwarding. Returns the trailing up to 8 quarters of earnings for the symbol."
+          }
+        },
+        "required": [
+          "symbol"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_equity_analyst_ratings",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "symbols": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "One or more equity symbols (max 75 per call). Exact-ticker match — no name or partial-ticker resolution. Lowercase and whitespace-padded input is normalized to uppercase-trimmed before forwarding."
+          }
+        },
+        "required": [
+          "symbols"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_equity_fundamentals",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "symbols": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "One or more stock symbols (max 10 per call). Exact-ticker match — no name or partial-ticker resolution. Lowercase and whitespace-padded input is normalized to uppercase-trimmed before forwarding."
+          },
+          "bounds": {
+            "type": "string",
+            "description": "Trading session the day-level fields (open / high / low / volume / overnight_volume) are drawn from. One of 'regular' (regular trading hours), 'trading' (regular + post-market), 'extended' (pre-market + regular + post-market), '24_5' (24-hour, 5-day-trading-week). Does not affect valuation fields. overnight_volume only populates when bounds=24_5. Defaults to 'regular' when omitted."
+          }
+        },
+        "required": [
+          "symbols"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_equity_historicals",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "symbols": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "One or more stock symbols (uppercase). Up to 10 per call."
+          },
+          "start_time": {
+            "type": "string",
+            "description": "Start of the range (RFC3339 UTC, e.g. '2026-01-01T00:00:00Z'). Required."
+          },
+          "end_time": {
+            "type": "string",
+            "description": "End of the range (RFC3339 UTC). Optional — when omitted, defaults to the current time."
+          },
+          "interval": {
+            "type": "string",
+            "description": "Bar interval. Optional — when omitted, the server picks an interval that targets ~2,500 bars across the requested range. Intraday: 15second, 30second, minute, 5minute, 10minute, 30minute, hour, 4hour. Interday: day, week, month, 3month, 6month, year, 5year, 10year, 20year, 50year. Note: the 1-minute bar is named 'minute' (not '1minute')."
+          },
+          "bounds": {
+            "type": "string",
+            "description": "Session bounds. One of 'regular' (RTH, default), 'extended', 'trading', '24_5', '24_7', 'hyper_trading'."
+          },
+          "adjustment_type": {
+            "type": "string",
+            "description": "Corporate-action adjustment: 'none' (raw prices), 'split' (default; right for backtesting), or 'all' (split + dividend; intraday only)."
+          }
+        },
+        "required": [
+          "symbols",
+          "start_time"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_equity_orders",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "account_number": {
+            "type": "string",
+            "description": "Brokerage account number. Must come from the user or be clearly implied — never default from get_accounts."
+          },
+          "order_id": {
+            "type": "string",
+            "description": "Filter to a single order by UUID. The response shape is unchanged (orders[] with at most one entry); empty when the order does not belong to account_number."
+          },
+          "state": {
+            "type": "string",
+            "description": "Filter by single state: new, queued, confirmed, unconfirmed, partially_filled, filled, cancelled, rejected, failed, voided."
+          },
+          "symbol": {
+            "type": "string",
+            "description": "Filter to one symbol (triggers a symbol→instrument lookup before the orders call)."
+          },
+          "created_at_gte": {
+            "type": "string",
+            "description": "Lower bound (inclusive). ISO 8601 UTC or YYYY-MM-DD; naive values are interpreted as UTC."
+          },
+          "placed_agent": {
+            "type": "string",
+            "description": "Filter to one source: 'user', 'agentic' (MCP), 'recurring', 'drip', etc."
+          },
+          "cursor": {
+            "type": "string",
+            "description": "Pagination cursor. Omit for the first page; for the next page, pass the prior response's next value back verbatim."
+          }
+        },
+        "required": [
+          "account_number"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_equity_positions",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "account_number": {
+            "type": "string",
+            "description": "Brokerage account number. Must come from the user or be clearly implied — never default from get_accounts."
+          },
+          "cursor": {
+            "type": "string",
+            "description": "Pagination cursor. Omit for the first page; for the next page, pass the prior response's next value back verbatim."
+          }
+        },
+        "required": [
+          "account_number"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_equity_price_book",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "symbols": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "One or more stock symbols, max 4 per call."
+          }
+        },
+        "required": [
+          "symbols"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_equity_quotes",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "symbols": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "One or more stock symbols. Above 20 symbols, quotes still return but closes is omitted with closes_error set."
+          }
+        },
+        "required": [
+          "symbols"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_equity_tax_lots",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "account_number": {
+            "type": "string",
+            "description": "Brokerage account number. Must come from the user or be clearly implied — never default from get_accounts."
+          },
+          "symbol": {
+            "type": "string",
+            "description": "Ticker symbol of the holding whose tax lots you want, e.g. AAPL. Tax lots are tracked per instrument — one symbol per call."
+          },
+          "cursor": {
+            "type": "string",
+            "description": "Pagination cursor. Omit for the first page; for the next page, pass the prior response's next value back verbatim."
+          }
+        },
+        "required": [
+          "account_number",
+          "symbol"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_equity_technical_indicators",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "symbol": {
+            "type": "string",
+            "description": "Stock symbol (uppercase). Exactly one symbol per call."
+          },
+          "type": {
+            "type": "string",
+            "description": "Indicator to compute. One of: ema, sma, rsi, momentum, roc, cci, williams_r, atr, mfi, adx, donchian_channels, bollinger_bands, macd, keltner_channels, supertrend, vwap, obv, pivot_points."
+          },
+          "interval": {
+            "type": "string",
+            "description": "Required bar interval the indicator is computed on. Intraday: 15second, 30second, minute, 5minute, 10minute, 30minute, hour, 4hour. Interday: day, week, month, 3month, 6month, year, 5year, 10year, 20year, 50year. The 1-minute bar is named 'minute' (not '1minute')."
+          },
+          "start_time": {
+            "type": "string",
+            "description": "Start of the range (RFC3339 UTC, e.g. '2026-01-01T00:00:00Z'). Required."
+          },
+          "end_time": {
+            "type": "string",
+            "description": "End of the range (RFC3339 UTC). Optional — defaults to the current time when omitted."
+          },
+          "bounds": {
+            "type": "string",
+            "description": "Session bounds. One of 'regular' (RTH, default) or 'extended'."
+          },
+          "adjustment_type": {
+            "type": "string",
+            "description": "Corporate-action adjustment: 'none' (raw prices), 'split' (default), or 'all' (split + dividend; requires a day-or-coarser interval)."
+          },
+          "output": {
+            "type": "string",
+            "description": "How much of the series to return: 'series' (default, full range), 'latest' (most recent bar only), or 'last:N' (most recent N bars). The indicator is always computed over the full range first; this only trims the response."
+          },
+          "period": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "description": "Lookback period in bars. Applies to ema, sma, rsi, momentum, roc, cci, williams_r, atr, mfi, adx, donchian_channels, bollinger_bands, keltner_channels, supertrend. Omit to use the indicator's default."
+          },
+          "num_std": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "Number of standard deviations for the bands. bollinger_bands only (default 2)."
+          },
+          "fast_period": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "description": "Fast EMA period. macd only (default 12)."
+          },
+          "slow_period": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "description": "Slow EMA period. macd only (default 26)."
+          },
+          "signal_period": {
+            "type": [
+              "null",
+              "integer"
+            ],
+            "description": "Signal EMA period. macd only (default 9)."
+          },
+          "multiplier": {
+            "type": [
+              "null",
+              "number"
+            ],
+            "description": "Band/offset multiplier. keltner_channels (default 2) and supertrend (default 3) only."
+          },
+          "method": {
+            "type": "string",
+            "description": "Calculation method. pivot_points only; currently only 'classic'."
+          }
+        },
+        "required": [
+          "symbol",
+          "type",
+          "interval",
+          "start_time"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_equity_tradability",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "account_number": {
+            "type": "string",
+            "description": "Brokerage account number. Must come from the user or be clearly implied — never default from get_accounts."
+          },
+          "symbols": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "Stock symbols, max 10 per call. With more than 10, split across multiple calls of 10 or fewer. Exact-ticker match only."
+          }
+        },
+        "required": [
+          "account_number",
+          "symbols"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_financials",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "symbols": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "One or more stock symbols (max 20 per call). Exact-ticker match — no name or partial-ticker resolution. Lowercase and whitespace-padded input is normalized to uppercase-trimmed before forwarding."
+          },
+          "period": {
+            "type": "string",
+            "description": "Reporting period: 'quarterly' or 'annual'. Defaults to 'quarterly' when omitted."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Number of most-recent periods to return per symbol (e.g. 8 for the last 8 quarters or years). Defaults to 4; values above 40 are capped to 40."
+          }
+        },
+        "required": [
+          "symbols"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_index_historicals",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "instrument_ids": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "Index instrument UUIDs (from get_indexes). Up to 10 per call."
+          },
+          "start_time": {
+            "type": "string",
+            "description": "Start of the range (RFC3339 UTC, e.g. '2026-01-01T00:00:00Z'). Required."
+          },
+          "end_time": {
+            "type": "string",
+            "description": "End of the range (RFC3339 UTC). Optional — when omitted, defaults to the current time."
+          },
+          "interval": {
+            "type": "string",
+            "description": "Bar interval. Required — there is no server auto-select for indexes. Intraday: 5second, 15second, 30second, minute, 5minute, 10minute, 30minute, hour, 4hour. Interday: day, week, month, 3month, 6month, year, 5year, 10year, 20year, 50year. Note: the 1-minute bar is named 'minute' (not '1minute')."
+          }
+        },
+        "required": [
+          "instrument_ids",
+          "start_time",
+          "interval"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_index_quotes",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "instrument_ids": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "One or more index instrument IDs (UUIDs) to fetch current values for. Obtain IDs from the get_indexes tool."
+          }
+        },
+        "required": [
+          "instrument_ids"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_indexes",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "symbols": {
+            "type": "string",
+            "description": "Comma-separated list of index symbols to look up (e.g. 'SPX,NDX'). Omit to return all available indexes."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_limited_margin_upgrade_info",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "account_number": {
+            "type": "string",
+            "description": "Brokerage account number to check. Obtain from get_accounts."
+          }
+        },
+        "required": [
+          "account_number"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_option_chains",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "ids": {
+            "type": "string",
+            "description": "Comma-separated chain UUIDs."
+          },
+          "underlying_symbol": {
+            "type": "string",
+            "description": "Ticker filter; covers equity and index underlyings (e.g. 'AAPL', 'SPX')."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_option_historicals",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "instrument_ids": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "Option contract instrument UUIDs (from get_option_instruments). Up to 10 per call."
+          },
+          "start_time": {
+            "type": "string",
+            "description": "Start of the range (RFC3339 UTC, e.g. '2026-01-01T00:00:00Z'). Required."
+          },
+          "end_time": {
+            "type": "string",
+            "description": "End of the range (RFC3339 UTC). Optional — when omitted, defaults to the current time."
+          },
+          "interval": {
+            "type": "string",
+            "description": "Bar interval. Optional — when omitted, the server auto-selects an interval that targets a bounded bar count across the range. Intraday: 15second, 30second, minute, 5minute, 10minute, 30minute, hour, 4hour. Interday: day, week, month, 3month, 6month, year, 5year, 10year, 20year, 50year. Note: the 1-minute bar is named 'minute' (not '1minute')."
+          },
+          "bounds": {
+            "type": "string",
+            "description": "Session bounds. One of 'regular' (regular hours, default), '24_5', or '24_7'. Use '24_5'/'24_7' only when the user explicitly asks about extended-hours or overnight option activity (index options, and certain equity options)."
+          }
+        },
+        "required": [
+          "instrument_ids",
+          "start_time"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_option_instruments",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "chain_id": {
+            "type": "string",
+            "description": "Chain UUID."
+          },
+          "chain_symbol": {
+            "type": "string",
+            "description": "Underlying ticker (e.g. 'AAPL')."
+          },
+          "expiration_dates": {
+            "type": "string",
+            "description": "Comma-separated YYYY-MM-DD expirations."
+          },
+          "strike_price": {
+            "type": "string",
+            "description": "Exact strike (e.g. '150.0000')."
+          },
+          "type": {
+            "type": "string",
+            "description": "'call' or 'put'."
+          },
+          "state": {
+            "type": "string",
+            "description": "'active' (default), 'expired', or 'inactive'. Use 'expired' to find option contracts whose expiration date has passed; 'inactive' is for delisted/withdrawn contracts that never expired."
+          },
+          "tradability": {
+            "type": "string",
+            "description": "'tradable' or 'untradable' (untradable is rejected at the tool layer)."
+          },
+          "ids": {
+            "type": "string",
+            "description": "Comma-separated instrument UUIDs."
+          },
+          "cursor": {
+            "type": "string",
+            "description": "Pagination cursor. Omit for the first page; for the next page, pass the prior response's next value back verbatim."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_option_level_upgrade_info",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "account_number": {
+            "type": "string",
+            "description": "Brokerage account number to generate the upgrade URL for. Obtain from get_accounts."
+          }
+        },
+        "required": [
+          "account_number"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_option_orders",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "account_number": {
+            "type": "string",
+            "description": "Brokerage account number. Must come from the user or be clearly implied — never default from get_accounts."
+          },
+          "order_id": {
+            "type": "string",
+            "description": "Filter to a single order by UUID. The response shape is unchanged (orders[] with at most one entry); empty when the order does not belong to account_number."
+          },
+          "state": {
+            "type": "string",
+            "description": "Filter by single state: queued, confirmed, partially_filled, filled, rejected, cancelled, failed, voided, pending_cancelled."
+          },
+          "created_at_gte": {
+            "type": "string",
+            "description": "Lower bound (inclusive). ISO 8601 UTC or YYYY-MM-DD; naive values are interpreted as UTC."
+          },
+          "chain_ids": {
+            "type": "string",
+            "description": "Comma-separated chain UUIDs (from get_option_chains) to filter by underlying."
+          },
+          "underlying_type": {
+            "type": "string",
+            "description": "'equity' or 'index'."
+          },
+          "placed_agent": {
+            "type": "string",
+            "description": "Filter to one source: 'user', 'agentic' (MCP), 'recurring', 'drip', etc."
+          },
+          "cursor": {
+            "type": "string",
+            "description": "Pagination cursor. Omit for the first page; for the next page, pass the prior response's next value back verbatim."
+          }
+        },
+        "required": [
+          "account_number"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_option_positions",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "account_number": {
+            "type": "string",
+            "description": "Brokerage account number. Must come from the user or be clearly implied — never default from get_accounts."
+          },
+          "nonzero": {
+            "type": "boolean",
+            "description": "True to return only currently-open positions; omit/false to include closed ones."
+          },
+          "chain_ids": {
+            "type": "string",
+            "description": "Comma-separated chain UUIDs (from get_option_chains)."
+          },
+          "option_ids": {
+            "type": "string",
+            "description": "Comma-separated instrument UUIDs."
+          },
+          "type": {
+            "type": "string",
+            "description": "'long' or 'short'."
+          },
+          "option_type": {
+            "type": "string",
+            "description": "'call' or 'put'."
+          },
+          "expiration_date": {
+            "type": "string",
+            "description": "Exact expiration (YYYY-MM-DD)."
+          },
+          "expiration_date_lte": {
+            "type": "string",
+            "description": "Upper bound on expiration (YYYY-MM-DD)."
+          },
+          "expiration_date_gte": {
+            "type": "string",
+            "description": "Lower bound on expiration (YYYY-MM-DD)."
+          },
+          "cursor": {
+            "type": "string",
+            "description": "Pagination cursor. Omit for the first page; for the next page, pass the prior response's next value back verbatim."
+          }
+        },
+        "required": [
+          "account_number"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_option_quotes",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "instrument_ids": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "Option instrument UUIDs. Above 20, quotes still return but closes is omitted with closes_error set."
+          }
+        },
+        "required": [
+          "instrument_ids"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_option_watchlist",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_pnl_trade_history",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "account_number": {
+            "type": "string",
+            "description": "Brokerage account number (the rhs_account_number from get_accounts). Obtain it from get_accounts."
+          },
+          "span": {
+            "type": "string",
+            "description": "Preset window: week (default), month, 3month, ytd, or all. Wormhole offers preset spans only (no arbitrary date range)."
+          },
+          "symbol": {
+            "type": "string",
+            "description": "Optional single stock symbol filter (trimmed + uppercased). Omit for all symbols; one symbol per call."
+          },
+          "cursor": {
+            "type": "string",
+            "description": "Pagination cursor from a previous response's next_cursor. Omit for the first page."
+          }
+        },
+        "required": [
+          "account_number"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_politician_trades",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "politician_name": {
+            "type": "string",
+            "description": "Full or partial name of a US politician, e.g. 'Nancy Pelosi'. Case-insensitive. Optional when equity_symbol is provided."
+          },
+          "equity_symbol": {
+            "type": "string",
+            "description": "One active US equity ticker, e.g. NVDA. Exact ticker only; lowercase and surrounding whitespace are normalized. Optional when politician_name is provided."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_popular_watchlists",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_portfolio",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "account_number": {
+            "type": "string",
+            "description": "Brokerage account number. Obtain from get_accounts."
+          }
+        },
+        "required": [
+          "account_number"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_realized_pnl",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "account_number": {
+            "type": "string",
+            "description": "Brokerage account number (the rhs_account_number from get_accounts). Obtain it from get_accounts."
+          },
+          "span": {
+            "type": "string",
+            "description": "Preset window: day, week, month, 3month, year, or all. Defaults to 3month ('last 90 days'). Mutually exclusive with start_date/end_date."
+          },
+          "start_date": {
+            "type": "string",
+            "description": "Custom window start, YYYY-MM-DD, inclusive — interpreted at midnight in timezone (default US Eastern). Use with end_date instead of span; must be on or before end_date and not in the future."
+          },
+          "end_date": {
+            "type": "string",
+            "description": "Custom window end, YYYY-MM-DD, inclusive — the entire end_date is covered (through 23:59:59 in timezone). Use with start_date instead of span; an end_date beyond today returns data through the present."
+          },
+          "asset_classes": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "Filter to one or more of equity, option, crypto. Omit for all asset classes available on the account."
+          },
+          "display_currency": {
+            "type": "string",
+            "description": "Currency for returned amounts. Currently USD only; defaults to USD."
+          },
+          "timezone": {
+            "type": "string",
+            "description": "IANA timezone for bucket day-boundaries (e.g. America/New_York). Defaults to the account timezone (US Eastern)."
+          }
+        },
+        "required": [
+          "account_number"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_scanner_datapoints",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "category": {
+            "type": "string",
+            "description": "Which part of the catalog to return. One of: technical (chart studies - rsi, macd, adx, bollinger, pivots), price_volume (prices, changes, moving averages, volume), fundamental (marketCap, peRatio, eps, dividends, sector, earnings dates), options (options volume and open interest on the underlying), volatility (implied and realized volatility, IV rank), quote (bid/ask, sizes, spread), descriptive (symbol, type, listing, date arithmetic). Also accepts \"function\" or \"field\" to slice by kind instead, or any category name from a previous response. Required - the full catalog is too large to return at once."
+          }
+        },
+        "required": [
+          "category"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_scanner_filter_specs",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_scans",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_sec_filing",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "filing_id": {
+            "type": "string",
+            "description": "Filing identifier returned by get_sec_filing_index."
+          },
+          "section": {
+            "type": "string",
+            "description": "Section identifier from the table of contents (the id field). Omit to get the full table of contents; provide to get a specific section's text."
+          }
+        },
+        "required": [
+          "filing_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_sec_filing_facts",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "filing_ids": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "Filing identifiers to fetch facts for (1-3), from get_sec_filing_index. Default to a single filing_id — most questions are answered by periods already embedded in one filing (10-Ks carry ~3 fiscal years, 10-Qs carry current + prior-year). Pass more than one only when the question needs data a single filing structurally can't have, e.g. a trend longer than 3 years, or confirming a disclosed subsequent event landed in the next filing."
+          },
+          "concepts": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "GAAP concept names to fetch (1-10) — covers numeric line items (e.g. NetIncomeLoss, Assets, Revenues) and disclosure text blocks (e.g. ScheduleOfDebtTableTextBlock) alike. Guess common names directly; only call get_sec_filing_facts_catalog first if a guess comes back with no matching facts."
+          }
+        },
+        "required": [
+          "filing_ids",
+          "concepts"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_sec_filing_facts_catalog",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "filing_id": {
+            "type": "string",
+            "description": "Filing identifier to catalog, from get_sec_filing_index."
+          },
+          "concept_contains": {
+            "type": "string",
+            "description": "Case-insensitive substring filter on concept name, e.g. 'Debt'. Omit to return all concepts."
+          },
+          "axis_name_in": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "Only return concepts broken down by at least one of these dimension names. For 'what's unusual/notable in this filing' questions, try named-entity axes like SubsequentEventTypeAxis, BusinessAcquisitionAxis, RelatedPartyTransactionsByRelatedPartyAxis, LegalEntityAxis, or MajorCustomersAxis before falling back to an unfiltered call. Omit to skip this filter."
+          },
+          "offset": {
+            "type": "integer",
+            "description": "Pagination offset. Omit for the first page; to fetch the next page, pass the value from the prior response's next_offset field."
+          }
+        },
+        "required": [
+          "filing_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_sec_filing_index",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "symbol": {
+            "type": "string",
+            "description": "Stock ticker symbol, e.g. AAPL. Exact match — no partial or name-based lookup. Lowercase input is normalized to uppercase."
+          },
+          "form_type": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "One or more SEC form types to filter by, e.g. ['10-K'] or ['10-K','10-Q']. Omit to return all form types."
+          },
+          "since": {
+            "type": "string",
+            "description": "Earliest filing date to include, ISO format YYYY-MM-DD. Omit to return filings from all dates."
+          },
+          "until": {
+            "type": "string",
+            "description": "Latest filing date to include, ISO format YYYY-MM-DD. Omit to return filings up to the most recent."
+          },
+          "cursor": {
+            "type": "string",
+            "description": "Pagination cursor. Omit for the first page; to fetch the next page, pass the value from the prior response's next field."
+          }
+        },
+        "required": [
+          "symbol"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_watchlist_items",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "list_id": {
+            "type": "string",
+            "description": "UUID of the watchlist whose items to fetch. Obtain from get_watchlists or get_popular_watchlists."
+          }
+        },
+        "required": [
+          "list_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "get_watchlists",
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "mark_alerts_read",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "alert_log_ids": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "Fired-alert event ids from get_alert_log's alert_log_id (never alert_id). At most 100 per call — the server enforces the exact cap and rejects oversized batches naming the current limit."
+          },
+          "all_through": {
+            "type": "string",
+            "description": "RFC3339 timestamp: mark every event triggered at or before this instant as read, across all symbols. Set it to the triggered_at of the newest event you relayed so later events stay unread. Never a future timestamp — the upstream rejects it, and one would silently suppress unread state for alerts that have not fired yet."
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "place_crypto_order",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "rhs_account_number": {
+            "type": "string",
+            "description": "Numeric brokerage account number (the 'rhs_account_number' field on get_accounts entries — distinct from the alphanumeric 'account_number'). Must be an agentic-enabled crypto account. Required. Do NOT pass rhc_account_number (the linked crypto account, labeled 'Crypto Account' on get_accounts) — that is a different identifier space and will return no crypto account found."
+          },
+          "symbol": {
+            "type": "string",
+            "description": "Crypto symbol (e.g. 'BTC', 'ETH', or 'BTC-USD'). Resolved to a currency pair before the order is placed. Required."
+          },
+          "side": {
+            "type": "string",
+            "description": "'buy' or 'sell'. Required."
+          },
+          "type": {
+            "type": "string",
+            "description": "'market', 'limit', 'stop_loss', or 'stop_limit'. Required. 'stop_loss' is a stop-triggered market order — despite the name it applies to buy stops too; the equity/option tools call the same concept 'stop_market'. ALWAYS call these by their app names when speaking to the user, including when listing what types are supported: 'stop_loss' is a 'stop order' and 'stop_limit' a 'stop limit order'; the raw values are tool inputs only. A user asking for a 'stop loss', 'stop order', or 'stop market' order means this stop_loss type — do not ask which stop type (but a limit price given alongside the trigger makes it stop_limit); ask only when the phrasing names no type, e.g. a bare 'stop' or 'protect my position'."
+          },
+          "quantity": {
+            "type": "string",
+            "description": "Asset quantity to trade (e.g. amount of BTC). Provide exactly one of quantity or dollar_amount. Crypto is measured in coins/units, not shares — when speaking to the user, including order confirmations, NEVER call a crypto quantity 'shares' ('shares' is equity terminology); state the amount of the asset, e.g. '0.001542 ETH'."
+          },
+          "dollar_amount": {
+            "type": "string",
+            "description": "USD notional (e.g. '100.00'). Valid with every order type. Provide exactly one of quantity or dollar_amount. For market, quantity is derived server-side: a buy is sized at the current market price — the same sizing as the app — so the typical debit is ~dollar_amount, with a worst case up to ~1% more if the price moves before execution (the buy collar); a sell is likewise sized at the current market price, so the typical credit is ~dollar_amount, with a worst case up to ~5% less if the price moves before execution (the sell collar). For stop_loss, quantity is derived from dollar_amount at stop_price (the trigger price) when the order is placed, not the live quote — the triggered market order executes near the trigger, so the typical fill notional is ~dollar_amount, with a worst case up to the collar worse (a higher debit for buy stops, a lower credit for sell stops). For limit and stop_limit, quantity is derived from dollar_amount at limit_price when the order is placed — fills execute at the limit price or better, so a buy's debit is capped at dollar_amount (no collar buffer; on fee-priced accounts fee rounding can add at most one cent) and a sell's credit is at least the derived quantity's worth at the limit, minus any fee. On fee-priced accounts a buy's quantity is sized from the fee-netted amount so the total debit targets dollar_amount, and a sell's fee is deducted from the credit."
+          },
+          "limit_price": {
+            "type": "string",
+            "description": "Limit price; required for limit and stop_limit."
+          },
+          "stop_price": {
+            "type": "string",
+            "description": "Stop trigger price; required for stop_loss and stop_limit."
+          },
+          "time_in_force": {
+            "type": "string",
+            "description": "Allowed values depend on type. market and limit: 'gtc' (good till canceled) only — market orders execute immediately so a bounded duration does not apply, and limit orders are always for 90 days; omit this field or pass 'gtc' for both. stop_loss and stop_limit: 'gtc' (good for 90 days), 'gfd' (good for day), 'gfw' (good for 7 days), or 'gfm' (good for 30 days). If omitted, defaults to gtc for market and limit, and gfd for stop_loss and stop_limit. 'ioc' is NEVER supported for crypto orders."
+          },
+          "tax_lots": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "object",
+              "properties": {
+                "open_lot_id": {
+                  "type": "string",
+                  "description": "open_lot_id of the open tax lot to sell, from get_crypto_tax_lots."
+                },
+                "quantity": {
+                  "type": "string",
+                  "description": "Units to sell from this lot as a decimal string; at most the lot's quantity_available (or exactly quantity_to_sell from a strategy result)."
+                }
+              },
+              "required": [
+                "open_lot_id",
+                "quantity"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Optional specified-lot selection for a SELL order. To sell specific tax lots instead of the default disposal, pass {open_lot_id, quantity} objects whose quantities sum to the order quantity, with open_lot_id taken from the account's crypto tax lots (see the request guide). Omit for the default. Sell only; quantity-based orders only (not dollar_amount); at most 50 lots; only when the lot listing reports selection_state 'enabled'. Not every account can select lots: if the tool rejects tax_lots as not available, tell the user and offer the default disposal instead."
+          },
+          "ref_id": {
+            "type": "string",
+            "description": "Idempotency key (UUID). Generate once per logical order and re-send the SAME value on retries of transient failures — the upstream deduplicates by ref_id. Omitting falls back to a server-generated key (loses client↔gateway idempotency). Use a new value only when the user wants a new order."
+          }
+        },
+        "required": [
+          "rhs_account_number",
+          "symbol",
+          "side",
+          "type"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "place_equity_order",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "account_number": {
+            "type": "string",
+            "description": "Brokerage account number. Must come from the user or be clearly implied — never default from get_accounts. Must be agentic_allowed=true; non-agentic accounts are rejected."
+          },
+          "symbol": {
+            "type": "string",
+            "description": "Stock symbol."
+          },
+          "side": {
+            "type": "string",
+            "description": "'buy' or 'sell'."
+          },
+          "type": {
+            "type": "string",
+            "description": "'market', 'limit', 'stop_market', or 'stop_limit'."
+          },
+          "quantity": {
+            "type": "string",
+            "description": "Number of shares. Decimals (fractional) allowed for market + regular_hours only."
+          },
+          "dollar_amount": {
+            "type": "string",
+            "description": "USD notional (e.g. '100.00'). Only valid with type=market."
+          },
+          "limit_price": {
+            "type": "string",
+            "description": "Limit price; required for limit or stop_limit."
+          },
+          "stop_price": {
+            "type": "string",
+            "description": "Stop trigger price; required for stop_market or stop_limit."
+          },
+          "time_in_force": {
+            "type": "string",
+            "description": "'gfd' or 'gtc'. Default: gfd."
+          },
+          "market_hours": {
+            "type": "string",
+            "description": "'regular_hours' (default, 9:30–16:00 ET), 'extended_hours' (pre-/post-market), or 'all_day_hours' (the 24 Hour Market / overnight session). extended_hours and all_day_hours execute limit orders only — market, stop_market, and stop_limit are regular_hours-only and are rejected if tagged to another session."
+          },
+          "tax_lots": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "object",
+              "properties": {
+                "open_lot_id": {
+                  "type": "string",
+                  "description": "open_lot_id of the open tax lot to sell, from get_equity_tax_lots."
+                },
+                "quantity": {
+                  "type": "string",
+                  "description": "Shares to sell from this lot as a decimal string; at most the lot's quantity_available."
+                }
+              },
+              "required": [
+                "open_lot_id",
+                "quantity"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Optional specified-lot selection for a SELL order. To sell specific tax lots instead of the default FIFO cost basis, pass the exact lots as {open_lot_id, quantity} objects, where open_lot_id comes from get_equity_tax_lots and the quantities sum to the order quantity. Omit for default FIFO. Sell only; at most 30 lots; US accounts only. Not allowed with dollar_amount, stop_market/stop_limit, all_day_hours, or fractional-share limit orders."
+          },
+          "ref_id": {
+            "type": "string",
+            "description": "Idempotency key (UUID). Generate once per logical order and re-send on retry — the upstream deduplicates by ref_id. Omitting falls back to a server-generated key (loses client↔gateway idempotency)."
+          }
+        },
+        "required": [
+          "account_number",
+          "symbol",
+          "side",
+          "type"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "place_option_order",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "account_number": {
+            "type": "string",
+            "description": "Brokerage account number. Must come from the user or be clearly implied — never default from get_accounts. Must be agentic_allowed=true."
+          },
+          "legs": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "object",
+              "properties": {
+                "option_id": {
+                  "type": "string",
+                  "description": "Option instrument UUID (from get_option_instruments)."
+                },
+                "side": {
+                  "type": "string",
+                  "description": "'buy' or 'sell'."
+                },
+                "position_effect": {
+                  "type": "string",
+                  "description": "'open' (new position) or 'close' (existing position). To close a long use sell; to close a short use buy."
+                },
+                "ratio_quantity": {
+                  "type": "integer",
+                  "description": "Contracts for this leg per unit of the order's quantity. Defaults to 1, which is what standard spreads, condors, calendars, and rolls use. Must be 1 on a single-leg order; across legs the ratios must be in lowest terms (1:2, not 2:4)."
+                }
+              },
+              "required": [
+                "option_id",
+                "side",
+                "position_effect"
+              ],
+              "additionalProperties": false
+            },
+            "description": "1 to 4 legs, all on the same underlying and each a different contract. Several legs are filled together as one strategy. Should match the legs the user reviewed."
+          },
+          "direction": {
+            "type": "string",
+            "description": "Net direction of the whole order: 'debit' (you pay the net premium) or 'credit' (you receive it). Required with 2 or more legs; for one leg it is derived from that leg's side, so omit it."
+          },
+          "type": {
+            "type": "string",
+            "description": "'limit' (default), 'market', 'stop_limit', or 'stop_market'. Should match the type the user reviewed. Only 'limit' is available with 2 or more legs."
+          },
+          "quantity": {
+            "type": "string",
+            "description": "Positive integer contract count. With several legs it counts whole strategies — each leg fills quantity × its ratio_quantity contracts."
+          },
+          "price": {
+            "type": "string",
+            "description": "Limit price. Per contract for one leg; with several legs it is the net premium of the whole strategy per unit of quantity, always positive — direction says whether it is paid or received. Required for limit/stop_limit; must be omitted for market/stop_market."
+          },
+          "stop_price": {
+            "type": "string",
+            "description": "Stop trigger price per contract. Required for stop_limit/stop_market; must be omitted for limit/market."
+          },
+          "time_in_force": {
+            "type": "string",
+            "description": "'gfd' (default) or 'gtc'. Market orders must be 'gfd'."
+          },
+          "market_hours": {
+            "type": "string",
+            "description": "'regular_hours' (default), 'regular_curb_hours', or 'regular_curb_overnight_hours'. Non-limit-immediate orders only place in regular_hours. CURB requires an index chain with extended_hours_state='enabled'."
+          },
+          "ref_id": {
+            "type": "string",
+            "description": "Idempotency key (UUID). Generate once per logical order and re-send on retry. Omitting falls back to a server-generated key."
+          }
+        },
+        "required": [
+          "account_number",
+          "legs",
+          "quantity"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "preview_crypto_order",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "rhs_account_number": {
+            "type": "string",
+            "description": "Numeric brokerage account number (the 'rhs_account_number' field on get_accounts entries — distinct from the alphanumeric 'account_number'). Must be an agentic-enabled crypto account. Required. Do NOT pass rhc_account_number (the linked crypto account, labeled 'Crypto Account' on get_accounts) — that is a different identifier space and will return no crypto account found."
+          },
+          "symbol": {
+            "type": "string",
+            "description": "Crypto symbol (e.g. 'BTC', 'ETH', or 'BTC-USD'). Resolved to a currency pair before the preview. Required."
+          },
+          "side": {
+            "type": "string",
+            "description": "'buy' or 'sell'. Required."
+          },
+          "type": {
+            "type": "string",
+            "description": "'market', 'limit', 'stop_loss', or 'stop_limit'. Required. 'stop_loss' is a stop-triggered market order — despite the name it applies to buy stops too; the equity/option tools call the same concept 'stop_market'. ALWAYS call these by their app names when speaking to the user, including when listing what types are supported: 'stop_loss' is a 'stop order' and 'stop_limit' a 'stop limit order'; the raw values are tool inputs only. A user asking for a 'stop loss', 'stop order', or 'stop market' order means this stop_loss type — do not ask which stop type (but a limit price given alongside the trigger makes it stop_limit); ask only when the phrasing names no type, e.g. a bare 'stop' or 'protect my position'."
+          },
+          "quantity": {
+            "type": "string",
+            "description": "Asset quantity to trade (e.g. amount of BTC). Provide exactly one of quantity or dollar_amount. Crypto is measured in coins/units, not shares — when speaking to the user, including order confirmations, NEVER call a crypto quantity 'shares' ('shares' is equity terminology); state the amount of the asset, e.g. '0.001542 ETH'."
+          },
+          "dollar_amount": {
+            "type": "string",
+            "description": "USD notional (e.g. '100.00'). Valid with every order type. Provide exactly one of quantity or dollar_amount. For market, quantity is derived server-side: a buy is sized at the current market price — the same sizing as the app — so the typical debit is ~dollar_amount, with a worst case up to ~1% more if the price moves before execution (the buy collar); a sell is likewise sized at the current market price, so the typical credit is ~dollar_amount, with a worst case up to ~5% less if the price moves before execution (the sell collar). For stop_loss, quantity is derived from dollar_amount at stop_price (the trigger price) when the order is placed, not the live quote — the triggered market order executes near the trigger, so the typical fill notional is ~dollar_amount, with a worst case up to the collar worse (a higher debit for buy stops, a lower credit for sell stops). For limit and stop_limit, quantity is derived from dollar_amount at limit_price when the order is placed — fills execute at the limit price or better, so a buy's debit is capped at dollar_amount (no collar buffer; on fee-priced accounts fee rounding can add at most one cent) and a sell's credit is at least the derived quantity's worth at the limit, minus any fee. On fee-priced accounts a buy's quantity is sized from the fee-netted amount so the total debit targets dollar_amount, and a sell's fee is deducted from the credit."
+          },
+          "limit_price": {
+            "type": "string",
+            "description": "Limit price; required for limit and stop_limit."
+          },
+          "stop_price": {
+            "type": "string",
+            "description": "Stop trigger price; required for stop_loss and stop_limit."
+          },
+          "time_in_force": {
+            "type": "string",
+            "description": "Allowed values depend on type. market and limit: 'gtc' (good till canceled) only — market orders execute immediately so a bounded duration does not apply, and limit orders are always for 90 days; omit this field or pass 'gtc' for both. stop_loss and stop_limit: 'gtc' (good for 90 days), 'gfd' (good for day), 'gfw' (good for 7 days), or 'gfm' (good for 30 days). If omitted, defaults to gtc for market and limit, and gfd for stop_loss and stop_limit. 'ioc' is NEVER supported for crypto orders."
+          },
+          "tax_lots": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "object",
+              "properties": {
+                "open_lot_id": {
+                  "type": "string",
+                  "description": "open_lot_id of the open tax lot to sell, from get_crypto_tax_lots."
+                },
+                "quantity": {
+                  "type": "string",
+                  "description": "Units to sell from this lot as a decimal string; at most the lot's quantity_available (or exactly quantity_to_sell from a strategy result)."
+                }
+              },
+              "required": [
+                "open_lot_id",
+                "quantity"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Optional specified-lot selection for a SELL order. To sell specific tax lots instead of the default disposal, pass {open_lot_id, quantity} objects whose quantities sum to the order quantity, with open_lot_id taken from the account's crypto tax lots (see the request guide). Omit for the default. Sell only; quantity-based orders only (not dollar_amount); at most 50 lots; only when the lot listing reports selection_state 'enabled'. Not every account can select lots: if the tool rejects tax_lots as not available, tell the user and offer the default disposal instead."
+          }
+        },
+        "required": [
+          "rhs_account_number",
+          "symbol",
+          "side",
+          "type"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "preview_scan",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "filters": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "object",
+              "properties": {
+                "filter_type": {
+                  "type": "string",
+                  "description": "Wire-format enum name, e.g. \"FILTER_TYPE_RSI\". See the scanner-filter-specs resource for valid values. Omit when supplying expression."
+                },
+                "predicate": {
+                  "type": "string",
+                  "description": "Wire-format enum name, e.g. \"PREDICATE_GREATER_THAN\". See the scanner-filter-specs resource for the predicates supported by each filter."
+                },
+                "values": {
+                  "type": [
+                    "null",
+                    "array"
+                  ],
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Threshold values. Single-element for unary predicates, two-element for BETWEEN, multi-element for IN_LIST/ANY_OF. For a boolean expression screen, exactly [\"True\"]."
+                },
+                "interval": {
+                  "type": "string",
+                  "description": "Time granularity for time-series filters (e.g. \"1d\"). Use one of the supported_intervals from the filter's scanner-filter-specs entry. Not used with expression — encode granularity inside the expression."
+                },
+                "length": {
+                  "type": "integer",
+                  "description": "Lookback length for filters that need one (e.g. RSI period of 14). Use one of the supported_lengths from the filter's scanner-filter-specs entry. Not used with expression.",
+                  "minimum": -2147483648,
+                  "maximum": 2147483647
+                },
+                "plot": {
+                  "type": "string",
+                  "description": "Plot / price-field input for filters that have one (e.g. \"open\" or \"close\" for % Change). Use one of the supported_plots from the filter's scanner-filter-specs entry. Not used with expression."
+                },
+                "expression": {
+                  "type": "string",
+                  "description": "Raw market-data expression to screen on, e.g. \"dayVolume / volumeAvg(candleCount=30, candlePeriod=\\\"1d\\\", session=\\\"all\\\")\" with a numeric predicate, or a whole comparison like \"tradeAllDay.price > closeAvg(candleCount=50, candlePeriod=\\\"1d\\\", session=\\\"all\\\")\" with predicate \"=\" and values [\"True\"]. Accepted by preview_scan (validate without saving) and create_scan (save); update_scan_filters rejects expressions — to change an expression filter on a saved scan, call create_scan with that scan's scan_id and the full filter set (a new configuration version is appended; earlier versions are preserved). Omit filter_type when set. Prefer an enum filter_type whenever one covers the request."
+                },
+                "display_title": {
+                  "type": "string",
+                  "description": "Optional short label for an expression filter, shown as the results-column header (e.g. \"Relative volume (30D)\"). Only used with expression."
+                }
+              },
+              "required": [
+                "predicate",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Filters to evaluate, enum-based and/or expression-based. Enum filter: filter_type from get_scanner_filter_specs plus predicate/values and optional interval/length/plot. Expression filter: expression (omit filter_type) plus predicate/values and an optional display_title. At least one filter is required."
+          },
+          "columns": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "object",
+              "properties": {
+                "display_name": {
+                  "type": "string",
+                  "description": "Column header, and the column's identity: matching an existing column's name (case-insensitively) customizes that column instead of adding a duplicate, and two columns cannot share a name. A filter with non-default interval/length names its column with those parameters (e.g. a 5-minute RSI filter's column is \"RSI (14, 5M)\") — matching it requires that exact name; a bare \"RSI\" next to it adds a separate, default-parameters RSI column. Without expression, must name a standard column (e.g. \"Market cap\", \"RSI\", \"Volume\") — an unknown name is rejected with the full list of valid ones."
+                },
+                "expression": {
+                  "type": "string",
+                  "description": "Raw market-data expression computing the column's value, built from get_scanner_datapoints (same language as expression filters), e.g. \"optionsPutDayVolume / optionsCallDayVolume\". Omit to reference a standard column by display_name alone. If the expression equals a standard column's canonical form, the column is saved as that standard column and display_name is REPLACED by its canonical name (e.g. \"optionsPutDayVolume\" always saves as \"Total put volume\")."
+                },
+                "visible": {
+                  "type": [
+                    "null",
+                    "boolean"
+                  ],
+                  "description": "Whether the column shows in results. When omitted, a NEW column is visible, but a column customizing an existing filter-created column keeps that column's current visibility (some filter columns are deliberately hidden) — pass an explicit value to change it. A hidden column is still computed and saved."
+                },
+                "order": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ],
+                  "description": "Relative ordering among the columns passed in this call: lower comes first, columns without an order go last in the order given. The scan's standard default columns (Symbol, Name, price, Volume, ...) always come before these.",
+                  "minimum": -2147483648,
+                  "maximum": 2147483647
+                }
+              },
+              "required": [
+                "display_name"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Optional result columns to display on top of what the filters and the standard default columns already show. Each column: display_name plus either an expression (raw market-data expression from get_scanner_datapoints) or nothing (a standard column referenced by name, e.g. \"Market cap\"). Columns display values, filters screen — to show a datapoint without restricting results, add a column here, never a no-op filter (e.g. >= 0)."
+          }
+        },
+        "required": [
+          "filters"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "remove_from_watchlist",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "list_id": {
+            "type": "string",
+            "description": "UUID of the watchlist to remove items from."
+          },
+          "symbols": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "Stock symbols to remove (e.g. ['AAPL']). Mutually exclusive with currency_pair_ids and index_ids."
+          },
+          "currency_pair_ids": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "Currency-pair UUIDs to remove. Mutually exclusive with symbols and index_ids."
+          },
+          "index_ids": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "Index UUIDs to remove. Mutually exclusive with symbols and currency_pair_ids."
+          }
+        },
+        "required": [
+          "list_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "remove_option_from_watchlist",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "option_ids": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "Option contract UUIDs to remove. The position_type must match how each contract was added (most likely \"long\")."
+          },
+          "position_type": {
+            "type": "string",
+            "description": "\"long\" (default) or \"short\". Must match how the contract was originally added."
+          }
+        },
+        "required": [
+          "option_ids"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "review_equity_order",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "account_number": {
+            "type": "string",
+            "description": "Brokerage account number. Must come from the user or be clearly implied — never default from get_accounts. Must be agentic_allowed=true; non-agentic accounts are rejected."
+          },
+          "symbol": {
+            "type": "string",
+            "description": "Stock symbol."
+          },
+          "side": {
+            "type": "string",
+            "description": "'buy' or 'sell'."
+          },
+          "type": {
+            "type": "string",
+            "description": "'market', 'limit', 'stop_market', or 'stop_limit'."
+          },
+          "quantity": {
+            "type": "string",
+            "description": "Number of shares. Decimals (fractional) allowed for market + regular_hours only."
+          },
+          "dollar_amount": {
+            "type": "string",
+            "description": "USD notional (e.g. '100.00'). Only valid with type=market."
+          },
+          "limit_price": {
+            "type": "string",
+            "description": "Limit price; required for limit or stop_limit."
+          },
+          "stop_price": {
+            "type": "string",
+            "description": "Stop trigger price; required for stop_market or stop_limit."
+          },
+          "time_in_force": {
+            "type": "string",
+            "description": "'gfd' (good for day) or 'gtc' (good till cancelled). Default: gfd."
+          },
+          "market_hours": {
+            "type": "string",
+            "description": "'regular_hours' (default, 9:30–16:00 ET), 'extended_hours' (pre-/post-market), or 'all_day_hours' (the 24 Hour Market / overnight session). extended_hours and all_day_hours execute limit orders only — market, stop_market, and stop_limit are regular_hours-only and are rejected if tagged to another session."
+          },
+          "tax_lots": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "object",
+              "properties": {
+                "open_lot_id": {
+                  "type": "string",
+                  "description": "open_lot_id of the open tax lot to sell, from get_equity_tax_lots."
+                },
+                "quantity": {
+                  "type": "string",
+                  "description": "Shares to sell from this lot as a decimal string; at most the lot's quantity_available."
+                }
+              },
+              "required": [
+                "open_lot_id",
+                "quantity"
+              ],
+              "additionalProperties": false
+            },
+            "description": "Optional specified-lot selection for a SELL order. To sell specific tax lots instead of the default FIFO cost basis, pass the exact lots as {open_lot_id, quantity} objects, where open_lot_id comes from get_equity_tax_lots and the quantities sum to the order quantity. Omit for default FIFO. Sell only; at most 30 lots; US accounts only. Not allowed with dollar_amount, stop_market/stop_limit, all_day_hours, or fractional-share limit orders."
+          }
+        },
+        "required": [
+          "account_number",
+          "symbol",
+          "side",
+          "type"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "review_option_order",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "account_number": {
+            "type": "string",
+            "description": "Brokerage account number. Must come from the user or be clearly implied — never default from get_accounts. Must be agentic_allowed=true."
+          },
+          "legs": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "object",
+              "properties": {
+                "option_id": {
+                  "type": "string",
+                  "description": "Option instrument UUID (from get_option_instruments)."
+                },
+                "side": {
+                  "type": "string",
+                  "description": "'buy' or 'sell'."
+                },
+                "position_effect": {
+                  "type": "string",
+                  "description": "'open' (new position) or 'close' (existing position). To close a long use sell; to close a short use buy."
+                },
+                "ratio_quantity": {
+                  "type": "integer",
+                  "description": "Contracts for this leg per unit of the order's quantity. Defaults to 1, which is what standard spreads, condors, calendars, and rolls use. Must be 1 on a single-leg order; across legs the ratios must be in lowest terms (1:2, not 2:4)."
+                }
+              },
+              "required": [
+                "option_id",
+                "side",
+                "position_effect"
+              ],
+              "additionalProperties": false
+            },
+            "description": "1 to 4 legs, all on the same underlying and each a different contract. Several legs are filled together as one strategy."
+          },
+          "direction": {
+            "type": "string",
+            "description": "Net direction of the whole order: 'debit' (you pay the net premium) or 'credit' (you receive it). Required with 2 or more legs; for one leg it is derived from that leg's side, so omit it."
+          },
+          "type": {
+            "type": "string",
+            "description": "'limit' (default), 'market', 'stop_limit', or 'stop_market'. Only 'limit' is available with 2 or more legs."
+          },
+          "quantity": {
+            "type": "string",
+            "description": "Positive integer contract count. With several legs it counts whole strategies — each leg fills quantity × its ratio_quantity contracts."
+          },
+          "price": {
+            "type": "string",
+            "description": "Limit price (e.g. '1.50'). Per contract for one leg; with several legs it is the net premium of the whole strategy per unit of quantity, always positive — direction says whether it is paid or received. Required for limit/stop_limit; must be omitted for market/stop_market."
+          },
+          "stop_price": {
+            "type": "string",
+            "description": "Stop trigger price per contract. Required for stop_limit/stop_market; must be omitted for limit/market. For sell-side stop_market, must be below the current ask."
+          },
+          "time_in_force": {
+            "type": "string",
+            "description": "'gfd' (default) or 'gtc'. Market orders must be 'gfd'."
+          },
+          "market_hours": {
+            "type": "string",
+            "description": "'regular_hours' (default), 'regular_curb_hours', or 'regular_curb_overnight_hours'. Extended-hours sessions only accept limit+immediate. CURB requires an index chain with extended_hours_state='enabled' (per get_option_chains); rejection surfaces at place time."
+          },
+          "chain_symbol": {
+            "type": "string",
+            "description": "Underlying ticker (e.g. 'AAPL', 'SPXW'). Supply alongside underlying_type to include fees and collateral in the response — always do so when known."
+          },
+          "underlying_type": {
+            "type": "string",
+            "description": "'equity' or 'index'. Required alongside chain_symbol to enable the fee + collateral fetch."
+          }
+        },
+        "required": [
+          "account_number",
+          "legs",
+          "quantity"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "run_scan",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "scan_id": {
+            "type": "string",
+            "description": "The scan identifier to execute. Get this from get_scans or create_scan."
+          }
+        },
+        "required": [
+          "scan_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "search",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Natural-language search query: company name, partial name, or ticker (e.g. \"apple\", \"tesla motors\", \"AAPL\"). Required."
+          },
+          "asset_type": {
+            "type": "string",
+            "description": "Asset category to search. Supported: \"instrument\" (US-listed stocks/ETFs), \"currency_pair\" (crypto pairs like BTC-USD), and \"market_index\" (e.g. SPX, NDX, DJI). Defaults to \"instrument\" when omitted. More categories (events, futures) will be added as their corresponding tools land."
+          },
+          "limit": {
+            "type": "integer",
+            "description": "Max results to return. Defaults to 10; clamped to 20."
+          }
+        },
+        "required": [
+          "query"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "unfollow_watchlist",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "list_id": {
+            "type": "string",
+            "description": "UUID of the Robinhood-curated list to unfollow."
+          }
+        },
+        "required": [
+          "list_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "update_alert",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "alert_id": {
+            "type": "string",
+            "description": "The alert to change — take it from get_alerts or create_alert; never construct one."
+          },
+          "enabled": {
+            "type": [
+              "null",
+              "boolean"
+            ],
+            "description": "Set false to pause the alert or true to re-enable it. Omitted = unchanged."
+          },
+          "condition_type": {
+            "type": "string",
+            "description": "New condition for the alert — same vocabulary as create_alert. Omitted = unchanged."
+          },
+          "threshold": {
+            "type": "string",
+            "description": "New trigger price or target indicator value, as a decimal string. Omitted = unchanged."
+          },
+          "indicator": {
+            "type": [
+              "null",
+              "object"
+            ],
+            "properties": {
+              "period": {
+                "type": "integer",
+                "description": "Lookback window in bars. Required for sma/ema/rsi/boll conditions.",
+                "minimum": -2147483648,
+                "maximum": 2147483647
+              },
+              "interval_secs": {
+                "type": "integer",
+                "description": "Bar size in seconds — one of 300 (5m), 600 (10m), 3600 (1h), 86400 (1d), 604800 (1w), or 2592000 (30d). Required for every indicator condition; vwap conditions support 300 only.",
+                "minimum": -2147483648,
+                "maximum": 2147483647
+              },
+              "fast_period": {
+                "type": "integer",
+                "description": "macd only: fast EMA period (commonly 12).",
+                "minimum": -2147483648,
+                "maximum": 2147483647
+              },
+              "slow_period": {
+                "type": "integer",
+                "description": "macd only: slow EMA period (commonly 26).",
+                "minimum": -2147483648,
+                "maximum": 2147483647
+              },
+              "signal_period": {
+                "type": "integer",
+                "description": "macd only: signal-line EMA period (commonly 9).",
+                "minimum": -2147483648,
+                "maximum": 2147483647
+              },
+              "std_dev": {
+                "type": "number",
+                "description": "boll only: number of standard deviations for the bands (commonly 2)."
+              },
+              "ma_type": {
+                "type": "string",
+                "description": "boll only: which moving average the bands are built on — sma or ema."
+              }
+            },
+            "description": "New indicator configuration — replaces the stored one wholesale, so send the complete configuration when provided. Omitted = unchanged.",
+            "required": [
+              "interval_secs"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "alert_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "update_scan_config",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "scan_id": {
+            "type": "string",
+            "description": "The scan to modify. Get this from get_scans or create_scan. Cortex-managed scans are rejected."
+          },
+          "sorting_column": {
+            "type": "string",
+            "description": "Display name of the column to sort by (e.g. \"Volume\", \"% Change\", \"RSI\"). Must match a column on the scan — call get_scans / run_scan first to see available columns. Required unless columns is provided."
+          },
+          "sorting_direction": {
+            "type": "string",
+            "description": "\"asc\" or \"desc\" (ascending or descending). Required with sorting_column."
+          },
+          "columns": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "object",
+              "properties": {
+                "display_name": {
+                  "type": "string",
+                  "description": "Column header, and the column's identity: matching an existing column's name (case-insensitively) customizes that column instead of adding a duplicate, and two columns cannot share a name. A filter with non-default interval/length names its column with those parameters (e.g. a 5-minute RSI filter's column is \"RSI (14, 5M)\") — matching it requires that exact name; a bare \"RSI\" next to it adds a separate, default-parameters RSI column. Without expression, must name a standard column (e.g. \"Market cap\", \"RSI\", \"Volume\") — an unknown name is rejected with the full list of valid ones."
+                },
+                "expression": {
+                  "type": "string",
+                  "description": "Raw market-data expression computing the column's value, built from get_scanner_datapoints (same language as expression filters), e.g. \"optionsPutDayVolume / optionsCallDayVolume\". Omit to reference a standard column by display_name alone. If the expression equals a standard column's canonical form, the column is saved as that standard column and display_name is REPLACED by its canonical name (e.g. \"optionsPutDayVolume\" always saves as \"Total put volume\")."
+                },
+                "visible": {
+                  "type": [
+                    "null",
+                    "boolean"
+                  ],
+                  "description": "Whether the column shows in results. When omitted, a NEW column is visible, but a column customizing an existing filter-created column keeps that column's current visibility (some filter columns are deliberately hidden) — pass an explicit value to change it. A hidden column is still computed and saved."
+                },
+                "order": {
+                  "type": [
+                    "null",
+                    "integer"
+                  ],
+                  "description": "Relative ordering among the columns passed in this call: lower comes first, columns without an order go last in the order given. The scan's standard default columns (Symbol, Name, price, Volume, ...) always come before these.",
+                  "minimum": -2147483648,
+                  "maximum": 2147483647
+                }
+              },
+              "required": [
+                "display_name"
+              ],
+              "additionalProperties": false
+            },
+            "description": "REPLACE the scan's extra result columns (the ones beyond what its filters and the standard defaults contribute): the scan keeps its current filters verbatim and gets a new configuration version whose extra columns are exactly this list. To add one column, read the scan's current columns with get_scans and pass the complete intended set, carrying visible: false for any column get_scans shows as hidden (a hidden extra column re-sent without it becomes visible). Omitted or empty means sorting-only, columns untouched; to remove every extra column, use create_scan with this scan's scan_id and its current filters. Each column: display_name plus either an expression (from get_scanner_datapoints) or nothing (a standard column referenced by name, e.g. \"Market cap\")."
+          }
+        },
+        "required": [
+          "scan_id"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "update_scan_filters",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "scan_id": {
+            "type": "string",
+            "description": "The scan to modify. Get this from get_scans or create_scan. Cortex-managed scans (cortex_managed: true in get_scans output) are rejected."
+          },
+          "filters": {
+            "type": [
+              "null",
+              "array"
+            ],
+            "items": {
+              "type": "object",
+              "properties": {
+                "filter_type": {
+                  "type": "string",
+                  "description": "Wire-format enum name, e.g. \"FILTER_TYPE_RSI\". See the scanner-filter-specs resource for valid values. Omit when supplying expression."
+                },
+                "predicate": {
+                  "type": "string",
+                  "description": "Wire-format enum name, e.g. \"PREDICATE_GREATER_THAN\". See the scanner-filter-specs resource for the predicates supported by each filter."
+                },
+                "values": {
+                  "type": [
+                    "null",
+                    "array"
+                  ],
+                  "items": {
+                    "type": "string"
+                  },
+                  "description": "Threshold values. Single-element for unary predicates, two-element for BETWEEN, multi-element for IN_LIST/ANY_OF. For a boolean expression screen, exactly [\"True\"]."
+                },
+                "interval": {
+                  "type": "string",
+                  "description": "Time granularity for time-series filters (e.g. \"1d\"). Use one of the supported_intervals from the filter's scanner-filter-specs entry. Not used with expression — encode granularity inside the expression."
+                },
+                "length": {
+                  "type": "integer",
+                  "description": "Lookback length for filters that need one (e.g. RSI period of 14). Use one of the supported_lengths from the filter's scanner-filter-specs entry. Not used with expression.",
+                  "minimum": -2147483648,
+                  "maximum": 2147483647
+                },
+                "plot": {
+                  "type": "string",
+                  "description": "Plot / price-field input for filters that have one (e.g. \"open\" or \"close\" for % Change). Use one of the supported_plots from the filter's scanner-filter-specs entry. Not used with expression."
+                },
+                "expression": {
+                  "type": "string",
+                  "description": "Raw market-data expression to screen on, e.g. \"dayVolume / volumeAvg(candleCount=30, candlePeriod=\\\"1d\\\", session=\\\"all\\\")\" with a numeric predicate, or a whole comparison like \"tradeAllDay.price > closeAvg(candleCount=50, candlePeriod=\\\"1d\\\", session=\\\"all\\\")\" with predicate \"=\" and values [\"True\"]. Accepted by preview_scan (validate without saving) and create_scan (save); update_scan_filters rejects expressions — to change an expression filter on a saved scan, call create_scan with that scan's scan_id and the full filter set (a new configuration version is appended; earlier versions are preserved). Omit filter_type when set. Prefer an enum filter_type whenever one covers the request."
+                },
+                "display_title": {
+                  "type": "string",
+                  "description": "Optional short label for an expression filter, shown as the results-column header (e.g. \"Relative volume (30D)\"). Only used with expression."
+                }
+              },
+              "required": [
+                "predicate",
+                "values"
+              ],
+              "additionalProperties": false
+            },
+            "description": "The complete set of filters the scan should have after the update. REPLACE semantics — to add a filter, supply all existing filters plus the new one. To remove a filter, omit it from the array. To clear all filters, send []. Each filter: filter_type (FILTER_TYPE_... enum), predicate (>, <, =, BETWEEN, etc.), values, optional interval (e.g. 1d), optional length (e.g. 14 for RSI). Call get_scanner_filter_specs first for valid filter_type / predicate / interval / length combinations."
+          }
+        },
+        "required": [
+          "scan_id",
+          "filters"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "name": "update_watchlist",
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "list_id": {
+            "type": "string",
+            "description": "UUID of the watchlist to update. Obtain from get_watchlists."
+          },
+          "display_name": {
+            "type": "string",
+            "description": "New name for the watchlist."
+          },
+          "icon_emoji": {
+            "type": "string",
+            "description": "New emoji."
+          },
+          "display_description": {
+            "type": "string",
+            "description": "New description."
+          }
+        },
+        "required": [
+          "list_id"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ]
+}

@@ -11,9 +11,10 @@
 //   2. A halt in external mode moves every open order to PendingCancel at the bridge but (before
 //      this PR) minted no approval for it, so the gateway had no signed authorization to actually
 //      cancel it at the broker -- real-bridge-halts.test.ts's own header comment flagged this
-//      exact gap. This test places several orders, kills the bridge, and proves the heartbeat
-//      drains protocol v1.2.1's `pending_cancels` and finishes every cancel at the mock broker,
-//      exactly once per order, deterministically across two independent runs.
+//      exact gap. This test lets an order rest at the mock broker (an emulated IOC with a long
+//      rest window, so only the halt can end it), kills the bridge, and proves the heartbeat
+//      drains protocol v1.2.1's `pending_cancels` and finishes the cancel at the mock broker,
+//      exactly once, deterministically across two independent runs.
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -30,7 +31,7 @@ import { ledgerSha256RedactingApprovalSignatures } from "../src/ledger.js";
 import { runLoop } from "../src/loop.js";
 import { resolveRealBridgeBin } from "../src/testkit/real-bridge-bin.js";
 import { writeRealBridgeFixtures } from "../src/testkit/real-bridge-fixtures.js";
-import { createMockRobinhoodServer } from "../src/testkit/mock-robinhood-mcp.js";
+import { createMockRobinhoodServer, MOCK_ACCOUNT_NUMBER } from "../src/testkit/mock-robinhood-mcp.js";
 
 /** A decider whose decide() call never resolves -- standing in for a live LLM call that hangs,
  *  or any other stuck decision loop. Deliberately not awaited by its caller in either test below:
@@ -61,7 +62,7 @@ interface Harness {
  *  fast heartbeat interval added for these tests. */
 async function startHarness(
   dir: string,
-  opts: { journalPath: string; scenarios?: Record<string, "accepted"> },
+  opts: { journalPath: string; scenarios?: Record<string, "accepted">; iocCancelAfterMs?: number },
 ): Promise<Harness & { external: Awaited<ReturnType<typeof createExternalModeGateway>> }> {
   const fixtures = writeRealBridgeFixtures(path.join(dir, "fixtures"));
   const killFile = path.join(dir, "kill");
@@ -102,7 +103,9 @@ async function startHarness(
     mcp,
     assetClass: "equity",
     instrument: "1",
+    accountNumber: MOCK_ACCOUNT_NUMBER,
     journalPath: opts.journalPath,
+    iocCancelAfterMs: opts.iocCancelAfterMs,
     heartbeatIntervalMs: 25,
   });
 
@@ -173,13 +176,15 @@ describe("heartbeat finishes halt-triggered cancels at the real broker (issue #4
     const journalPath = path.join(dir, "broker-journal.jsonl");
     const harness = await startHarness(dir, {
       journalPath,
-      // Every order stays "accepted" (resting, unfilled) at the mock broker -- if any filled or
-      // was rejected there'd be nothing left open for the kill to need to cancel.
-      scenarios: { "1": "accepted", "2": "accepted", "3": "accepted", "4": "accepted" },
+      // The first order rests unfilled; its emulated-IOC rest is far longer than the test, so
+      // only the halt's cancel can end it.
+      scenarios: { "1": "accepted" },
+      iocCancelAfterMs: 600_000,
     });
 
     try {
-      const counts = await runLoop({
+      harness.external.heartbeat.start();
+      const loop = runLoop({
         bridge: harness.bridge,
         decider: new FakeDecider({ probThreshold: 0.5 }),
         mode: "fake",
@@ -192,10 +197,12 @@ describe("heartbeat finishes halt-triggered cancels at the real broker (issue #4
           reconcile: harness.external.reconcile,
           reconcileEveryNDecisions: 1_000, // only the startup reconcile matters for this test
         },
-      });
-      expect(counts.accepted).toBe(4); // sanity: all 4 orders open at the broker, none resolved yet
+      }).catch(() => undefined); // after the halt the loop may stop on a refused decision
 
-      harness.external.heartbeat.start();
+      const restingBy = Date.now() + 5_000;
+      while (Date.now() < restingBy && ((await harness.bridge.status()).status?.open_orders ?? []).length === 0) {
+        await new Promise((resolve) => setTimeout(resolve, 10));
+      }
       writeFileSync(harness.killFile, "");
 
       const deadline = Date.now() + 5_000;
@@ -210,6 +217,7 @@ describe("heartbeat finishes halt-triggered cancels at the real broker (issue #4
         await new Promise((resolve) => setTimeout(resolve, 20));
       }
       expect(allClosed).toBe(true);
+      await loop;
 
       return {
         ledgerSha256: ledgerSha256RedactingApprovalSignatures(ledgerPath),
@@ -221,12 +229,12 @@ describe("heartbeat finishes halt-triggered cancels at the real broker (issue #4
     }
   }
 
-  it("cancels every open order at the broker within the timeout, exactly once each, deterministically across two runs", async () => {
+  it("cancels the resting order at the broker within the timeout, exactly once, deterministically across two runs", async () => {
     const first = await runKillScenario("1");
     const second = await runKillScenario("2");
 
-    expect(first.cancelCalls).toBe(4);
-    expect(second.cancelCalls).toBe(4);
+    expect(first.cancelCalls).toBe(1);
+    expect(second.cancelCalls).toBe(1);
     expect(second.ledgerSha256).toBe(first.ledgerSha256);
     expect(second.journalSha256).toBe(first.journalSha256);
   }, 30_000);

@@ -257,6 +257,15 @@ record-quotes *args:
 robinhood-schema-check *args:
     cd {{agent}} && node_modules/.bin/tsx src/broker/schema-check-cli.ts {{args}}
 
+# Issue #26: calls only get_accounts, get_equity_positions, get_equity_orders, get_equity_quotes
+# and get_equity_price_book (allowlist enforced in code and by test), writes response SHAPES only
+# (keys + JSON types, every value redacted) to out/robinhood/shapes-<date>.json, and prints each
+# symbol's last-trade price. Default is the in-process mock; `--target real` needs
+# ROBINHOOD_MCP_URL, QC_ROBINHOOD_ACCOUNT_NUMBER and a prior `just robinhood-login`.
+# `--symbols SPY,SPLG` overrides the default candidate list.
+robinhood-probe-readonly *args:
+    cd {{agent}} && node_modules/.bin/tsx src/broker/probe-readonly.ts {{args}}
+
 # Signs in to the Robinhood trading MCP at ROBINHOOD_MCP_URL (required) in the desktop browser
 # (OAuth 2.1 + PKCE via @modelcontextprotocol/sdk), stores the sign-in 0600 outside the repo at
 # ~/.config/fall_forward_labs/robinhood-oauth.json (QC_ROBINHOOD_TOKEN_PATH overrides), then only

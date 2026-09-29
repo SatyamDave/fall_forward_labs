@@ -11,6 +11,7 @@ import { BrokerGateway, type GatewayConfig } from "./gateway.js";
 import { Heartbeat } from "./heartbeat.js";
 import { reconcileWithBroker } from "./reconcile.js";
 import type { McpClient } from "./mcp-client.js";
+import { UnsupportedAssetClassError, verifyAgenticAccount } from "./robinhood.js";
 import type { AssetClass } from "./types.js";
 import type { BridgeClient } from "../bridge.js";
 
@@ -19,7 +20,10 @@ export interface ExternalModeDeps {
   mcp: McpClient;
   assetClass: AssetClass;
   instrument: string;
+  /** robinhood.ts's accountNumberFromEnv(); verified agentic_allowed=true before anything else. */
+  accountNumber: string;
   journalPath?: string;
+  iocCancelAfterMs?: number;
   /** Passed through to reconcileWithBroker's statusPath (preflight's reconcile_recent gate). */
   reconcileStatusPath?: string;
   requestTimeoutMs?: number;
@@ -51,9 +55,13 @@ export interface ExternalMode {
  * bridge's market clock (`marketNowNs()`) for approval expiry, and `reconcileWithBroker()`
  * triggered on every ambiguous broker response. Throws if the bridge reports venue_mode "sim" --
  * this factory is external-mode-only; sim mode needs no gateway at all (the bridge routes
- * straight to SimVenue and never returns an approval to verify).
+ * straight to SimVenue and never returns an approval to verify). Also throws, before the bridge
+ * is asked anything, for a non-equity asset class or an account that get_accounts does not list
+ * with agentic_allowed=true.
  */
 export async function createExternalModeGateway(deps: ExternalModeDeps): Promise<ExternalMode> {
+  if (deps.assetClass !== "equity") throw new UnsupportedAssetClassError(deps.assetClass);
+  await verifyAgenticAccount(deps.mcp, deps.accountNumber, { timeoutMs: deps.requestTimeoutMs });
   const helloResp = await deps.bridge.hello();
   if (!helloResp.ok || !helloResp.hello) {
     throw new Error(`bridge hello failed: ${helloResp.error?.code ?? "unknown"} ${helloResp.error?.message ?? ""}`);
@@ -68,7 +76,9 @@ export async function createExternalModeGateway(deps: ExternalModeDeps): Promise
       mcp: deps.mcp,
       bridge: deps.bridge,
       assetClass: deps.assetClass,
+      accountNumber: deps.accountNumber,
       instrument: deps.instrument,
+      clientOrderIdForRefId: (refId) => gateway.clientOrderIdForRefId(refId),
       callOpts: { timeoutMs: deps.requestTimeoutMs },
       statusPath: deps.reconcileStatusPath,
     });
@@ -77,6 +87,8 @@ export async function createExternalModeGateway(deps: ExternalModeDeps): Promise
     mcp: deps.mcp,
     reporter: deps.bridge,
     approvalPublicKey,
+    accountNumber: deps.accountNumber,
+    iocCancelAfterMs: deps.iocCancelAfterMs,
     now: () => deps.bridge.marketNowNs(),
     requestTimeoutMs: deps.requestTimeoutMs,
     journalPath: deps.journalPath,

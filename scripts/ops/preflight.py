@@ -89,7 +89,9 @@ CAP_KEYS = (
 # ops/live/bin/load-secrets.sh is the one place these names are decided; this list must track
 # that file's `case` statement, not invent a second list. Robinhood issues no static session
 # token: its credential is the OAuth sign-in file checked by check_robinhood_signin below.
-REQUIRED_SECRET_NAMES = ("ANTHROPIC_API_KEY",)
+# QC_ROBINHOOD_ACCOUNT_NUMBER is account data, not a credential, but it is handled like one:
+# agent/src/broker/robinhood.ts refuses to start external mode without it and never logs it.
+REQUIRED_SECRET_NAMES = ("ANTHROPIC_API_KEY", "QC_ROBINHOOD_ACCOUNT_NUMBER")
 
 # Must match agent/src/broker/robinhood-oauth.ts's tokenPath().
 ROBINHOOD_TOKEN_PATH_ENV = "QC_ROBINHOOD_TOKEN_PATH"  # noqa: S105 -- a variable name, not a secret
