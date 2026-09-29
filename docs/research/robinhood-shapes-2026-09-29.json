@@ -1,0 +1,140 @@
+{
+  "target": "real",
+  "probed_at": "2026-09-29T06:21:09.829Z",
+  "calls": [
+    {
+      "tool": "get_accounts",
+      "ok": true,
+      "shape": {
+        "data": {
+          "accounts": [
+            {
+              "account_number": "string",
+              "rhs_account_number": "string",
+              "rhc_account_number": "string",
+              "type": "string",
+              "unsettled_funds": "string",
+              "brokerage_account_type": "string",
+              "is_default": "boolean",
+              "agentic_allowed": "boolean",
+              "option_level": "string",
+              "management_type": "string",
+              "affiliate": "string",
+              "state": "string",
+              "deactivated": "boolean",
+              "permanently_deactivated": "boolean"
+            },
+            {
+              "account_number": "string",
+              "rhs_account_number": "string",
+              "rhc_account_number": "string",
+              "type": "string",
+              "unsettled_funds": "string",
+              "brokerage_account_type": "string",
+              "nickname": "string",
+              "is_default": "boolean",
+              "agentic_allowed": "boolean",
+              "option_level": "string",
+              "management_type": "string",
+              "affiliate": "string",
+              "state": "string",
+              "deactivated": "boolean",
+              "permanently_deactivated": "boolean"
+            }
+          ]
+        },
+        "guide": "string"
+      }
+    },
+    {
+      "tool": "get_equity_positions",
+      "ok": true,
+      "shape": {
+        "data": {
+          "positions": []
+        },
+        "guide": "string"
+      }
+    },
+    {
+      "tool": "get_equity_orders",
+      "ok": true,
+      "shape": {
+        "data": {
+          "orders": []
+        },
+        "guide": "string"
+      }
+    },
+    {
+      "tool": "get_equity_quotes",
+      "ok": true,
+      "shape": {
+        "data": {
+          "results": [
+            {
+              "quote": {
+                "symbol": "string",
+                "last_trade_price": "string",
+                "venue_last_trade_time": "string",
+                "last_non_reg_trade_price": "string",
+                "venue_last_non_reg_trade_time": "string",
+                "adjusted_previous_close": "string",
+                "previous_close": "string",
+                "previous_close_date": "string",
+                "bid_price": "string",
+                "venue_bid_time": "string",
+                "ask_price": "string",
+                "venue_ask_time": "string",
+                "has_traded": "boolean",
+                "state": "string"
+              },
+              "close": {
+                "symbol": "string",
+                "date": "string",
+                "price": "string",
+                "interpolated": "boolean",
+                "source": "string"
+              }
+            }
+          ]
+        },
+        "guide": "string"
+      }
+    },
+    {
+      "tool": "get_equity_price_book",
+      "ok": true,
+      "shape": {
+        "data": {
+          "books": [
+            {
+              "symbol": "string",
+              "updated_at": "string",
+              "asks": [],
+              "bids": []
+            }
+          ]
+        },
+        "guide": "string"
+      }
+    },
+    {
+      "tool": "get_equity_price_book",
+      "ok": true,
+      "shape": {
+        "data": {
+          "books": [
+            {
+              "symbol": "string",
+              "updated_at": "string",
+              "asks": [],
+              "bids": []
+            }
+          ]
+        },
+        "guide": "string"
+      }
+    }
+  ]
+}
