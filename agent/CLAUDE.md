@@ -7,6 +7,7 @@
 ## Commands
 - `just agent-setup`, `just agent-test`, `just agent-sim` (fake mode against tests/replay/sample_day.csv; running it twice must give identical ledger sha256)
 - `QC_AGENT_MODE=fake ...`: no network, no key, what CI runs. `QC_AGENT_MODE=live ...`: needs `ANTHROPIC_API_KEY` and `scripts/ci/ai_gate.py loop-agent-eval` to allow it.
+- `just robinhood-schema-check` (issue #26): the day Agentic access arrives, run `ROBINHOOD_MCP_URL=https://agent.robinhood.com/mcp/trading just robinhood-schema-check --target real`. It sends tools/list only (never a tool call; `tests/broker/schema-check.test.ts` proves it), saves `out/robinhood/tools-<date>.json`, and exits 1 with a list of every tool or parameter `src/broker/robinhood.ts` gets wrong. Without `--target real` it runs against the mock. `mcp-client.ts` has no auth step yet, so if the server demands sign-in the command fails at connect.
 - `just ensemble-compare` (issue #54): single decider vs an N-member ensemble at the exact same total AI usage, over the frozen suite; reports P&L, member agreement, and an ADOPT/DO_NOT_ADOPT verdict. Never wired into the live loop by default — `QC_ENSEMBLE_SIZE`/`QC_ENSEMBLE_AGGREGATION` opt `cli.ts` in.
 
 ## MUST

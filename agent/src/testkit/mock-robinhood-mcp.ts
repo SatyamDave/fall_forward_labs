@@ -41,7 +41,35 @@ export interface MockRobinhoodOptions {
   /** What get_accounts reports as cash. `null` reports no cash field at all (some responses may
    *  omit it). Defaults to a fixed synthetic balance. */
   cash?: string | null;
+  /** Test hook for the schema check (#26): rewrites the tool list ListTools returns, e.g. to
+   *  rename a tool or a parameter and prove the check catches it. */
+  listTools?: (tools: MockTool[]) => MockTool[];
 }
+
+export interface MockTool {
+  name: string;
+  description: string;
+  inputSchema: { type: "object"; properties?: Record<string, object>; required?: string[] };
+}
+
+// SYNTHETIC input schemas, written to match robinhood.ts's own UNVERIFIED placeholder arguments
+// so `just robinhood-schema-check` passes against this mock. They say nothing about Robinhood's
+// real schemas; that comparison is the whole point of running the check against the real server.
+const str = { type: "string" };
+const ORDER_SCHEMA = {
+  type: "object" as const,
+  properties: { symbol: str, side: str, quantity: str, price: str, time_in_force: str, client_order_id: str },
+  required: ["symbol", "side", "quantity"],
+};
+const INPUT_SCHEMAS: Record<string, MockTool["inputSchema"]> = {
+  place: ORDER_SCHEMA,
+  preview: ORDER_SCHEMA,
+  cancel: { type: "object", properties: { symbol: str, client_order_id: str } },
+  status: { type: "object", properties: { client_order_id: str } },
+  symbols: { type: "object", properties: { symbols: { type: "array", items: str } }, required: ["symbols"] },
+  position: { type: "object", properties: { symbol: str } },
+  none: { type: "object", properties: {} },
+};
 
 const PLACE_TOOLS = new Set(["place_equity_order", "place_crypto_order"]);
 const PREVIEW_TOOLS = new Set(["review_equity_order", "preview_crypto_order"]);
@@ -114,22 +142,20 @@ export function createMockRobinhoodServer(opts: MockRobinhoodOptions = {}): Serv
     { capabilities: { tools: {} } },
   );
 
-  server.setRequestHandler(ListToolsRequestSchema, async () => ({
-    tools: [
-      ...PLACE_TOOLS,
-      ...PREVIEW_TOOLS,
-      ...CANCEL_TOOLS,
-      ...STATUS_TOOLS,
-      ...QUOTE_TOOLS,
-      ...BOOK_TOOLS,
-      ...POSITIONS_TOOLS,
-      ...ACCOUNT_TOOLS,
-    ].map((name) => ({
-      name,
-      description: `SYNTHETIC mock of Robinhood's ${name}`,
-      inputSchema: { type: "object" },
-    })),
-  }));
+  const toolGroups: [Set<string>, keyof typeof INPUT_SCHEMAS][] = [
+    [PLACE_TOOLS, "place"],
+    [PREVIEW_TOOLS, "preview"],
+    [CANCEL_TOOLS, "cancel"],
+    [STATUS_TOOLS, "status"],
+    [QUOTE_TOOLS, "symbols"],
+    [BOOK_TOOLS, "symbols"],
+    [POSITIONS_TOOLS, "position"],
+    [ACCOUNT_TOOLS, "none"],
+  ];
+  const tools: MockTool[] = toolGroups.flatMap(([names, schema]) =>
+    [...names].map((name) => ({ name, description: `SYNTHETIC mock of Robinhood's ${name}`, inputSchema: structuredClone(INPUT_SCHEMAS[schema]!) })),
+  );
+  server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools: opts.listTools ? opts.listTools(tools) : tools }));
 
   server.setRequestHandler(CallToolRequestSchema, async (request): Promise<CallToolResult> => {
     const { name, arguments: args = {} } = request.params;
