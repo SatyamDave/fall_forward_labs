@@ -32,9 +32,15 @@ field with the amount charged (https://openrouter.ai/docs/use-cases/usage-accoun
    the ledger's `raw` field. Nothing is retried. qc-risk still re-checks every accepted proposal.
 3. Spend: `cost_usd` is what OpenRouter reports, `"0"` only when it reports zero. When it reports
    nothing, `raw.cost_usd` is `"unknown"` (the ledger schema's `cost_usd` only takes a decimal) and
-   the run continues only for a `:free` model. A positive cost that takes the day's total past
-   `min(QC_OPENROUTER_MAX_USD_PER_DAY, POLICY daily_usd)` stops the loop. The env cap defaults
-   to `0`, and a model id without `:free` is refused at start while that cap is `0`.
+   the run continues only for a model confirmed priced at zero. A positive cost that takes the
+   day's total past `min(QC_OPENROUTER_MAX_USD_PER_DAY, POLICY daily_usd)` stops the loop. The env
+   cap defaults to `0`; while it is `0`, a model id ending `:free` is trusted on its id, and any
+   other id is refused at start unless `resolveOpenRouterConfig` fetches the public
+   `GET https://openrouter.ai/api/v1/models` and finds that id listed with `pricing.prompt`,
+   `pricing.completion`, and every other pricing field exactly `"0"` (the founders picked
+   `stealth/space-bunny-alpha`, priced at zero but without the `:free` suffix, 2026-09-29). A
+   failed fetch, a missing model, or any nonzero field all refuse the same as a paid id -- this
+   check never widens what a `:free` id already gets on its own.
 4. Gate: `ai_gate.py loop-agent-openrouter`, a new `autonomy/POLICY.yaml` entry, disabled with
    zero numbers. It is separate from `loop-agent-eval` so enabling the free model never enables
    the paid Claude decider. Required env: `OPENROUTER_API_KEY`, `QC_OPENROUTER_MODEL` (no default:
@@ -67,7 +73,9 @@ budget allows it.
 
 1. Create an OpenRouter key and store it as `OPENROUTER_API_KEY` in the host's secret manager.
 2. Pick a model from https://openrouter.ai/models?max_price=0 and set `QC_OPENROUTER_MODEL` to its
-   id, ending in `:free`.
+   id. Most zero-priced ids end in `:free`; an id that does not (like `stealth/space-bunny-alpha`)
+   still starts, as long as OpenRouter's models list still prices it at zero when the process
+   starts (`QC_OPENROUTER_MAX_USD_PER_DAY` above `0` skips this check entirely).
 3. In `autonomy/POLICY.yaml` (T3), set `"enabled": true` at the top and change
    `loop-agent-openrouter` to `{"enabled": true, "daily_usd": 0.01, "max_turns": 1,
    "timeout_minutes": 1, "open_pr_cap": 0}`, and set `AUTONOMY_ENABLED=true` in the environment.
