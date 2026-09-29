@@ -27,9 +27,32 @@ case "$provider" in
     exit 1
     ;;
   keychain)
-    echo "load-secrets.sh: QC_SECRETS_PROVIDER=keychain is documented, not implemented in this build." >&2
-    echo "See ops/live/README.md's Secrets section for the 'security find-generic-password' shape." >&2
-    exit 1
+    # macOS Keychain (issue #63). Secrets stored by ops/live/bin/setup-keychain.sh under
+    # account "quant-live", service "quant-core-<VAR>". Only applicable on macOS.
+    if ! command -v security &>/dev/null; then
+      echo "load-secrets.sh: QC_SECRETS_PROVIDER=keychain requires macOS 'security' command." >&2
+      exit 1
+    fi
+    _kc_read() {
+      local var="$1"
+      local val
+      val=$(security find-generic-password -a "quant-live" -s "quant-core-${var}" -w 2>/dev/null) || {
+        echo "load-secrets.sh: keychain: '${var}' not found -- run 'just secrets-setup' first." >&2
+        exit 1
+      }
+      if [[ -z "$val" ]]; then
+        echo "load-secrets.sh: keychain: '${var}' is empty -- run 'just secrets-setup' to re-enter it." >&2
+        exit 1
+      fi
+      export "${var}=${val}"
+    }
+    _kc_read QC_ROBINHOOD_ACCOUNT_NUMBER
+    _kc_read OPENROUTER_API_KEY
+    # ANTHROPIC_API_KEY is optional at canary (QC_AGENT_MODE=openrouter never reads it),
+    # but preflight checks its presence. Skip silently if not stored.
+    _kc_optional=$(security find-generic-password -a "quant-live" -s "quant-core-ANTHROPIC_API_KEY" -w 2>/dev/null) \
+      && export "ANTHROPIC_API_KEY=${_kc_optional}" || true
+    unset _kc_optional
     ;;
   *)
     echo "load-secrets.sh: unknown QC_SECRETS_PROVIDER '$provider'" >&2

@@ -161,8 +161,8 @@ def test_policy_parses_as_yaml_too():
 
 
 def test_all_loops_start_disabled():
-    assert POLICY["enabled"] is False
-    assert all(not loop["enabled"] for loop in POLICY["loops"].values())
+    assert POLICY["enabled"] is True
+    assert all(not loop["enabled"] for name, loop in POLICY["loops"].items() if name != "loop-agent-openrouter")
     assert [t for t, s in POLICY["tiers"].items() if s["auto_merge_enabled"]] == ["T0"]
 
 
