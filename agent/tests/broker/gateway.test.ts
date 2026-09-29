@@ -11,7 +11,7 @@ import path from "node:path";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import type { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { BrokerGateway, GatewayRejection, MAX_SENDS } from "../../src/broker/gateway.js";
+import { BrokerGateway, GatewayRejection, iocCancelAfterMsFromEnv, MAX_SENDS } from "../../src/broker/gateway.js";
 import { openJournal, replayJournal } from "../../src/broker/journal.js";
 import { placeOrder, refIdForApproval } from "../../src/broker/robinhood.js";
 import { connectRobinhoodMcp } from "../../src/broker/mcp-client.js";
@@ -464,5 +464,13 @@ describe("BrokerGateway", () => {
 
     expect(result.status).toBe("filled");
     expect(reporter.calls).toHaveLength(1);
+  });
+});
+
+describe("QC_IOC_CANCEL_AFTER_MS", () => {
+  it("defaults when unset and refuses anything outside 1..60000 ms", () => {
+    expect(iocCancelAfterMsFromEnv(undefined)).toBeUndefined();
+    expect(iocCancelAfterMsFromEnv("2000")).toBe(2000);
+    for (const bad of ["", "0", "60001", "1.5", "-1", "2s"]) expect(() => iocCancelAfterMsFromEnv(bad)).toThrow(/1 to 60000/);
   });
 });

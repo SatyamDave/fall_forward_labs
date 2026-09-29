@@ -14,6 +14,7 @@
 // names it rather than this file guessing.
 import path from "node:path";
 import { createExternalModeGateway } from "./broker/external-mode.js";
+import { iocCancelAfterMsFromEnv } from "./broker/gateway.js";
 import { connectRobinhoodMcp } from "./broker/mcp-client.js";
 import { accountNumberFromEnv } from "./broker/robinhood.js";
 import type { AssetClass } from "./broker/types.js";
@@ -61,6 +62,7 @@ async function maybeBuildExternalMode(bridge: BridgeClient): Promise<ExternalMod
     assetClass,
     instrument,
     accountNumber,
+    iocCancelAfterMs: iocCancelAfterMsFromEnv(process.env.QC_IOC_CANCEL_AFTER_MS),
     reconcileStatusPath: reconcileStatusPath(),
     onHalted: (reason) => {
       // No logging convention exists in agent/ yet (cli.ts's own broker/gateway.ts precedent);

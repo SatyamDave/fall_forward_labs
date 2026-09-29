@@ -188,7 +188,11 @@ def make_broker_fill_resolver(journal: dict[int, dict[str, Any]]) -> FillResolve
         resolved = journal.get(client_order_id)
         # "canceled" too: the gateway emulates IOC as gfd + cancel, so a partial fill ends
         # canceled with a nonzero filled_qty.
-        if resolved is None or resolved.get("status") not in ("filled", "partially_filled", "canceled"):
+        if resolved is None or resolved.get("status") not in (
+            "filled",
+            "partially_filled",
+            "canceled",
+        ):
             return None
         filled_qty, avg_price = resolved.get("filled_qty"), resolved.get("avg_price")
         if not filled_qty or not avg_price or Decimal(str(filled_qty)) == 0:

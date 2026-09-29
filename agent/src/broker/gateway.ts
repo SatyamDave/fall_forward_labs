@@ -65,6 +65,16 @@ const CANCEL_CONFIRM_INTERVAL_MS = 250;
 export const DEFAULT_IOC_CANCEL_AFTER_MS = 2_000;
 const DAY_MS = 86_400_000;
 
+/** QC_IOC_CANCEL_AFTER_MS: how long an emulated IOC order rests before the gateway cancels it.
+ *  Unset keeps DEFAULT_IOC_CANCEL_AFTER_MS (2000, pending the founders' decision
+ *  #23). Anything but an integer from 1 to 60000 refuses to start. */
+export function iocCancelAfterMsFromEnv(raw: string | undefined): number | undefined {
+  if (raw === undefined) return undefined;
+  const ms = /^\d+$/.test(raw) ? Number(raw) : NaN;
+  if (!(ms >= 1 && ms <= 60_000)) throw new Error(`QC_IOC_CANCEL_AFTER_MS must be an integer from 1 to 60000 ms, got ${JSON.stringify(raw)}`);
+  return ms;
+}
+
 export interface GatewayConfig {
   mcp: McpClient;
   reporter: BridgeReporter;
