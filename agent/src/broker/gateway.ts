@@ -106,6 +106,9 @@ export interface GatewayConfig {
 }
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 5_000;
+/** The preview is best-effort and runs while the 5 s approval ticks, so it gets less time than a
+ *  place call; the approval is still re-checked after it. */
+const PREVIEW_TIMEOUT_MS = 1_000;
 
 function isApprovalPayload(value: unknown): value is ApprovalPayload {
   if (typeof value !== "object" || value === null) return false;
@@ -158,18 +161,29 @@ export class BrokerGateway {
   private readonly iocWakers = new Map<number, () => void>();
   private readonly now: () => number;
   private readonly callOpts: { timeoutMs: number };
+  private readonly previewOpts: { timeoutMs: number };
   private readonly iocCancelAfterMs: number;
   private readonly journal: Journal;
 
   constructor(private readonly config: GatewayConfig) {
     this.now = config.now ?? (() => Date.now() * 1_000_000);
     this.callOpts = { timeoutMs: config.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS };
+    this.previewOpts = { timeoutMs: Math.min(this.callOpts.timeoutMs, PREVIEW_TIMEOUT_MS) };
     this.iocCancelAfterMs = config.iocCancelAfterMs ?? DEFAULT_IOC_CANCEL_AFTER_MS;
     const journalPath = config.journalPath ?? defaultBrokerJournalPath();
-    this.journal = openJournal(journalPath);
+    // The bridge restarts client_order_id at 0 with a fresh approval key, so the key is what
+    // tells this bridge process's order 1 from the last one's.
+    const session = (config.approvalPublicKey.export({ type: "spki", format: "der" }) as Buffer).subarray(-32).toString("base64");
+    this.journal = openJournal(journalPath, session);
     // Restart safety: an order sent before a crash is never treated as "never sent."
-    for (const [clientOrderId, snapshot] of replayJournal(journalPath)) {
-      this.orders.set(clientOrderId, snapshot);
+    const replay = replayJournal(journalPath, session);
+    for (const [clientOrderId, snapshot] of replay.orders) this.orders.set(clientOrderId, snapshot);
+    if (replay.otherSessionsUnresolved.length > 0) {
+      // Not matched to any current order; reconciliation reports them if still open at the venue.
+      console.error(
+        `broker journal: ${replay.otherSessionsUnresolved.length} order(s) from earlier bridge sessions were unknown or live ` +
+          `when their session ended (ref_ids ${replay.otherSessionsUnresolved.join(", ")})`,
+      );
     }
   }
 
@@ -222,8 +236,9 @@ export class BrokerGateway {
     if (existing?.state !== "terminal" || TERMINAL.has(existing.result.status) || !venueOrderId) {
       throw new GatewayRejection(`client_order_id ${clientOrderId} (${instrument}) has no live order to cancel`);
     }
-    const final = await this.cancelAndConfirm(assetClass, venueOrderId);
+    const { final, last } = await this.cancelAndConfirm(assetClass, venueOrderId);
     if (!final) {
+      await this.reportLiveFill(clientOrderId, existing.refId, existing.result, last, existing.reported);
       const reason = `cancel not confirmed after ${CANCEL_CONFIRM_ATTEMPTS} attempts`;
       await this.report(clientOrderId, "cancel_rejected", { reason });
       return { status: "cancel_rejected", reason, raw: {} };
@@ -366,17 +381,25 @@ export class BrokerGateway {
     expiresTsNs: number,
   ): Promise<PlaceOrderResult> {
     const id = order.client_order_id;
-    // Durable BEFORE the network call: if the process crashes after Robinhood receives this
-    // order, the journal -- not the in-memory map -- remembers it was sent, and with which ref_id.
-    this.journal.recordAttempt(id, attempt.refId, attempt.sentAt);
-
     // Best-effort preview: log it, but a preview failure never blocks the real order.
     try {
-      const preview = await robinhood.previewOrder(this.config.mcp, assetClass, this.config.accountNumber, order, this.callOpts);
+      const preview = await robinhood.previewOrder(this.config.mcp, assetClass, this.config.accountNumber, order, this.previewOpts);
       this.config.logPreview?.(order, assetClass, preview);
     } catch (err) {
       this.config.logPreview?.(order, assetClass, { warnings: [`preview failed: ${(err as Error).message}`], raw: {} });
     }
+
+    // The preview took time off the approval: check it again, on the same clock, right before
+    // the place call. This attempt was never sent, so the order keeps its previous send count.
+    if (expiresTsNs <= this.now()) {
+      if (attempt.sends === 1) this.orders.delete(id);
+      else this.orders.set(id, { ...attempt, sends: attempt.sends - 1 });
+      throw new GatewayRejection("approval expired before the order could be sent");
+    }
+
+    // Durable BEFORE the network call: if the process crashes after Robinhood receives this
+    // order, the journal -- not the in-memory map -- remembers it was sent, and with which ref_id.
+    this.journal.recordAttempt(id, attempt.refId, attempt.sentAt);
 
     let placed: PlaceOrderResult;
     try {
@@ -427,11 +450,12 @@ export class BrokerGateway {
     });
     this.iocWakers.delete(id);
 
-    const final = await this.cancelAndConfirm(assetClass, venueOrderId);
+    const { final, last } = await this.cancelAndConfirm(assetClass, venueOrderId);
     if (!final) {
       // Left live and recorded as such, so a halt's cancel can still reach it. Stop here rather
-      // than keep trading with an order the IOC contract says should be gone.
-      this.resolve(id, refId, placed);
+      // than keep trading with an order the IOC contract says should be gone. A fill already
+      // read back is reported first: it happened whether or not the cancel took.
+      await this.reportLiveFill(id, refId, placed, last, undefined);
       this.ambiguous(id);
       throw new Error(
         `order ${id}: emulated IOC cancel not confirmed after ${CANCEL_CONFIRM_ATTEMPTS} attempts; ` +
@@ -445,9 +469,14 @@ export class BrokerGateway {
 
   /** Cancels, then reads the order back until the venue reports a terminal state. The cancel
    *  call's own outcome is never trusted: a cancel that fails because the order filled first
-   *  still ends with the fill being read back and reported. undefined: still not terminal. */
-  private async cancelAndConfirm(assetClass: AssetClass, venueOrderId: string): Promise<PlaceOrderResult | undefined> {
+   *  still ends with the fill being read back and reported. No `final`: still not terminal, and
+   *  `last` is the most recent live state read back, if any. */
+  private async cancelAndConfirm(
+    assetClass: AssetClass,
+    venueOrderId: string,
+  ): Promise<{ final?: PlaceOrderResult; last?: PlaceOrderResult }> {
     const { mcp, accountNumber } = this.config;
+    let last: PlaceOrderResult | undefined;
     for (let attempt = 1; attempt <= CANCEL_CONFIRM_ATTEMPTS; attempt++) {
       if (attempt > 1) await sleep(CANCEL_CONFIRM_INTERVAL_MS);
       try {
@@ -457,12 +486,29 @@ export class BrokerGateway {
       }
       try {
         const status = await robinhood.getOrderById(mcp, assetClass, accountNumber, venueOrderId, this.callOpts);
-        if (status.status !== "not_found" && TERMINAL.has(status.status)) return { ...status, status: status.status, raw: status.raw ?? {} };
+        if (status.status !== "not_found") {
+          const read = { ...status, status: status.status, raw: status.raw ?? {} };
+          if (TERMINAL.has(read.status)) return { final: read };
+          last = read;
+        }
       } catch (err) {
         console.error(`status read ${attempt} for venue order ${venueOrderId} failed: ${(err as Error).message}`);
       }
     }
-    return undefined;
+    return { last };
+  }
+
+  /** An order whose cancel was not confirmed stays live. Any fill `last` read back beyond what was
+   *  already reported is reported now, and the order is kept with what has been reported. */
+  private async reportLiveFill(id: number, refId: string, known: PlaceOrderResult, last: PlaceOrderResult | undefined, reported: Fill | undefined): Promise<void> {
+    const fill = last ? unreportedFill(reported, last) : undefined;
+    if (fill === null) {
+      console.error(`order ${id}: venue fill totals cannot be reported exactly; leaving it to reconciliation`);
+      this.ambiguous(id);
+    }
+    const state = last ? { ...last, venue_order_id: last.venue_order_id ?? known.venue_order_id } : known;
+    this.resolve(id, refId, state, fill ? { qty: state.filled_qty!, price: state.avg_price! } : reported);
+    if (fill) await this.report(id, "partially_filled", { ...state, ...fill });
   }
 
   private resolve(id: number, refId: string, result: PlaceOrderResult, reported?: Fill): void {

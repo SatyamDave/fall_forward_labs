@@ -19,8 +19,7 @@
 // -- that fake is kept as a unit-test fixture only (agent/tests/bridge-v12.test.ts,
 // agent/tests/loop-external.test.ts), not as this demo's stand-in for the real binary anymore.
 // Set QC_BRIDGE_BIN to override (e.g. a prebuilt binary, or the fake, for a one-off check).
-import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -29,6 +28,7 @@ import type { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { BridgeClient } from "../bridge.js";
 import { connectRobinhoodMcp } from "../broker/mcp-client.js";
 import { createExternalModeGateway } from "../broker/external-mode.js";
+import { journalSha256RedactingSessions } from "../broker/journal.js";
 import { FakeDecider } from "../decider/fake.js";
 import { ledgerSha256RedactingApprovalSignatures } from "../ledger.js";
 import { runLoop } from "../loop.js";
@@ -49,11 +49,6 @@ const SCENARIOS: Record<string, MockScenario> = {
   "3": "rejected",
   "4": "accepted",
 };
-
-function sha256(filePath: string): string {
-  const contents = existsSync(filePath) ? readFileSync(filePath) : Buffer.alloc(0);
-  return createHash("sha256").update(contents).digest("hex");
-}
 
 export interface ExternalSimResult {
   ledgerPath: string;
@@ -151,7 +146,7 @@ export async function runExternalSim(opts: RunExternalSimOptions = {}): Promise<
       // are expected to differ between two independent runs even though every order/decision/
       // execution outcome they wrap is identical. This is what proves that.
       ledgerSha256: ledgerSha256RedactingApprovalSignatures(ledgerPath),
-      journalSha256: sha256(journalPath),
+      journalSha256: journalSha256RedactingSessions(journalPath),
       counts,
     };
   } finally {

@@ -81,7 +81,7 @@ for tripping it:
    mock broker, 25 ms heartbeat interval for a fast test): 27–29 ms from the kill file appearing to
    the heartbeat observing `halted`, across three runs; the same suite proves four resting orders
    at the mock broker are all cancelled — exactly one cancel call each — within a 5 s timeout, and
-   that the resulting ledger (signature-redacted) and broker journal hash identically across two
+   that the resulting ledger (signature-redacted) and broker journal (session-redacted) hash identically across two
    independent runs. Before this PR, nothing played this role: `agent/src/loop.ts`'s reconcile
    calls were decision-count-based (tied to loop progress), `ops/live/supervisor.py` only reacts to
    process *exit*, and no code path minted a cancel approval for a halt-triggered `PendingCancel`

@@ -243,8 +243,21 @@ function unwrap(tool: string, result: CallToolResult): Record<string, unknown> {
   return parsed;
 }
 
+/** Every failure of an account-scoped call has the account number removed from its message and
+ *  stack here, once, because a tool's error text can echo its arguments and these messages are
+ *  logged and written to the reconcile status file. */
 async function call(client: McpClient, tool: string, args: Record<string, unknown>, opts?: CallOptions) {
-  return unwrap(tool, await callTool(client, tool, args, opts));
+  try {
+    return unwrap(tool, await callTool(client, tool, args, opts));
+  } catch (err) {
+    const account = args.account_number;
+    if (err instanceof Error && typeof account === "string" && account !== "") {
+      const redact = (text: string) => text.split(account).join("<account>");
+      err.message = redact(err.message);
+      if (err.stack) err.stack = redact(err.stack);
+    }
+    throw err;
+  }
 }
 
 function asDecimalString(value: unknown): DecimalString | undefined {
@@ -297,16 +310,34 @@ export interface VenueOrderRecord extends PlaceOrderResult {
   ref_id?: string;
 }
 
+/** A fill field: absent (undefined or null) or a decimal string. Anything else throws rather than
+ *  being read as "no fill". */
+function fillField(tool: string, body: Record<string, unknown>, field: string): DecimalString | undefined {
+  const value = body[field];
+  if (value === undefined || value === null) return undefined;
+  if (typeof value !== "string") throw new RobinhoodToolError(tool, `order ${field} is a ${typeof value}, not a decimal string`);
+  try {
+    toFixed(value);
+  } catch {
+    throw new RobinhoodToolError(tool, `order ${field} is not a decimal string`);
+  }
+  return value;
+}
+
 /** One order object, from a place response or an orders list. An unknown state, or a fill with no
- *  parseable quantity and price, throws: those are exactly the "ambiguous response" case. */
+ *  parseable quantity and price in any state (a cancelled order can carry a partial fill), throws:
+ *  those are exactly the "ambiguous response" case. */
 function normalizeOrder(tool: string, body: unknown): VenueOrderRecord {
   if (!isRecord(body)) throw new RobinhoodToolError(tool, "order entry is not an object");
   const status = typeof body.state === "string" ? ORDER_STATES[body.state] : undefined;
   if (!status) throw new RobinhoodToolError(tool, `unrecognized order state: ${JSON.stringify(body.state)}`);
-  const filled_qty = asDecimalString(body.filled_quantity);
-  const avg_price = asDecimalString(body.average_price);
+  const filled_qty = fillField(tool, body, "filled_quantity");
+  const avg_price = fillField(tool, body, "average_price");
   if ((status === "filled" || status === "partially_filled") && (filled_qty === undefined || avg_price === undefined)) {
     throw new RobinhoodToolError(tool, `a ${status} order has no string filled_quantity/average_price`);
+  }
+  if (filled_qty !== undefined && toFixed(filled_qty) !== 0n && avg_price === undefined) {
+    throw new RobinhoodToolError(tool, `a ${status} order has filled_quantity ${filled_qty} but no average_price`);
   }
   return {
     status,
