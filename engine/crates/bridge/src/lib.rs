@@ -9,6 +9,7 @@ pub mod engine;
 pub mod eventlog;
 pub mod feed;
 pub mod instrument;
+pub mod usage;
 pub mod wire;
 
 pub use engine::{BridgeEngine, HaltReason, LoadedModel, VenueMode};
