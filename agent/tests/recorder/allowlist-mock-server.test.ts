@@ -16,8 +16,8 @@ const ORDER: ApprovedOrder = {
   client_order_id: 1,
   instrument: "SPY",
   side: "buy",
-  qty: "10",
-  limit_price: "500.00",
+  qty: "1",
+  limit_price: "20.00",
   time_in_force: "ioc",
   request_id: "req-1",
 };
@@ -59,7 +59,7 @@ describe("recorder allowlist against the mock Robinhood MCP server", () => {
     };
     const client = readOnly(rawClient);
 
-    await expect(placeOrder(client, "equity", ORDER)).rejects.toThrow(OrderToolCalledError);
+    await expect(placeOrder(client, "equity", "SYNTH0001", ORDER, "ref-1")).rejects.toThrow(OrderToolCalledError);
     // The whole point: the mock server's handler (and its onToolCall hook) never ran for
     // place_equity_order -- the rejection happened inside readOnly(), before the wire.
     expect(calledTools).toEqual([]);
@@ -80,8 +80,8 @@ describe("recorder allowlist against the mock Robinhood MCP server", () => {
     for (let i = 0; i < 5; i++) {
       await pollQuote(client, "equity", "SPY");
     }
-    await expect(placeOrder(client, "equity", ORDER)).rejects.toThrow(OrderToolCalledError);
-    await expect(placeOrder(client, "equity", { ...ORDER, client_order_id: 2 })).rejects.toThrow(OrderToolCalledError);
+    await expect(placeOrder(client, "equity", "SYNTH0001", ORDER, "ref-1")).rejects.toThrow(OrderToolCalledError);
+    await expect(placeOrder(client, "equity", "SYNTH0001", { ...ORDER, client_order_id: 2 }, "ref-2")).rejects.toThrow(OrderToolCalledError);
 
     expect(calledTools).toEqual(["get_equity_quotes", "get_equity_quotes", "get_equity_quotes", "get_equity_quotes", "get_equity_quotes"]);
     expect(calledTools.some((t) => t.includes("place") || t.includes("cancel"))).toBe(false);

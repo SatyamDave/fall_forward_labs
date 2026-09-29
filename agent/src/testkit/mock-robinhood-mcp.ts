@@ -27,6 +27,7 @@ export type MockScenario =
   | "canceled"
   | "timeout" // the broker fills it, but the response never arrives
   | "lost_once" // the first send never arrives and never answers; a resend with the same ref_id fills
+  | "never_arrives" // no send ever arrives or answers
   | "cancel_fails_filled" // rests; the cancel errors because the order filled first
   | "cancel_stuck" // rests; every cancel errors and it stays live
   | "ambiguous"; // SYNTHETIC: a response with a `state` this codebase does not recognize
@@ -226,6 +227,7 @@ export function createMockRobinhoodServer(opts: MockRobinhoodOptions = {}): Serv
         if (!refId) return errorResult("SYNTHETIC mock requires ref_id");
         if (!seqByRefId.has(refId)) seqByRefId.set(refId, seqByRefId.size + 1);
         const scenario = scenarios[String(seqByRefId.get(refId))] ?? "accepted";
+        if (scenario === "never_arrives") return new Promise<CallToolResult>(() => undefined);
         if (scenario === "lost_once" && !lostOnceSpent.has(refId)) {
           lostOnceSpent.add(refId);
           return new Promise<CallToolResult>(() => undefined); // never arrived, never answers

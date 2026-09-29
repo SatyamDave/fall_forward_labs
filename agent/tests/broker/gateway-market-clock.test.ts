@@ -18,7 +18,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { ed25519PublicKeyFromRaw } from "../../src/broker/crypto.js";
 import { BrokerGateway } from "../../src/broker/gateway.js";
 import { connectRobinhoodMcp } from "../../src/broker/mcp-client.js";
-import { createMockRobinhoodServer } from "../../src/testkit/mock-robinhood-mcp.js";
+import { createMockRobinhoodServer, MOCK_ACCOUNT_NUMBER } from "../../src/testkit/mock-robinhood-mcp.js";
 import type { Approval, ApprovalPayload, ApprovedOrder } from "../../src/broker/types.js";
 
 const { publicKey, privateKey } = generateKeyPairSync("ed25519");
@@ -87,8 +87,10 @@ describe("BrokerGateway approval expiry uses the bridge's market clock, not Date
       mcp: client,
       reporter: { reportExecution: async () => ({ ok: true as const }) },
       approvalPublicKey: ed25519PublicKeyFromRaw(rawPublicKey),
+      accountNumber: MOCK_ACCOUNT_NUMBER,
       now,
       requestTimeoutMs: 200,
+      iocCancelAfterMs: 10,
       journalPath: tempJournalPath(),
     });
   }
@@ -98,8 +100,8 @@ describe("BrokerGateway approval expiry uses the bridge's market clock, not Date
       client_order_id: 101,
       expires_ts_ns: MARKET_TS_NS + TTL_NS,
       instrument: "SPY",
-      limit_price: "500.00",
-      qty: "10",
+      limit_price: "20.00",
+      qty: "1",
       request_id: "req-101",
       side: "buy",
       time_in_force: "ioc",
@@ -118,8 +120,8 @@ describe("BrokerGateway approval expiry uses the bridge's market clock, not Date
       client_order_id: 102,
       expires_ts_ns: MARKET_TS_NS + TTL_NS,
       instrument: "SPY",
-      limit_price: "500.00",
-      qty: "10",
+      limit_price: "20.00",
+      qty: "1",
       request_id: "req-102",
       side: "buy",
       time_in_force: "ioc",

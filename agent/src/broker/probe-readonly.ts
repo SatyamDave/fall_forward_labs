@@ -42,8 +42,9 @@ export function shapeOf(value: unknown, sensitiveKeys: ReadonlySet<string>): Sha
   }
   if (typeof value === "object") {
     const out: Record<string, Shape> = {};
+    let redacted = 0;
     for (const [key, v] of Object.entries(value as Record<string, unknown>)) {
-      const safeKey = sensitiveKeys.has(key) || /\d{5,}|[0-9a-f]{8}-[0-9a-f]{4}-/i.test(key) ? "<redacted-key>" : key;
+      const safeKey = sensitiveKeys.has(key) || /\d{5,}|[0-9a-f]{8}-[0-9a-f]{4}-/i.test(key) ? `<redacted-key-${++redacted}>` : key;
       out[safeKey] = shapeOf(v, sensitiveKeys);
     }
     return out;

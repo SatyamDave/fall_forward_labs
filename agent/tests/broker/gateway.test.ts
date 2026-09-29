@@ -1,7 +1,9 @@
 // The door orders must pass through to reach the broker (#35) and the mock-Robinhood
-// connection to it (#43, mock only). Covers exactly the scenarios wave-spec.md's gateway lane
-// calls for: happy path, tampered approval refused, expired refused, duplicate client_order_id
-// not resent, timeout -> status query -> no double order, reject -> report_execution rejected.
+// connection to it (#43, mock only; the mock enforces the real input schemas). Covers: happy
+// path, tampered/expired approvals refused, duplicate client_order_id not resent, an ambiguous
+// submit looked up by ref_id before a bounded resend with the same ref_id, crash-after-send
+// recovery from the journal, IOC emulation (gfd + cancel after the window, final state
+// reported), cancel failures sent to reconciliation, and market orders never sent.
 import { generateKeyPairSync, sign as cryptoSign } from "node:crypto";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -9,7 +11,9 @@ import path from "node:path";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import type { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { BrokerGateway, GatewayRejection } from "../../src/broker/gateway.js";
+import { BrokerGateway, GatewayRejection, MAX_SENDS } from "../../src/broker/gateway.js";
+import { openJournal, replayJournal } from "../../src/broker/journal.js";
+import { placeOrder, refIdForApproval } from "../../src/broker/robinhood.js";
 import { connectRobinhoodMcp } from "../../src/broker/mcp-client.js";
 import { ed25519PublicKeyFromRaw } from "../../src/broker/crypto.js";
 import type {
@@ -20,7 +24,7 @@ import type {
   CancelApprovalPayload,
   ReportExecutionOp,
 } from "../../src/broker/types.js";
-import { createMockRobinhoodServer, type MockScenario } from "../../src/testkit/mock-robinhood-mcp.js";
+import { createMockRobinhoodServer, MOCK_ACCOUNT_NUMBER, type MockScenario } from "../../src/testkit/mock-robinhood-mcp.js";
 
 function tempJournalPath(): string {
   const dir = mkdtempSync(path.join(tmpdir(), "broker-gateway-journal-"));
@@ -105,8 +109,9 @@ function baseFields(clientOrderId: number): ApprovalPayload {
     client_order_id: clientOrderId,
     expires_ts_ns: NOW_NS + 5_000_000_000, // +5s TTL, per protocol v1.1
     instrument: "SPY",
-    limit_price: "500.00",
-    qty: "10",
+    // $20 notional: inside the $25/order max_notional (config/limits, #106).
+    limit_price: "20.00",
+    qty: "1",
     request_id: `req-${clientOrderId}`,
     side: "buy",
     time_in_force: "ioc",
@@ -126,235 +131,338 @@ describe("BrokerGateway", () => {
     await Promise.all(closers.map((c) => c()));
   });
 
-  // Every test gets its own journal file (like ledger.test.ts's tempLedgerPath()) -- otherwise
-  // every gateway in this suite would replay every other test's client_order_ids from a shared
-  // default out/agent/broker-journal.jsonl on disk, and would also litter the real repo tree.
-  async function makeGateway(scenarios: Record<string, MockScenario>, onToolCall?: (name: string) => void): Promise<BrokerGateway> {
+  type Call = { name: string; args: Record<string, unknown>; at: number };
+
+  interface Harness {
+    gateway: BrokerGateway;
+    server: Server;
+    calls: Call[];
+    ambiguous: number[];
+    journalPath: string;
+    clock: { ns: number };
+  }
+
+  // Every test gets its own mock broker and journal file. Scenario keys are placement order
+  // ("1" = the first distinct ref_id placed), not client_order_id.
+  async function harness(scenarios: Record<string, MockScenario>, opts: { iocCancelAfterMs?: number; journalPath?: string } = {}): Promise<Harness> {
+    const calls: Call[] = [];
     const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    const server = createMockRobinhoodServer({ scenarios, onToolCall });
+    const server = createMockRobinhoodServer({ scenarios, onToolCall: (name, args) => calls.push({ name, args, at: Date.now() }) });
     await server.connect(serverTransport);
     const client = await connectRobinhoodMcp({ transport: clientTransport });
     closers.push(async () => {
       await client.close();
       await server.close();
     });
-    return new BrokerGateway({
+    const ambiguous: number[] = [];
+    const clock = { ns: NOW_NS };
+    const journalPath = opts.journalPath ?? tempJournalPath();
+    const gateway = new BrokerGateway({
       mcp: client,
       reporter,
       approvalPublicKey: ed25519PublicKeyFromRaw(rawPublicKey),
-      now: () => NOW_NS,
-      requestTimeoutMs: 200,
-      journalPath: tempJournalPath(),
+      accountNumber: MOCK_ACCOUNT_NUMBER,
+      now: () => clock.ns,
+      requestTimeoutMs: 100,
+      iocCancelAfterMs: opts.iocCancelAfterMs ?? 20,
+      journalPath,
+      onAmbiguousOutcome: (id) => ambiguous.push(id),
     });
+    return { gateway, server, calls, ambiguous, journalPath, clock };
   }
 
-  /** A second client connected to the SAME mock server instance, sharing `journalPath` with an
-   *  existing gateway -- simulates "a fresh process starts, journal on disk, same broker
-   *  connection" without the first gateway's in-memory state being reachable at all. */
-  async function reconnectGateway(server: Server, journalPath: string): Promise<BrokerGateway> {
-    // The MCP Server type only accepts one live transport at a time; closing it doesn't touch
-    // the mock's own `placed` order-state closure (createMockRobinhoodServer's Map lives outside
-    // the transport), which is exactly what makes this a "same broker, new connection" restart.
-    await server.close();
-    const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
-    await server.connect(serverTransport);
-    const client = await connectRobinhoodMcp({ transport: clientTransport });
-    closers.push(async () => {
-      await client.close();
-    });
-    return new BrokerGateway({
-      mcp: client,
-      reporter,
-      approvalPublicKey: ed25519PublicKeyFromRaw(rawPublicKey),
-      now: () => NOW_NS,
-      requestTimeoutMs: 200,
-      journalPath,
-    });
-  }
+  const places = (calls: Call[]) => calls.filter((c) => c.name === "place_equity_order");
+  const events = () => reporter.calls.map((c) => c.execution.event);
 
   it("happy path: a validly approved order is placed and the fill is reported back", async () => {
     const fields = baseFields(1);
-    const gateway = await makeGateway({ "1": "filled" });
+    const { gateway } = await harness({ "1": "filled" });
 
     const result = await gateway.submitOrder(orderFrom(fields), approve(fields), "equity");
 
     expect(result.status).toBe("filled");
     expect(reporter.calls).toHaveLength(1);
-    expect(reporter.calls[0]!.execution).toMatchObject({ client_order_id: 1, event: "filled" });
+    expect(reporter.calls[0]!.execution).toMatchObject({ client_order_id: 1, event: "filled", qty: "1", price: "20" });
   });
 
   it("refuses a tampered approval (order changed after approval) before any network call", async () => {
     const fields = baseFields(2);
-    const gateway = await makeGateway({ "2": "filled" });
-    const tamperedOrder = orderFrom({ ...fields, qty: "999" }); // different qty than what was approved
+    const { gateway, calls } = await harness({ "1": "filled" });
+    const tamperedOrder = orderFrom({ ...fields, qty: "2" });
 
     await expect(gateway.submitOrder(tamperedOrder, approve(fields), "equity")).rejects.toThrow(GatewayRejection);
-    expect(reporter.calls).toHaveLength(0); // no report_execution either: nothing was ever sent
+    expect(calls).toEqual([]);
+    expect(reporter.calls).toHaveLength(0);
   });
 
   it("refuses an approval whose payload bytes were edited (signature no longer verifies)", async () => {
     const fields = baseFields(3);
-    const gateway = await makeGateway({ "3": "filled" });
+    const { gateway } = await harness({ "1": "filled" });
     const approval = approve(fields);
-    const edited: Approval = { ...approval, payload: canonicalPayload({ ...fields, qty: "999" }) };
+    const edited: Approval = { ...approval, payload: canonicalPayload({ ...fields, qty: "2" }) };
 
     await expect(gateway.submitOrder(orderFrom(fields), edited, "equity")).rejects.toThrow(/signature/);
   });
 
   it("refuses a missing approval", async () => {
     const fields = baseFields(4);
-    const gateway = await makeGateway({});
+    const { gateway } = await harness({});
     await expect(gateway.submitOrder(orderFrom(fields), undefined, "equity")).rejects.toThrow(/missing approval/);
   });
 
   it("refuses an expired approval", async () => {
-    const fields = baseFields(5);
-    const expired = { ...fields, expires_ts_ns: NOW_NS - 1 };
-    const gateway = await makeGateway({ "5": "filled" });
+    const expired = { ...baseFields(5), expires_ts_ns: NOW_NS - 1 };
+    const { gateway } = await harness({ "1": "filled" });
 
     await expect(gateway.submitOrder(orderFrom(expired), approve(expired), "equity")).rejects.toThrow(/expired/);
   });
 
+  it("refuses a fractional-share approval before any call: only whole-share limit orders are sent", async () => {
+    const fields = { ...baseFields(6), qty: "0.5" };
+    const { gateway, calls } = await harness({ "1": "filled" });
+
+    await expect(gateway.submitOrder(orderFrom(fields), approve(fields), "equity")).rejects.toThrow(/whole number of shares/);
+    expect(calls).toEqual([]);
+  });
+
+  it("never sends a market order: every place and review call is a limit order with no dollar_amount", async () => {
+    const { gateway, calls } = await harness({ "1": "filled", "2": "accepted" });
+    const ioc = baseFields(7);
+    const gtc = { ...baseFields(8), time_in_force: "gtc" as const };
+    await gateway.submitOrder(orderFrom(ioc), approve(ioc), "equity");
+    await gateway.submitOrder(orderFrom(gtc), approve(gtc), "equity");
+
+    const orderCalls = calls.filter((c) => c.name === "place_equity_order" || c.name === "review_equity_order");
+    expect(orderCalls).toHaveLength(4);
+    for (const c of orderCalls) {
+      expect(c.args.type).toBe("limit");
+      expect(c.args).not.toHaveProperty("dollar_amount");
+      expect(c.args).not.toHaveProperty("stop_price");
+    }
+    expect(places(calls).map((c) => c.args.time_in_force)).toEqual(["gfd", "gtc"]);
+  });
+
   it("never resends a duplicate client_order_id once it has a terminal outcome", async () => {
-    const fields = baseFields(6);
-    const gateway = await makeGateway({ "6": "filled" });
+    const fields = baseFields(9);
+    const { gateway, calls } = await harness({ "1": "filled" });
 
     const first = await gateway.submitOrder(orderFrom(fields), approve(fields), "equity");
     const second = await gateway.submitOrder(orderFrom(fields), approve(fields), "equity");
 
     expect(second).toEqual(first);
-    expect(reporter.calls).toHaveLength(1); // reported once, not twice
+    expect(places(calls)).toHaveLength(1);
+    expect(reporter.calls).toHaveLength(1);
   });
 
-  it("on an ambiguous outcome (timeout), queries status before ever trying again -- no double order", async () => {
-    const fields = baseFields(7);
-    const gateway = await makeGateway({ "7": "timeout" });
+  it("ambiguous submit (response lost): looks the order up by ref_id before anything else, finds it, never places twice", async () => {
+    const fields = baseFields(10);
+    const { gateway, calls } = await harness({ "1": "timeout" });
+
+    const result = await gateway.submitOrder(orderFrom(fields), approve(fields), "equity");
+
+    expect(result.status).toBe("filled");
+    expect(calls.map((c) => c.name)).toEqual(["review_equity_order", "place_equity_order", "get_equity_orders"]);
+    expect(events()).toEqual(["filled"]);
+  });
+
+  it("ambiguous submit that never arrived: queries first, then resends with the SAME ref_id, derived from the signed approval", async () => {
+    const fields = baseFields(11);
+    const approval = approve(fields);
+    const { gateway, calls, journalPath } = await harness({ "1": "lost_once" });
+
+    const result = await gateway.submitOrder(orderFrom(fields), approval, "equity");
+
+    expect(result.status).toBe("filled");
+    const names = calls.map((c) => c.name).filter((n) => n !== "review_equity_order");
+    expect(names).toEqual(["place_equity_order", "get_equity_orders", "place_equity_order"]);
+    const refIds = places(calls).map((c) => c.args.ref_id);
+    expect(refIds).toEqual([refIdForApproval(approval.payload), refIdForApproval(approval.payload)]);
+    // Both attempts were journaled (fsync'd) under that ref_id before being sent.
+    expect(replayJournal(journalPath).get(11)).toMatchObject({ state: "terminal", refId: refIds[0] });
+  });
+
+  it(`resends at most ${MAX_SENDS} times in all, then hands the order to reconciliation`, async () => {
+    const fields = baseFields(12);
+    const { gateway, calls, ambiguous, journalPath } = await harness({ "1": "never_arrives" });
 
     await expect(gateway.submitOrder(orderFrom(fields), approve(fields), "equity")).rejects.toThrow(/outcome unknown/);
-    expect(reporter.calls).toHaveLength(0); // nothing reported yet -- outcome is still unresolved
 
-    // Reconciling call: the mock records the order as if the broker really did receive it, so
-    // this must resolve via a status query, never a second place_equity_order call.
-    const resolved = await gateway.submitOrder(orderFrom(fields), approve(fields), "equity");
-    expect(resolved.status).toBe("filled");
-    expect(reporter.calls).toHaveLength(1);
-    expect(reporter.calls[0]!.execution.event).toBe("filled");
+    expect(places(calls)).toHaveLength(MAX_SENDS);
+    expect(new Set(places(calls).map((c) => c.args.ref_id)).size).toBe(1);
+    expect(ambiguous).toEqual([12]);
+    expect(replayJournal(journalPath).get(12)).toMatchObject({ state: "unknown", sends: MAX_SENDS });
+    expect(reporter.calls).toHaveLength(0);
   });
 
-  it("crash-after-send: a brand new BrokerGateway (simulated process restart) reconciles via the journal instead of blind-resubmitting", async () => {
-    const fields = baseFields(11);
-    const journalPath = tempJournalPath();
-    let placeCalls = 0;
-    const onToolCall = (name: string) => {
-      if (name === "place_equity_order") placeCalls += 1;
-    };
+  it("does not resend once the approval has expired, even when the lookup found nothing", async () => {
+    const fields = baseFields(13);
+    const h = await harness({ "1": "never_arrives" });
+    const timedOut = h.gateway.submitOrder(orderFrom(fields), approve(fields), "equity");
+    h.clock.ns = fields.expires_ts_ns; // the approval expires while the first send hangs
 
-    const [clientTransportA, serverTransportA] = InMemoryTransport.createLinkedPair();
-    const server = createMockRobinhoodServer({ scenarios: { "11": "timeout" }, onToolCall });
-    await server.connect(serverTransportA);
-    const clientA = await connectRobinhoodMcp({ transport: clientTransportA });
-    closers.push(async () => {
-      await clientA.close();
-      await server.close();
-    });
-    const gatewayA = new BrokerGateway({
-      mcp: clientA,
+    await expect(timedOut).rejects.toThrow(/approval has expired; not sending again/);
+    expect(places(h.calls)).toHaveLength(1);
+    expect(h.ambiguous).toEqual([13]);
+  });
+
+  it("crash-after-send: a restarted gateway finds the order by the journaled ref_id instead of placing it again", async () => {
+    const fields = baseFields(14);
+    const approval = approve(fields);
+    const refId = refIdForApproval(approval.payload);
+    const journalPath = tempJournalPath();
+    const h = await harness({ "1": "filled" }, { journalPath });
+    // The process before the crash journaled the attempt, and the broker received the order.
+    openJournal(journalPath).recordAttempt(14, refId, "2026-09-29T14:30:00.000Z");
+    const [ct, st] = InMemoryTransport.createLinkedPair();
+    await h.server.close();
+    await h.server.connect(st);
+    const client = await connectRobinhoodMcp({ transport: ct });
+    closers.push(() => client.close());
+    await placeOrder(client, "equity", MOCK_ACCOUNT_NUMBER, orderFrom(fields), refId);
+    const restarted = new BrokerGateway({
+      mcp: client,
       reporter,
       approvalPublicKey: ed25519PublicKeyFromRaw(rawPublicKey),
+      accountNumber: MOCK_ACCOUNT_NUMBER,
       now: () => NOW_NS,
-      requestTimeoutMs: 200,
+      requestTimeoutMs: 100,
       journalPath,
     });
+    h.calls.length = 0;
 
-    // gatewayA sends the order; the mock server truly receives it (it records it as "placed"),
-    // but the response is lost (timeout) -- exactly the "outcome unknown after a real send"
-    // case. This process's own in-memory map now says "unknown" for client_order_id 11 -- but
-    // the point of this test is that the NEXT process must know that too, from disk alone.
-    await expect(gatewayA.submitOrder(orderFrom(fields), approve(fields), "equity")).rejects.toThrow(/outcome unknown/);
-    expect(placeCalls).toBe(1);
-    expect(reporter.calls).toHaveLength(0);
+    const resolved = await restarted.submitOrder(orderFrom(fields), approval, "equity");
 
-    // Simulated restart: a brand new BrokerGateway, sharing nothing with gatewayA except the
-    // journal file on disk and a connection to the same broker. Its in-memory map starts empty;
-    // if the journal fix were missing, submitOrder would fall through to attemptSubmit and call
-    // place_equity_order a second time for the same client_order_id -- a real duplicate order.
-    const gatewayB = await reconnectGateway(server, journalPath);
+    expect(resolved.status).toBe("filled");
+    expect(h.calls.map((c) => c.name)).toEqual(["get_equity_orders"]);
+    expect(events()).toEqual(["filled"]);
+  });
 
-    const resolved = await gatewayB.submitOrder(orderFrom(fields), approve(fields), "equity");
+  it("emulated IOC: rests as gfd, is cancelled by the gateway after the window, and the final state is read back and reported", async () => {
+    const fields = baseFields(15);
+    const { gateway, calls, journalPath } = await harness({ "1": "accepted" }, { iocCancelAfterMs: 60 });
 
-    expect(resolved.status).toBe("filled"); // reconciled via a status query, not a fresh place
-    expect(placeCalls).toBe(1); // still 1: place_equity_order was NEVER called a second time
-    expect(reporter.calls).toHaveLength(1);
-    expect(reporter.calls[0]!.execution.event).toBe("filled");
+    const result = await gateway.submitOrder(orderFrom(fields), approve(fields), "equity");
+
+    expect(result.status).toBe("canceled");
+    const placed = places(calls)[0]!;
+    const cancel = calls.find((c) => c.name === "cancel_equity_order")!;
+    expect(placed.args.time_in_force).toBe("gfd");
+    expect(cancel.at - placed.at).toBeGreaterThanOrEqual(55);
+    expect(calls.at(-1)!.name).toBe("get_equity_orders"); // the state reported is the one read back
+    expect(events()).toEqual(["accepted", "canceled"]);
+    expect(reporter.calls[0]!.execution.venue_order_id).toMatch(/^[0-9]+$/);
+    expect(replayJournal(journalPath).get(15)).toMatchObject({ state: "terminal", result: { status: "canceled" } });
+  });
+
+  it("emulated IOC journals the venue order id before resting, so a restart can still cancel it", async () => {
+    const fields = baseFields(16);
+    const { gateway, journalPath } = await harness({ "1": "accepted" }, { iocCancelAfterMs: 200 });
+
+    const pending = gateway.submitOrder(orderFrom(fields), approve(fields), "equity");
+    await new Promise((r) => setTimeout(r, 100));
+    const midRest = replayJournal(journalPath).get(16);
+    await pending;
+
+    expect(midRest).toMatchObject({ state: "terminal", result: { status: "accepted", venue_order_id: expect.stringMatching(/-/) } });
+  });
+
+  it("emulated IOC with a partial fill reports the fill, then the cancel of the rest", async () => {
+    const fields = { ...baseFields(17), qty: "1" };
+    const { gateway } = await harness({ "1": "partially_filled" });
+
+    const result = await gateway.submitOrder(orderFrom(fields), approve(fields), "equity");
+
+    expect(result).toMatchObject({ status: "canceled", filled_qty: "0.5" });
+    expect(events()).toEqual(["accepted", "partially_filled", "canceled"]);
+  });
+
+  it("emulated IOC whose cancel fails because it filled first: reports the fill read back, never assumes a cancel", async () => {
+    const fields = baseFields(18);
+    const { gateway, ambiguous } = await harness({ "1": "cancel_fails_filled" });
+
+    const result = await gateway.submitOrder(orderFrom(fields), approve(fields), "equity");
+
+    expect(result.status).toBe("filled");
+    expect(events()).toEqual(["accepted", "filled"]);
+    expect(ambiguous).toEqual([]);
+  });
+
+  it("emulated IOC whose cancel never takes: reconciles, reports no cancel, and leaves the order cancellable", async () => {
+    const fields = baseFields(19);
+    const { gateway, ambiguous } = await harness({ "1": "cancel_stuck" });
+
+    await expect(gateway.submitOrder(orderFrom(fields), approve(fields), "equity")).rejects.toThrow(/cancel not confirmed/);
+
+    expect(ambiguous).toEqual([19]);
+    expect(events()).toEqual(["accepted"]);
+    // Still known as live with its venue id: a halt's approved cancel reaches it.
+    await expect(gateway.cancelOrder(19, fields.instrument, "equity", approveCancel(cancelFields(19)))).resolves.toMatchObject({
+      status: "cancel_rejected",
+    });
+  }, 10_000);
+
+  it("a halt's cancel ends an emulated IOC order's rest early", async () => {
+    const fields = baseFields(20);
+    const { gateway } = await harness({ "1": "accepted" }, { iocCancelAfterMs: 60_000 });
+
+    const pending = gateway.submitOrder(orderFrom(fields), approve(fields), "equity");
+    while (!events().includes("accepted")) await new Promise((r) => setTimeout(r, 5));
+    const cancel = await gateway.cancelOrder(20, fields.instrument, "equity", approveCancel(cancelFields(20)));
+
+    expect(cancel.status).toBe("canceled");
+    expect((await pending).status).toBe("canceled");
+    expect(events()).toEqual(["accepted", "canceled"]);
   });
 
   it("reports an explicit broker rejection back to the bridge as rejected", async () => {
-    const fields = baseFields(8);
-    const gateway = await makeGateway({ "8": "rejected" });
+    const fields = baseFields(21);
+    const { gateway } = await harness({ "1": "rejected" });
 
     const result = await gateway.submitOrder(orderFrom(fields), approve(fields), "equity");
 
     expect(result.status).toBe("rejected");
     expect(reporter.calls).toHaveLength(1);
-    expect(reporter.calls[0]!.execution).toMatchObject({ client_order_id: 8, event: "rejected" });
+    expect(reporter.calls[0]!.execution).toMatchObject({ client_order_id: 21, event: "rejected" });
     expect(reporter.calls[0]!.execution.reason).toMatch(/SYNTHETIC/);
   });
 
-  it("cancels a live order and reports the cancellation", async () => {
-    const fields = baseFields(9);
-    const gateway = await makeGateway({ "9": "accepted" });
-    await gateway.submitOrder(orderFrom(fields), approve(fields), "equity");
+  it("cancels a resting gtc order by its journaled venue order id and reports the cancellation", async () => {
+    const fields = { ...baseFields(22), time_in_force: "gtc" as const };
+    const { gateway, calls } = await harness({ "1": "accepted" });
+    const placed = await gateway.submitOrder(orderFrom(fields), approve(fields), "equity");
 
-    const result = await gateway.cancelOrder(9, fields.instrument, "equity", approveCancel(cancelFields(9)));
+    const result = await gateway.cancelOrder(22, fields.instrument, "equity", approveCancel(cancelFields(22)));
 
     expect(result.status).toBe("canceled");
-    expect(reporter.calls[reporter.calls.length - 1]!.execution.event).toBe("canceled");
+    expect(calls.find((c) => c.name === "cancel_equity_order")!.args).toEqual({ account_number: MOCK_ACCOUNT_NUMBER, order_id: placed.venue_order_id });
+    expect(events()).toEqual(["accepted", "canceled"]);
   });
 
   it("refuses to cancel an order it never placed, without calling the broker", async () => {
-    const gateway = await makeGateway({});
-    await expect(
-      gateway.cancelOrder(12345, "SPY", "equity", approveCancel(cancelFields(12345))),
-    ).rejects.toThrow(GatewayRejection);
+    const { gateway, calls } = await harness({});
+    await expect(gateway.cancelOrder(12345, "SPY", "equity", approveCancel(cancelFields(12345)))).rejects.toThrow(GatewayRejection);
+    expect(calls).toEqual([]);
   });
 
-  it("refuses a cancel with a missing approval", async () => {
-    const fields = baseFields(13);
-    const gateway = await makeGateway({ "13": "accepted" });
+  it("refuses a cancel with a missing, mismatched or expired approval", async () => {
+    const fields = { ...baseFields(23), time_in_force: "gtc" as const };
+    const { gateway } = await harness({ "1": "accepted" });
     await gateway.submitOrder(orderFrom(fields), approve(fields), "equity");
 
-    await expect(gateway.cancelOrder(13, fields.instrument, "equity", undefined)).rejects.toThrow(/missing approval/);
-  });
-
-  it("refuses a cancel approval for a different client_order_id than the one being cancelled", async () => {
-    const fields = baseFields(14);
-    const gateway = await makeGateway({ "14": "accepted" });
-    await gateway.submitOrder(orderFrom(fields), approve(fields), "equity");
-
-    await expect(
-      gateway.cancelOrder(14, fields.instrument, "equity", approveCancel(cancelFields(999))),
-    ).rejects.toThrow(/does not match/);
-  });
-
-  it("refuses an expired cancel approval", async () => {
-    const fields = baseFields(15);
-    const gateway = await makeGateway({ "15": "accepted" });
-    await gateway.submitOrder(orderFrom(fields), approve(fields), "equity");
-    const expired: CancelApprovalPayload = { ...cancelFields(15), expires_ts_ns: NOW_NS - 1 };
-
-    await expect(
-      gateway.cancelOrder(15, fields.instrument, "equity", approveCancel(expired)),
-    ).rejects.toThrow(/expired/);
+    await expect(gateway.cancelOrder(23, fields.instrument, "equity", undefined)).rejects.toThrow(/missing approval/);
+    await expect(gateway.cancelOrder(23, fields.instrument, "equity", approveCancel(cancelFields(999)))).rejects.toThrow(/does not match/);
+    const expired: CancelApprovalPayload = { ...cancelFields(23), expires_ts_ns: NOW_NS - 1 };
+    await expect(gateway.cancelOrder(23, fields.instrument, "equity", approveCancel(expired))).rejects.toThrow(/expired/);
   });
 
   it("still returns the order's own outcome even if reporting the execution back fails", async () => {
-    const fields = baseFields(10);
-    const gateway = await makeGateway({ "10": "filled" });
+    const fields = baseFields(24);
+    const { gateway } = await harness({ "1": "filled" });
     reporter.ok = false;
 
     const result = await gateway.submitOrder(orderFrom(fields), approve(fields), "equity");
 
-    expect(result.status).toBe("filled"); // the trade happened; a books-sync failure doesn't hide that
+    expect(result.status).toBe("filled");
     expect(reporter.calls).toHaveLength(1);
   });
 });

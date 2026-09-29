@@ -11,7 +11,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { connectRobinhoodMcp } from "../../src/broker/mcp-client.js";
 import { ReconciliationHalted, reconcileWithBroker } from "../../src/broker/reconcile.js";
 import { repoRoot } from "../../src/paths.js";
-import { createMockRobinhoodServer } from "../../src/testkit/mock-robinhood-mcp.js";
+import { createMockRobinhoodServer, MOCK_ACCOUNT_NUMBER } from "../../src/testkit/mock-robinhood-mcp.js";
 import type { VenueSnapshot } from "../../src/types.js";
 
 describe("reconcileWithBroker", () => {
@@ -42,7 +42,7 @@ describe("reconcileWithBroker", () => {
       },
     };
 
-    await reconcileWithBroker({ mcp, bridge, assetClass: "equity", instrument: "SPY" });
+    await reconcileWithBroker({ mcp, bridge, assetClass: "equity", accountNumber: MOCK_ACCOUNT_NUMBER, instrument: "SPY" });
 
     expect(seen).toBeDefined();
     expect(seen!.position).toBe("3");
@@ -64,10 +64,10 @@ describe("reconcileWithBroker", () => {
       }),
     };
 
-    await expect(reconcileWithBroker({ mcp, bridge, assetClass: "equity", instrument: "SPY" })).rejects.toThrow(
+    await expect(reconcileWithBroker({ mcp, bridge, assetClass: "equity", accountNumber: MOCK_ACCOUNT_NUMBER, instrument: "SPY" })).rejects.toThrow(
       ReconciliationHalted,
     );
-    await expect(reconcileWithBroker({ mcp, bridge, assetClass: "equity", instrument: "SPY" })).rejects.toThrow(
+    await expect(reconcileWithBroker({ mcp, bridge, assetClass: "equity", accountNumber: MOCK_ACCOUNT_NUMBER, instrument: "SPY" })).rejects.toThrow(
       /position mismatch/,
     );
   });
@@ -78,7 +78,7 @@ describe("reconcileWithBroker", () => {
       reconcile: async () => ({ ok: false, error: { code: "invalid_fields", message: '"venue" is required' } }),
     };
 
-    await expect(reconcileWithBroker({ mcp, bridge, assetClass: "equity", instrument: "SPY" })).rejects.toThrow(
+    await expect(reconcileWithBroker({ mcp, bridge, assetClass: "equity", accountNumber: MOCK_ACCOUNT_NUMBER, instrument: "SPY" })).rejects.toThrow(
       ReconciliationHalted,
     );
   });
@@ -87,14 +87,14 @@ describe("reconcileWithBroker", () => {
     const mcp = await connectToMock("0", "10000.00");
     const bridge = { reconcile: async () => ({ ok: true, reconcile: { ok: true, discrepancies: [] } }) };
 
-    await expect(reconcileWithBroker({ mcp, bridge, assetClass: "equity", instrument: "SPY" })).resolves.toBeUndefined();
+    await expect(reconcileWithBroker({ mcp, bridge, assetClass: "equity", accountNumber: MOCK_ACCOUNT_NUMBER, instrument: "SPY" })).resolves.toBeUndefined();
   });
 
   it("a response with no nested verdict is not clean: throws", async () => {
     const mcp = await connectToMock("0", "10000.00");
     const bridge = { reconcile: async () => ({ ok: true }) };
 
-    await expect(reconcileWithBroker({ mcp, bridge, assetClass: "equity", instrument: "SPY" })).rejects.toThrow(
+    await expect(reconcileWithBroker({ mcp, bridge, assetClass: "equity", accountNumber: MOCK_ACCOUNT_NUMBER, instrument: "SPY" })).rejects.toThrow(
       /without a verdict/,
     );
   });
@@ -156,14 +156,14 @@ describe("reconcile status file (preflight's reconcile_recent gate)", () => {
 
   it("a clean reconcile writes a status preflight passes", async () => {
     const statusPath = tmpStatus();
-    await reconcileWithBroker({ mcp: await mcpFor("0"), bridge: clean, assetClass: "equity", instrument: "SPY", statusPath });
+    await reconcileWithBroker({ mcp: await mcpFor("0"), bridge: clean, assetClass: "equity", accountNumber: MOCK_ACCOUNT_NUMBER, instrument: "SPY", statusPath });
 
     expect(preflightGate(statusPath, 1).passed).toBe(true);
   });
 
   it("a stale clean reconcile fails preflight", async () => {
     const statusPath = tmpStatus();
-    await reconcileWithBroker({ mcp: await mcpFor("0"), bridge: clean, assetClass: "equity", instrument: "SPY", statusPath });
+    await reconcileWithBroker({ mcp: await mcpFor("0"), bridge: clean, assetClass: "equity", accountNumber: MOCK_ACCOUNT_NUMBER, instrument: "SPY", statusPath });
 
     expect(preflightGate(statusPath, 61).passed).toBe(false);
   });
@@ -171,9 +171,9 @@ describe("reconcile status file (preflight's reconcile_recent gate)", () => {
   it("a mismatch overwrites an earlier clean status and fails preflight", async () => {
     const statusPath = tmpStatus();
     const mcp = await mcpFor("3");
-    await reconcileWithBroker({ mcp, bridge: clean, assetClass: "equity", instrument: "SPY", statusPath });
+    await reconcileWithBroker({ mcp, bridge: clean, assetClass: "equity", accountNumber: MOCK_ACCOUNT_NUMBER, instrument: "SPY", statusPath });
     await expect(
-      reconcileWithBroker({ mcp, bridge: mismatch, assetClass: "equity", instrument: "SPY", statusPath }),
+      reconcileWithBroker({ mcp, bridge: mismatch, assetClass: "equity", accountNumber: MOCK_ACCOUNT_NUMBER, instrument: "SPY", statusPath }),
     ).rejects.toThrow(ReconciliationHalted);
 
     const gate = preflightGate(statusPath, 1);
@@ -184,14 +184,14 @@ describe("reconcile status file (preflight's reconcile_recent gate)", () => {
   it("a reconcile that could not reach the bridge overwrites an earlier clean status and fails preflight", async () => {
     const statusPath = tmpStatus();
     const mcp = await mcpFor("0");
-    await reconcileWithBroker({ mcp, bridge: clean, assetClass: "equity", instrument: "SPY", statusPath });
+    await reconcileWithBroker({ mcp, bridge: clean, assetClass: "equity", accountNumber: MOCK_ACCOUNT_NUMBER, instrument: "SPY", statusPath });
     const broken = {
       reconcile: async () => {
         throw new Error("bridge pipe closed");
       },
     };
     await expect(
-      reconcileWithBroker({ mcp, bridge: broken, assetClass: "equity", instrument: "SPY", statusPath }),
+      reconcileWithBroker({ mcp, bridge: broken, assetClass: "equity", accountNumber: MOCK_ACCOUNT_NUMBER, instrument: "SPY", statusPath }),
     ).rejects.toThrow(/pipe closed/);
 
     expect(JSON.parse(readFileSync(statusPath, "utf8")).ok).toBe(false);
