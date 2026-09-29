@@ -33,16 +33,16 @@ import { FakeDecider } from "../decider/fake.js";
 import { ledgerSha256RedactingApprovalSignatures } from "../ledger.js";
 import { runLoop } from "../loop.js";
 import { repoRoot } from "../paths.js";
-import { createMockRobinhoodServer, type MockScenario } from "./mock-robinhood-mcp.js";
+import { createMockRobinhoodServer, MOCK_ACCOUNT_NUMBER, type MockScenario } from "./mock-robinhood-mcp.js";
 import { resolveRealBridgeBin } from "./real-bridge-bin.js";
 import { FIRST_TRADE_DECISION, writeRealBridgeFixtures } from "./real-bridge-fixtures.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
-/** client_order_id -> broker outcome, matching real-bridge-fixtures.ts's RECORDING (exactly 4
- *  decision points, all buys, in order): a clean fill, a partial fill, a broker rejection, and
- *  one left open for an explicit cancel afterward -- "at least one partial fill, one reject, and
- *  one cancel" (wave2-spec.md). */
+/** placement order -> broker outcome, matching real-bridge-fixtures.ts's RECORDING (exactly 4
+ *  decision points, all buys, in order): a clean fill, a partial fill (the rest cancelled by the
+ *  gateway's IOC emulation), a broker rejection, and one that rests unfilled until the IOC cancel
+ *  -- "at least one partial fill, one reject, and one cancel" (wave2-spec.md). */
 const SCENARIOS: Record<string, MockScenario> = {
   "1": "filled",
   "2": "partially_filled",
@@ -119,7 +119,11 @@ export async function runExternalSim(opts: RunExternalSimOptions = {}): Promise<
       mcp,
       assetClass: "equity",
       instrument: "1",
+      accountNumber: MOCK_ACCOUNT_NUMBER,
       journalPath,
+      // Every loop order is an approved "ioc", emulated as gfd + a gateway cancel; a short rest
+      // keeps the demo fast. Order 4 rests unfilled, so this cancel is the demo's cancel.
+      iocCancelAfterMs: 5,
     });
 
     const counts = await runLoop({
@@ -137,15 +141,6 @@ export async function runExternalSim(opts: RunExternalSimOptions = {}): Promise<
       // that specific landing point matters here.
       external: { gateway, assetClass: "equity", reconcile, reconcileEveryNDecisions: FIRST_TRADE_DECISION + 2 },
     });
-
-    // Exercise the cancel path explicitly: client_order_id 4 (scenario "accepted") is left open
-    // by the loop itself -- nothing in today's loop auto-cancels an order, so this demo does it
-    // the way a human or a future policy would, through the same protocol v1.2 op.
-    const cancelResp = await bridge.cancelOrderIntent(4, "external-sim: demonstrating cancel_order_intent");
-    if (!cancelResp.ok || !cancelResp.result?.approval) {
-      throw new Error(`cancel_order_intent for client_order_id 4 failed: ${JSON.stringify(cancelResp.error ?? cancelResp.result)}`);
-    }
-    await gateway.cancelOrder(4, "1", "equity", cancelResp.result.approval);
 
     return {
       ledgerPath,

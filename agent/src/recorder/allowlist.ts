@@ -16,10 +16,13 @@ export const READ_ONLY_TOOLS: ReadonlySet<string> = new Set([
 ]);
 
 export class OrderToolCalledError extends Error {
-  constructor(public readonly tool: string) {
+  constructor(
+    public readonly tool: string,
+    allowed: ReadonlySet<string> = READ_ONLY_TOOLS,
+  ) {
     super(
-      `recorder attempted to call "${tool}", which is not on the read-only allowlist ` +
-        `(${[...READ_ONLY_TOOLS].join(", ")}). The recorder must never place, cancel, or ` +
+      `attempted to call "${tool}", which is not on the read-only allowlist ` +
+        `(${[...allowed].join(", ")}). A read-only client must never place, cancel, or ` +
         "preview an order -- refusing before the call reaches the wire.",
     );
     this.name = "OrderToolCalledError";
@@ -33,10 +36,11 @@ function toolName(params: unknown): string | undefined {
 }
 
 /**
- * Wraps a real McpClient so every callTool() is checked against READ_ONLY_TOOLS first.
+ * Wraps a real McpClient so every callTool() is checked against `allowed` (the recorder's
+ * READ_ONLY_TOOLS by default; robinhood.ts's PROBE_TOOLS for the read-only probe) first.
  * connect()/close() pass through untouched; only callTool is gated.
  */
-export function readOnly(client: McpClient): McpClient {
+export function readOnly(client: McpClient, allowed: ReadonlySet<string> = READ_ONLY_TOOLS): McpClient {
   return {
     connect: (...args: Parameters<McpClient["connect"]>) => client.connect(...args),
     close: (...args: Parameters<McpClient["close"]>) => client.close(...args),
@@ -45,8 +49,8 @@ export function readOnly(client: McpClient): McpClient {
     // break every caller (robinhood.ts, tests) that treats callTool() as always promise-returning.
     callTool: async (...args: Parameters<McpClient["callTool"]>) => {
       const name = toolName(args[0]);
-      if (!name || !READ_ONLY_TOOLS.has(name)) {
-        throw new OrderToolCalledError(name ?? "<unnamed tool>");
+      if (!name || !allowed.has(name)) {
+        throw new OrderToolCalledError(name ?? "<unnamed tool>", allowed);
       }
       return client.callTool(...args);
     },

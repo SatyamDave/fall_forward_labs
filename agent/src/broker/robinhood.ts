@@ -19,6 +19,7 @@
 // limit orders, and docs/decisions/0021 recommends SPY first, so crypto order tools are not
 // mapped and fail closed before any call.
 import { createHash } from "node:crypto";
+import { fromFixed, toFixed } from "../decimal.js";
 import type { CallToolResult, McpClient } from "./mcp-client.js";
 import type {
   ApprovedOrder,
@@ -97,16 +98,46 @@ export function bridgeVenueOrderId(venueOrderId: string): string {
   return createHash("sha256").update(venueOrderId, "utf8").digest().readBigUInt64BE(0).toString();
 }
 
+const ONE_SHARE = toFixed("1");
+const ONE_DOLLAR = toFixed("1");
+const CENT = toFixed("0.01");
+const HUNDREDTH_CENT = toFixed("0.0001");
+
+/** Why Robinhood would not take this order the way we send it, or undefined. We send whole-share
+ *  limit orders only: the real schema allows fractional quantity for market orders alone, and we
+ *  never send a market order. Prices must be on the penny tick at or above $1 and the 1/100-cent
+ *  tick below it (SEC Rule 612; Robinhood's own tick handling is UNVERIFIED). Checked before
+ *  anything is sent, so an order the venue would refuse is never an ambiguous outcome. */
+export function orderRefusal(order: ApprovedOrder): string | undefined {
+  let qty: bigint;
+  let price: bigint;
+  try {
+    qty = toFixed(order.qty);
+    price = toFixed(order.limit_price);
+  } catch {
+    return "qty or limit_price is not a decimal string";
+  }
+  if (qty <= 0n || qty % ONE_SHARE !== 0n) return `qty ${order.qty} is not a positive whole number of shares`;
+  if (price <= 0n) return `limit_price ${order.limit_price} is not positive`;
+  const tick = price >= ONE_DOLLAR ? CENT : HUNDREDTH_CENT;
+  if (price % tick !== 0n) return `limit_price ${order.limit_price} is not on the ${fromFixed(tick)} tick`;
+  return undefined;
+}
+
 // Robinhood has no IOC. The gateway emulates it with a gfd limit order it cancels itself
-// (gateway.ts); a gtc approval stays gtc. Market orders are never sent.
+// (gateway.ts); a gtc approval stays gtc. Market orders are never sent: `type` is always "limit"
+// and dollar_amount is never set. Quantities and prices go out normalized ("1", not the
+// bridge's "1.00000000"), so a whole share never reads as a fractional one.
 function orderParams(account: string, order: ApprovedOrder): Record<string, unknown> {
+  const refusal = orderRefusal(order);
+  if (refusal) throw new Error(`refusing to build a Robinhood order: ${refusal}`);
   return {
     account_number: account,
     symbol: order.instrument,
     side: order.side,
     type: "limit",
-    quantity: order.qty,
-    limit_price: order.limit_price,
+    quantity: fromFixed(toFixed(order.qty)),
+    limit_price: fromFixed(toFixed(order.limit_price)),
     time_in_force: order.time_in_force === "ioc" ? "gfd" : "gtc",
     market_hours: "regular_hours",
   };
@@ -126,15 +157,25 @@ const positionsParams = (account: string) => ({ account_number: account });
 const withCursor = (args: Record<string, unknown>, cursor: string | undefined) => (cursor === undefined ? args : { ...args, cursor });
 const symbolsParams = (instrument: string) => ({ symbols: [instrument] });
 
-/** The only calls `just robinhood-probe-readonly` makes (probe-readonly.ts enforces the list). */
-export function probeCalls(account: string): Array<{ tool: string; args: Record<string, unknown> }> {
-  return [
+/** The only tools `just robinhood-probe-readonly` may call (probe-readonly.ts wraps its client in
+ *  recorder/allowlist.ts's readOnly() with this list). */
+export const PROBE_TOOLS: ReadonlySet<string> = new Set([ACCOUNT_TOOL, EQUITY.positions, EQUITY.orders, QUOTE_TOOLS.equity, EQUITY.book]);
+
+/** get_equity_price_book's schema: "max 4 per call". */
+const BOOK_SYMBOLS_PER_CALL = 4;
+
+/** Every call the probe makes, in order: all read-only. */
+export function probeCalls(account: string, symbols: string[]): Array<{ tool: string; args: Record<string, unknown> }> {
+  const calls = [
     { tool: ACCOUNT_TOOL, args: {} },
     { tool: EQUITY.positions, args: positionsParams(account) },
     { tool: EQUITY.orders, args: { account_number: account } },
-    { tool: QUOTE_TOOLS.equity, args: symbolsParams("SPY") },
-    { tool: EQUITY.book, args: symbolsParams("SPY") },
+    { tool: QUOTE_TOOLS.equity, args: { symbols } },
   ];
+  for (let i = 0; i < symbols.length; i += BOOK_SYMBOLS_PER_CALL) {
+    calls.push({ tool: EQUITY.book, args: { symbols: symbols.slice(i, i + BOOK_SYMBOLS_PER_CALL) } });
+  }
+  return calls;
 }
 
 /** JSON Schema type name of one argument value this module sends. */
@@ -167,7 +208,7 @@ export function expectedToolParams(): Map<string, Record<string, SentParamType>>
   add(EQUITY.book, symbolsParams("X"));
   for (const tool of Object.values(QUOTE_TOOLS)) add(tool, symbolsParams("X"));
   add(ACCOUNT_TOOL, {});
-  for (const probe of probeCalls("A")) add(probe.tool, probe.args);
+  for (const probe of probeCalls("A", ["X"])) add(probe.tool, probe.args);
   return expected;
 }
 

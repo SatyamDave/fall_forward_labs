@@ -5,7 +5,8 @@
 // already approved: verify the v1.1 approval stamp against the hello public key, check the
 // payload matches the order field-by-field, reject anything expired, never resubmit a
 // client_order_id we've already resolved, and never resend an order whose outcome is unknown
-// without first looking it up by its ref_id.
+// without first looking it up by its ref_id. A resend reuses that ref_id (derived from the signed
+// approval payload), so Robinhood deduplicates it even when the lookup missed a real order.
 //
 // Robinhood has no IOC time in force. An approved "ioc" order is sent as a gfd limit order, then
 // cancelled by this gateway once iocCancelAfterMs has passed (or at once, if a halt asks for the
@@ -174,17 +175,19 @@ export class BrokerGateway {
    * mismatched or expired approval.
    */
   async submitOrder(order: ApprovedOrder, approval: Approval | undefined, assetClass: AssetClass): Promise<PlaceOrderResult> {
-    this.assertApproval(order, approval);
+    const { expires_ts_ns: expiresTsNs } = this.assertApproval(order, approval);
+    const refusal = robinhood.orderRefusal(order);
+    if (refusal) throw new GatewayRejection(refusal);
     const id = order.client_order_id;
 
     const existing = this.orders.get(id);
     if (existing?.state === "terminal") return existing.result; // duplicate: never resent
     if (existing?.state === "in_flight") return existing.promise; // join the one in-flight attempt
-    if (existing?.state === "unknown") return this.track(id, existing, this.lookUpThenResend(order, assetClass, existing));
+    if (existing?.state === "unknown") return this.track(id, existing, this.lookUpThenResend(order, assetClass, existing, expiresTsNs));
 
     const refId = robinhood.refIdForApproval(approval!.payload);
     const first = { state: "unknown" as const, refId, sentAt: this.nowIso(), sends: 1 };
-    return this.track(id, first, this.send(order, assetClass, first));
+    return this.track(id, first, this.send(order, assetClass, first, expiresTsNs));
   }
 
   /**
@@ -258,7 +261,7 @@ export class BrokerGateway {
     return parsed;
   }
 
-  private assertApproval(order: ApprovedOrder, approval: Approval | undefined): void {
+  private assertApproval(order: ApprovedOrder, approval: Approval | undefined): ApprovalPayload {
     const parsed = this.verifyApprovalPayload(approval);
     if (!isApprovalPayload(parsed)) {
       throw new GatewayRejection("approval payload is missing or has malformed fields");
@@ -282,6 +285,7 @@ export class BrokerGateway {
     if (parsed.expires_ts_ns <= this.now()) {
       throw new GatewayRejection("approval has expired");
     }
+    return parsed;
   }
 
   private assertCancelApproval(clientOrderId: number, approval: Approval | undefined): void {
@@ -305,35 +309,52 @@ export class BrokerGateway {
     }
   }
 
-  /** An unknown outcome is looked up by ref_id first. Only when no order carries it is the order
-   *  sent again, with the same ref_id so the upstream deduplicates, and at most MAX_SENDS times. */
+  /** An unknown outcome is looked up by ref_id first. Only when no order carries it, and the
+   *  approval is still unexpired, is the order sent again: with the same ref_id so the upstream
+   *  deduplicates, and at most MAX_SENDS times in all. Anything left unresolved triggers
+   *  reconciliation and throws; the order stays "unknown" so a later call looks it up again. */
   private async lookUpThenResend(
     order: ApprovedOrder,
     assetClass: AssetClass,
     unknown: Extract<OrderState, { state: "unknown" }>,
+    expiresTsNs: number,
   ): Promise<PlaceOrderResult> {
+    const id = order.client_order_id;
     // A day before the first send, so clock skew between us and the venue cannot hide the order.
     const since = new Date(Date.parse(unknown.sentAt) - DAY_MS).toISOString().slice(0, 10);
-    const found = await robinhood.findOrderByRefId(
-      this.config.mcp,
-      assetClass,
-      this.config.accountNumber,
-      unknown.refId,
-      order.instrument,
-      since,
-      this.callOpts,
-    );
+    let found: robinhood.VenueOrderRecord | undefined;
+    try {
+      found = await robinhood.findOrderByRefId(
+        this.config.mcp,
+        assetClass,
+        this.config.accountNumber,
+        unknown.refId,
+        order.instrument,
+        since,
+        this.callOpts,
+      );
+    } catch (err) {
+      this.ambiguous(id);
+      throw new Error(`order ${id}: outcome unknown, and the lookup by ref_id failed: ${(err as Error).message}`);
+    }
     if (found) return this.settle(order, assetClass, unknown.refId, found);
     if (unknown.sends >= MAX_SENDS) {
-      throw new Error(
-        `order ${order.client_order_id}: no venue order carries its ref_id after ${unknown.sends} send(s); ` +
-          "not sending again -- reconcile by hand",
-      );
+      this.ambiguous(id);
+      throw new Error(`order ${id}: outcome unknown; no venue order carries its ref_id after ${unknown.sends} send(s); not sending again`);
     }
-    return this.send(order, assetClass, { ...unknown, sends: unknown.sends + 1 });
+    if (expiresTsNs <= this.now()) {
+      this.ambiguous(id);
+      throw new Error(`order ${id}: outcome unknown and its approval has expired; not sending again`);
+    }
+    return this.send(order, assetClass, { ...unknown, sends: unknown.sends + 1 }, expiresTsNs);
   }
 
-  private async send(order: ApprovedOrder, assetClass: AssetClass, attempt: Extract<OrderState, { state: "unknown" }>): Promise<PlaceOrderResult> {
+  private async send(
+    order: ApprovedOrder,
+    assetClass: AssetClass,
+    attempt: Extract<OrderState, { state: "unknown" }>,
+    expiresTsNs: number,
+  ): Promise<PlaceOrderResult> {
     const id = order.client_order_id;
     // Durable BEFORE the network call: if the process crashes after Robinhood receives this
     // order, the journal -- not the in-memory map -- remembers it was sent, and with which ref_id.
@@ -351,11 +372,11 @@ export class BrokerGateway {
     try {
       placed = await robinhood.placeOrder(this.config.mcp, assetClass, this.config.accountNumber, order, attempt.refId, this.callOpts);
     } catch (err) {
-      // Outcome unknown: could have reached Robinhood and been lost on the way back, or never
-      // arrived at all. The next call looks it up by ref_id before anything is resent.
+      // Outcome unknown: it could have reached Robinhood and been lost on the way back, or never
+      // arrived at all. Look it up before anything is resent.
       this.orders.set(id, attempt);
-      this.ambiguous(id);
-      throw new Error(`order ${id}: outcome unknown after placeOrder failed: ${(err as Error).message}`);
+      console.error(`order ${id}: place attempt ${attempt.sends} outcome unknown: ${(err as Error).message}`);
+      return this.lookUpThenResend(order, assetClass, attempt, expiresTsNs);
     }
     return this.settle(order, assetClass, attempt.refId, placed);
   }
@@ -383,6 +404,9 @@ export class BrokerGateway {
       this.ambiguous(id);
       throw new Error(`order ${id}: the venue accepted it but returned no order id to cancel it by`);
     }
+    // Journal the venue order id before resting, so a crash mid-rest restarts with an order a
+    // halt's cancel (and reconciliation) can still reach, instead of one known only by ref_id.
+    this.journal.recordResolved(id, refId, placed);
     await this.report(id, "accepted", { venue_order_id: venueOrderId });
     await new Promise<void>((resolve) => {
       const timer = setTimeout(resolve, this.iocCancelAfterMs);

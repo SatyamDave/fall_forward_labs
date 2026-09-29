@@ -270,8 +270,11 @@ export function createMockRobinhoodServer(opts: MockRobinhoodOptions = {}): Serv
       }
 
       case "get_equity_quotes":
-      case "get_crypto_quotes":
-        return structured({ quotes: [{ symbol: args.symbols, bid: "100.00", ask: "100.05" }] });
+      case "get_crypto_quotes": {
+        // get_crypto_quotes' real parameter is also `symbols` (array); every value is SYNTHETIC.
+        const symbols = Array.isArray(args.symbols) ? args.symbols.filter((x): x is string => typeof x === "string") : [];
+        return structured({ quotes: symbols.map((symbol) => ({ symbol, bid: "100.00", ask: "100.05", last_trade_price: "100.02" })) });
+      }
 
       case "get_equity_price_book": {
         const symbols = Array.isArray(args.symbols) ? args.symbols.filter((s): s is string => typeof s === "string") : [];

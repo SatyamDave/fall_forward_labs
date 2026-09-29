@@ -391,8 +391,16 @@ def test_secrets_fails_when_missing() -> None:
 
 
 def test_secrets_passes_when_present() -> None:
-    result = preflight.check_secrets_present({"ANTHROPIC_API_KEY": "y"})
+    result = preflight.check_secrets_present(
+        {"ANTHROPIC_API_KEY": "y", "QC_ROBINHOOD_ACCOUNT_NUMBER": "z"}
+    )
     assert result.ok
+
+
+def test_secrets_require_the_robinhood_account_number() -> None:
+    result = preflight.check_secrets_present({"ANTHROPIC_API_KEY": "y"})
+    assert not result.ok
+    assert "QC_ROBINHOOD_ACCOUNT_NUMBER" in result.detail
 
 
 def test_secrets_no_longer_demand_a_robinhood_session_token() -> None:
@@ -546,7 +554,7 @@ def test_run_all_gates_all_pass_with_fixtures(tmp_path: Path) -> None:
         latency_results=latency_path,
         max_reconcile_age_min=60.0,
         now_ns=NOW_NS,
-        env={"ANTHROPIC_API_KEY": "y"},
+        env={"ANTHROPIC_API_KEY": "y", "QC_ROBINHOOD_ACCOUNT_NUMBER": "z"},
         robinhood_token=write_signin(tmp_path, {"refresh_token": SECRET}, None),
         kill_test_runner=lambda *a, **k: completed(0, stdout="test result: ok. 1 passed"),
     )
