@@ -191,7 +191,13 @@
     # ADR-0040 live decider (agent/src/decider/live.ts), QC_AGENT_MODE=live. Disabled with a
     # zero budget on purpose: no live-LLM decision may run until a human sets real numbers here
     # from measured cost/latency, and ai_gate.py fails closed on every zero in the meantime.
-    "loop-agent-eval": {"enabled": false, "daily_usd": 0, "max_turns": 0, "timeout_minutes": 0, "open_pr_cap": 0}
+    "loop-agent-eval": {"enabled": false, "daily_usd": 0, "max_turns": 0, "timeout_minutes": 0, "open_pr_cap": 0},
+    # ADR-0042 OpenRouter decider (agent/src/decider/openrouter.ts), QC_AGENT_MODE=openrouter.
+    # Separate from loop-agent-eval so turning on the free model never turns on the paid Claude
+    # decider. To enable, a founder sets enabled:true and small positive numbers (ai_gate.py denies
+    # zeros), e.g. daily_usd 0.01, max_turns 1, timeout_minutes 1; the decider's real spend cap is
+    # min(daily_usd, QC_OPENROUTER_MAX_USD_PER_DAY), default 0.
+    "loop-agent-openrouter": {"enabled": false, "daily_usd": 0, "max_turns": 0, "timeout_minutes": 0, "open_pr_cap": 0}
   },
 
   # Backlog ranking (Phase C): rank = expected_value * confidence / cost,
