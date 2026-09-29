@@ -254,6 +254,21 @@ record-quotes *args:
 # so it cannot place an order), writes names + input schemas to out/robinhood/, and checks them
 # against agent/src/broker/robinhood.ts. Exit 0 only if every tool and parameter we send matches.
 # Default is the in-process mock; `--target real` (plus ROBINHOOD_MCP_URL) is the real server.
+# Issue #63 (Rohit): store live-trading secrets in macOS Keychain. Run once per machine,
+# or again to rotate. After running, load them with: eval "$(just secrets-export)"
+secrets-setup:
+    bash ops/live/bin/setup-keychain.sh
+
+# Issue #63 (Rohit): print export statements for secrets stored by `just secrets-setup`.
+# Load into your current shell with: eval "$(just secrets-export)"
+# Add that line to ~/.zshrc to load secrets automatically in every new terminal.
+secrets-export:
+    @QC_SECRETS_PROVIDER=keychain bash -c '\
+      source ops/live/bin/load-secrets.sh; \
+      echo "export QC_ROBINHOOD_ACCOUNT_NUMBER=\"$$QC_ROBINHOOD_ACCOUNT_NUMBER\""; \
+      echo "export OPENROUTER_API_KEY=\"$$OPENROUTER_API_KEY\""; \
+      [ -n "$${ANTHROPIC_API_KEY:-}" ] && echo "export ANTHROPIC_API_KEY=\"$$ANTHROPIC_API_KEY\"" || true'
+
 robinhood-schema-check *args:
     cd {{agent}} && node_modules/.bin/tsx src/broker/schema-check-cli.ts {{args}}
 
