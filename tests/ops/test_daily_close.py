@@ -40,6 +40,13 @@ DATE0 = "2026-02-02"
 TS0 = 1769990400000000000  # 2026-02-02T00:00:00Z
 
 
+def _approval_payload(client_order_id: int) -> str:
+    return json.dumps(
+        {"client_order_id": client_order_id, "request_id": "dr-1", "side": "buy"},
+        separators=(",", ":"),
+    )
+
+
 def _ledger_entry(client_order_id: int, qty: str, decision_price: str) -> str:
     return json.dumps(
         {
@@ -69,7 +76,11 @@ def _ledger_entry(client_order_id: int, qty: str, decision_price: str) -> str:
                 "limit_price": decision_price,
                 "rationale": "t",
             },
-            "result": {"accepted": True, "client_order_id": client_order_id},
+            "result": {
+                "accepted": True,
+                "client_order_id": client_order_id,
+                "approval": {"payload": _approval_payload(client_order_id), "signature": "c3lu"},
+            },
             "mode": "fake",
             "prompt_version": "v1",
             "model": "test",
@@ -114,6 +125,7 @@ def _journal_resolved(client_order_id: int, status: str, **fields: object) -> st
     return json.dumps(
         {
             "client_order_id": client_order_id,
+            "ref_id": pnl_report.ref_id_for_approval(_approval_payload(client_order_id)),
             "phase": "resolved",
             "result": {"raw": {}, "status": status, **fields},
         }

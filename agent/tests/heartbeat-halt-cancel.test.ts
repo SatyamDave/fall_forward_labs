@@ -15,8 +15,7 @@
 //      rest window, so only the halt can end it), kills the bridge, and proves the heartbeat
 //      drains protocol v1.2.1's `pending_cancels` and finishes the cancel at the mock broker,
 //      exactly once, deterministically across two independent runs.
-import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -24,6 +23,7 @@ import type { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { describe, expect, it } from "vitest";
 import { BridgeClient } from "../src/bridge.js";
 import { createExternalModeGateway } from "../src/broker/external-mode.js";
+import { journalSha256RedactingSessions } from "../src/broker/journal.js";
 import { connectRobinhoodMcp } from "../src/broker/mcp-client.js";
 import { FakeDecider } from "../src/decider/fake.js";
 import type { Decider, DecisionOutcome } from "../src/decider/types.js";
@@ -40,11 +40,6 @@ class HungDecider implements Decider {
   decide(): Promise<DecisionOutcome> {
     return new Promise<DecisionOutcome>(() => undefined);
   }
-}
-
-function sha256(filePath: string): string {
-  const contents = existsSync(filePath) ? readFileSync(filePath) : Buffer.alloc(0);
-  return createHash("sha256").update(contents).digest("hex");
 }
 
 interface Harness {
@@ -221,7 +216,7 @@ describe("heartbeat finishes halt-triggered cancels at the real broker (issue #4
 
       return {
         ledgerSha256: ledgerSha256RedactingApprovalSignatures(ledgerPath),
-        journalSha256: sha256(journalPath),
+        journalSha256: journalSha256RedactingSessions(journalPath),
         cancelCalls: harness.cancelCalls(),
       };
     } finally {

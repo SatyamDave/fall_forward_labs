@@ -45,6 +45,7 @@ class RecordingReporter implements BridgeReporter {
 
 const { publicKey, privateKey } = generateKeyPairSync("ed25519");
 const rawPublicKey = (publicKey.export({ type: "spki", format: "der" }) as Buffer).subarray(-32);
+const SESSION = rawPublicKey.toString("base64");
 
 const NOW_NS = 1_767_571_200_000_000_000; // arbitrary fixed instant
 
@@ -278,7 +279,7 @@ describe("BrokerGateway", () => {
     const refIds = places(calls).map((c) => c.args.ref_id);
     expect(refIds).toEqual([refIdForApproval(approval.payload), refIdForApproval(approval.payload)]);
     // Both attempts were journaled (fsync'd) under that ref_id before being sent.
-    expect(replayJournal(journalPath).get(11)).toMatchObject({ state: "terminal", refId: refIds[0] });
+    expect(replayJournal(journalPath, SESSION).orders.get(11)).toMatchObject({ state: "terminal", refId: refIds[0] });
   });
 
   it(`resends at most ${MAX_SENDS} times in all, then hands the order to reconciliation`, async () => {
@@ -290,7 +291,7 @@ describe("BrokerGateway", () => {
     expect(places(calls)).toHaveLength(MAX_SENDS);
     expect(new Set(places(calls).map((c) => c.args.ref_id)).size).toBe(1);
     expect(ambiguous).toEqual([12]);
-    expect(replayJournal(journalPath).get(12)).toMatchObject({ state: "unknown", sends: MAX_SENDS });
+    expect(replayJournal(journalPath, SESSION).orders.get(12)).toMatchObject({ state: "unknown", sends: MAX_SENDS });
     expect(reporter.calls).toHaveLength(0);
   });
 
@@ -298,6 +299,7 @@ describe("BrokerGateway", () => {
     const fields = baseFields(13);
     const h = await harness({ "1": "never_arrives" });
     const timedOut = h.gateway.submitOrder(orderFrom(fields), approve(fields), "equity");
+    while (places(h.calls).length === 0) await new Promise((r) => setTimeout(r, 1));
     h.clock.ns = fields.expires_ts_ns; // the approval expires while the first send hangs
 
     await expect(timedOut).rejects.toThrow(/approval has expired; not sending again/);
@@ -312,7 +314,7 @@ describe("BrokerGateway", () => {
     const journalPath = tempJournalPath();
     const h = await harness({ "1": "filled" }, { journalPath });
     // The process before the crash journaled the attempt, and the broker received the order.
-    openJournal(journalPath).recordAttempt(14, refId, "2026-09-29T14:30:00.000Z");
+    openJournal(journalPath, SESSION).recordAttempt(14, refId, "2026-09-29T14:30:00.000Z");
     const [ct, st] = InMemoryTransport.createLinkedPair();
     await h.server.close();
     await h.server.connect(st);
@@ -351,7 +353,7 @@ describe("BrokerGateway", () => {
     expect(calls.at(-1)!.name).toBe("get_equity_orders"); // the state reported is the one read back
     expect(events()).toEqual(["accepted", "canceled"]);
     expect(reporter.calls[0]!.execution.venue_order_id).toMatch(/^[0-9]+$/);
-    expect(replayJournal(journalPath).get(15)).toMatchObject({ state: "terminal", result: { status: "canceled" } });
+    expect(replayJournal(journalPath, SESSION).orders.get(15)).toMatchObject({ state: "terminal", result: { status: "canceled" } });
   });
 
   it("emulated IOC journals the venue order id before resting, so a restart can still cancel it", async () => {
@@ -360,7 +362,7 @@ describe("BrokerGateway", () => {
 
     const pending = gateway.submitOrder(orderFrom(fields), approve(fields), "equity");
     await new Promise((r) => setTimeout(r, 100));
-    const midRest = replayJournal(journalPath).get(16);
+    const midRest = replayJournal(journalPath, SESSION).orders.get(16);
     await pending;
 
     expect(midRest).toMatchObject({ state: "terminal", result: { status: "accepted", venue_order_id: expect.stringMatching(/-/) } });

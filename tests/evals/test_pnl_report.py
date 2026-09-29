@@ -256,8 +256,41 @@ def test_write_daily_record_is_idempotent_for_identical_content(tmp_path: Path) 
 # --- --source broker: P&L from the gateway journal's real fills (issue #45) ------------------
 
 
-def _journal_line(client_order_id: int, phase: str, **result_fields: object) -> str:
-    entry: dict = {"client_order_id": client_order_id, "phase": phase}
+def _payload(client_order_id: int, session: str = "a") -> str:
+    # An approval payload as the bridge signs it; `session` stands in for what differs between
+    # two bridge processes' approvals for the same client_order_id (request_id, expiry).
+    return json.dumps(
+        {
+            "client_order_id": client_order_id,
+            "expires_ts_ns": 5_000_000_000,
+            "instrument": "SPY",
+            "limit_price": "110",
+            "qty": "1",
+            "request_id": f"dr-{client_order_id}-{session}",
+            "side": "buy",
+            "time_in_force": "ioc",
+        },
+        separators=(",", ":"),
+    )
+
+
+def _accepted(client_order_id: int, session: str = "a") -> dict:
+    approval = {"payload": _payload(client_order_id, session), "signature": "c3ludGhldGlj"}
+    return {"accepted": True, "client_order_id": client_order_id, "approval": approval}
+
+
+def _ref(client_order_id: int, session: str = "a") -> str:
+    return pnl_report.ref_id_for_approval(_payload(client_order_id, session))
+
+
+def _journal_line(
+    client_order_id: int, phase: str, session: str = "a", **result_fields: object
+) -> str:
+    entry: dict = {
+        "client_order_id": client_order_id,
+        "ref_id": _ref(client_order_id, session),
+        "phase": phase,
+    }
     if phase == "resolved":
         entry["result"] = {"raw": {}, **result_fields}
     return json.dumps(entry)
@@ -272,13 +305,13 @@ def test_broker_resolver_uses_the_journals_fill_not_the_decisions_estimate() -> 
             0,
             "buy",
             "110",
-            {"accepted": True, "client_order_id": 1},
+            _accepted(1),
             0.0,
             qty="1",
             limit_price="110",
         ),
     ]
-    journal = {1: {"status": "filled", "filled_qty": "1", "avg_price": "111"}}
+    journal = {_ref(1): {"status": "filled", "filled_qty": "1", "avg_price": "111"}}
     resolver = pnl_report.make_broker_fill_resolver(journal)
     result, _curve = pnl_report.compute(entries, fee_bps=D(0), resolve_fill=resolver)
     # bought 1@111 (not 110): mark_final=110 -> unrealized (110-111)*1 = -1
@@ -295,7 +328,7 @@ def test_broker_resolver_drops_an_order_the_journal_never_resolved() -> None:
             0,
             "buy",
             "110",
-            {"accepted": True, "client_order_id": 1},
+            _accepted(1),
             0.0,
             qty="1",
             limit_price="110",
@@ -314,13 +347,13 @@ def test_broker_resolver_drops_a_rejected_or_canceled_order() -> None:
             0,
             "buy",
             "110",
-            {"accepted": True, "client_order_id": 1},
+            _accepted(1),
             0.0,
             qty="1",
             limit_price="110",
         ),
     ]
-    journal = {1: {"status": "rejected", "reason": "insufficient_funds"}}
+    journal = {_ref(1): {"status": "rejected", "reason": "insufficient_funds"}}
     resolver = pnl_report.make_broker_fill_resolver(journal)
     result, _curve = pnl_report.compute(entries, fee_bps=D(0), resolve_fill=resolver)
     assert result.agent["unrealized_pnl_usd"] == "0"
@@ -335,18 +368,18 @@ def test_broker_resolver_counts_the_filled_part_of_a_canceled_order() -> None:
             0,
             "buy",
             "20",
-            {"accepted": True, "client_order_id": 1},
+            _accepted(1),
             0.0,
             qty="1",
             limit_price="20",
         ),
     ]
-    journal = {1: {"status": "canceled", "filled_qty": "0.5", "avg_price": "20"}}
+    journal = {_ref(1): {"status": "canceled", "filled_qty": "0.5", "avg_price": "20"}}
     resolver = pnl_report.make_broker_fill_resolver(journal)
     result, _curve = pnl_report.compute(entries, fee_bps=D(0), resolve_fill=resolver)
     assert result.fills == {"accepted_orders": 1, "matched_fills": 1}
 
-    unfilled = {1: {"status": "canceled", "filled_qty": "0"}}
+    unfilled = {_ref(1): {"status": "canceled", "filled_qty": "0"}}
     result, _curve = pnl_report.compute(
         entries, fee_bps=D(0), resolve_fill=pnl_report.make_broker_fill_resolver(unfilled)
     )
@@ -360,13 +393,13 @@ def test_broker_resolver_uses_partial_fill_quantity() -> None:
             0,
             "buy",
             "110",
-            {"accepted": True, "client_order_id": 1},
+            _accepted(1),
             0.0,
             qty="10",
             limit_price="110",
         ),
     ]
-    journal = {1: {"status": "partially_filled", "filled_qty": "4", "avg_price": "109"}}
+    journal = {_ref(1): {"status": "partially_filled", "filled_qty": "4", "avg_price": "109"}}
     resolver = pnl_report.make_broker_fill_resolver(journal)
     result, _curve = pnl_report.compute(entries, fee_bps=D(0), resolve_fill=resolver)
     # only 4 filled (not the requested 10) @109: mark_final=110 -> unrealized (110-109)*4 = 4
@@ -386,7 +419,57 @@ def test_load_broker_journal_last_entry_per_client_order_id_wins(tmp_path: Path)
         + "\n"
     )
     journal = pnl_report.load_broker_journal(path)
-    assert journal == {1: {"status": "filled", "filled_qty": "1", "avg_price": "100", "raw": {}}}
+    assert journal == {
+        _ref(1): {"status": "filled", "filled_qty": "1", "avg_price": "100", "raw": {}}
+    }
+
+
+def test_ref_id_matches_the_gateways_ref_id() -> None:
+    # agent/src/broker/robinhood.ts refIdForApproval() on the same payload.
+    payload = json.dumps(
+        {
+            "client_order_id": 1,
+            "expires_ts_ns": 5000000000,
+            "instrument": "SPY",
+            "limit_price": "110",
+            "qty": "1",
+            "request_id": "dr-1",
+            "side": "buy",
+            "time_in_force": "ioc",
+        },
+        separators=(",", ":"),
+    )
+    assert pnl_report.ref_id_for_approval(payload) == "1c551b89-e02d-50d7-8a89-b1267d9f3d43"
+
+
+def test_broker_journal_spanning_a_bridge_restart_matches_each_order_to_its_own_fill(
+    tmp_path: Path,
+) -> None:
+    # qc-bridge restarts client_order_id at 0, so both sessions have an order 1. The ledger's
+    # new-session order 1 must get the new session's fill (111), never the old one's (100).
+    path = tmp_path / "broker-journal.jsonl"
+    path.write_text(
+        "\n".join(
+            [
+                _journal_line(1, "attempt", session="old"),
+                _journal_line(
+                    1, "resolved", session="old", status="filled", filled_qty="1", avg_price="100"
+                ),
+                _journal_line(1, "attempt", session="new"),
+                _journal_line(
+                    1, "resolved", session="new", status="filled", filled_qty="1", avg_price="111"
+                ),
+            ]
+        )
+        + "\n"
+    )
+    entries = [
+        _entry("dr-1", 0, "buy", "110", _accepted(1, "new"), 0.0, qty="1", limit_price="110")
+    ]
+    resolver = pnl_report.make_broker_fill_resolver(pnl_report.load_broker_journal(path))
+    result, _curve = pnl_report.compute(entries, fee_bps=D(0), resolve_fill=resolver)
+    assert result.agent["unrealized_pnl_usd"] == "-1"  # bought at 111, marked at 110
+    assert result.fills == {"accepted_orders": 1, "matched_fills": 1}
 
 
 def test_load_broker_journal_missing_file_is_empty(tmp_path: Path) -> None:
@@ -395,7 +478,7 @@ def test_load_broker_journal_missing_file_is_empty(tmp_path: Path) -> None:
 
 def test_load_broker_journal_rejects_a_corrupt_line(tmp_path: Path) -> None:
     path = tmp_path / "broker-journal.jsonl"
-    path.write_text('{"client_order_id": 1, "phase": "sideways"}\n')
+    path.write_text('{"client_order_id": 1, "ref_id": "r", "phase": "sideways"}\n')
     try:
         pnl_report.load_broker_journal(path)
         raised = False
@@ -413,7 +496,7 @@ def test_build_report_source_broker_labels_the_result_reconciled(tmp_path: Path)
                 0,
                 "buy",
                 "110",
-                {"accepted": True, "client_order_id": 1},
+                _accepted(1),
                 0.0,
                 qty="1",
                 limit_price="110",
@@ -450,7 +533,7 @@ def test_cli_source_broker_writes_reconciled_and_exits_on_stop_rule(tmp_path: Pa
                 0,
                 "buy",
                 "110",
-                {"accepted": True, "client_order_id": 1},
+                _accepted(1),
                 0.0,
                 qty="1",
                 limit_price="110",
