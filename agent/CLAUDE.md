@@ -7,7 +7,8 @@
 ## Commands
 - `just agent-setup`, `just agent-test`, `just agent-sim` (fake mode against tests/replay/sample_day.csv; running it twice must give identical ledger sha256)
 - `QC_AGENT_MODE=fake ...`: no network, no key, what CI runs. `QC_AGENT_MODE=live ...`: needs `ANTHROPIC_API_KEY` and `scripts/ci/ai_gate.py loop-agent-eval` to allow it.
-- `just robinhood-schema-check` (issue #26): the day Agentic access arrives, run `ROBINHOOD_MCP_URL=https://agent.robinhood.com/mcp/trading just robinhood-schema-check --target real`. It sends tools/list only (never a tool call; `tests/broker/schema-check.test.ts` proves it), saves `out/robinhood/tools-<date>.json`, and exits 1 with a list of every tool or parameter `src/broker/robinhood.ts` gets wrong. Without `--target real` it runs against the mock. `mcp-client.ts` has no auth step yet, so if the server demands sign-in the command fails at connect.
+- `just robinhood-schema-check` (issue #26): the day Agentic access arrives, run `ROBINHOOD_MCP_URL=https://agent.robinhood.com/mcp/trading just robinhood-schema-check --target real`. It sends tools/list only (never a tool call; `tests/broker/schema-check.test.ts` proves it), saves `out/robinhood/tools-<date>.json`, and exits 1 with a list of every tool or parameter `src/broker/robinhood.ts` gets wrong. Without `--target real` it runs against the mock. It uses the sign-in stored by `just robinhood-login`; without one it exits 1 saying to run it.
+- `just robinhood-login`: the founder's one interactive step, on a desktop. `ROBINHOOD_MCP_URL=https://agent.robinhood.com/mcp/trading just robinhood-login`, sign in to Robinhood and finish Agentic onboarding in the browser tab it opens, then run the schema check above. It uses the SDK's MCP OAuth flow (PKCE, loopback callback, `state` checked, `src/broker/robinhood-oauth.ts`), stores the sign-in 0600 at `~/.config/fall_forward_labs/robinhood-oauth.json` (`QC_ROBINHOOD_TOKEN_PATH` overrides; a path inside the repo is refused), and only lists tools. Every connection from `mcp-client.ts` reuses it, refreshing when it can and failing closed otherwise.
 - `just ensemble-compare` (issue #54): single decider vs an N-member ensemble at the exact same total AI usage, over the frozen suite; reports P&L, member agreement, and an ADOPT/DO_NOT_ADOPT verdict. Never wired into the live loop by default — `QC_ENSEMBLE_SIZE`/`QC_ENSEMBLE_AGGREGATION` opt `cli.ts` in.
 
 ## MUST
@@ -25,7 +26,7 @@
 
 ## NEVER
 - Never register the Robinhood MCP server, or any tool beyond the two above, as an agent tool. Check: `grep -rn 'allowedTools' src` lists only `submit_order_intent` and `no_trade`.
-- Never let the agent hold, read, or forward a broker credential; `src/broker/` gets its session from the caller, not from environment variables the agent process can read.
+- Never let the agent hold, read, or forward a broker credential; `src/broker/` loads the Robinhood sign-in from its token file in `mcp-client.ts`, never from an environment variable, and never passes it to the decider or a prompt.
 - Never edit or skip a ledger line; corrections are new entries.
 - Never train `ml/`'s classifier on this agent's decisions or outputs as labels (ADR-0040; Anthropic Commercial Terms and Usage Policy bar training on Claude outputs).
 - Never call this service from `engine/`, and never let `engine/` make a network or AI call itself (root rule 1); the only channel between them is `qc-bridge`'s stdin/stdout.

@@ -2,8 +2,8 @@
 # Pluggable secret loading hook for the live host (#63). Source this from the systemd unit
 # (or a shell) before starting ops/live/supervisor.py: `source ops/live/bin/load-secrets.sh`.
 #
-# QC_SECRETS_PROVIDER selects how ROBINHOOD_SESSION_TOKEN and ANTHROPIC_API_KEY get into the
-# environment. Never edit this file to hardcode a secret value; it only decides *how* they get
+# QC_SECRETS_PROVIDER selects how ANTHROPIC_API_KEY gets into the environment. Robinhood has no
+# static token: its OAuth sign-in is a file (QC_ROBINHOOD_TOKEN_PATH, see ops/live/README.md). Never edit this file to hardcode a secret value; it only decides *how* they get
 # read, never *what* they are.
 set -euo pipefail
 

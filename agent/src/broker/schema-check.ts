@@ -16,7 +16,7 @@ type ListOnlyClient = Pick<Client, "listTools">;
 
 const MAX_PAGES = 50;
 
-async function listAllTools(client: ListOnlyClient): Promise<Tool[]> {
+export async function listAllTools(client: ListOnlyClient): Promise<Tool[]> {
   const tools: Tool[] = [];
   let cursor: string | undefined;
   for (let page = 0; page < MAX_PAGES; page++) {

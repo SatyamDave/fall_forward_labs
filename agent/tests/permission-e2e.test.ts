@@ -159,7 +159,9 @@ describe("structural check: Robinhood's address/credentials never appear in the 
     const lines = output.split("\n").filter(Boolean);
     expect(lines.length).toBeGreaterThan(0);
     for (const line of lines) {
-      expect(line).not.toMatch(/robinhood/i);
+      // Only the matched text, not the file path: a checkout under a directory named after
+      // Robinhood would otherwise fail this for a reason unrelated to the config.
+      expect(line.replace(/^[^:]+:\d+:/, "")).not.toMatch(/robinhood/i);
     }
   });
 

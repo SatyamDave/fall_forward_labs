@@ -10,7 +10,7 @@ Type=simple
 User=quant-live
 Group=quant-live
 WorkingDirectory=/opt/quant-core
-# Populates ROBINHOOD_SESSION_TOKEN / ANTHROPIC_API_KEY per QC_SECRETS_PROVIDER (default: env,
+# Populates ANTHROPIC_API_KEY per QC_SECRETS_PROVIDER (default: env,
 # meaning EnvironmentFile= below already has them), plus QC_BRIDGE_BIN / QC_BRIDGE_ARGS, which
 # the agent service itself reads to spawn its qc-bridge child (agent/src/cli.ts) -- the
 # supervisor just needs to inherit them, not pass them through as its own flags.
@@ -19,7 +19,6 @@ EnvironmentFile=-/etc/quant-core/live.env
 ExecStartPre=/opt/quant-core/ops/live/bin/load-secrets.sh
 ExecStart=/usr/bin/env python3 /opt/quant-core/ops/live/supervisor.py \
     --agent-cmd "${QC_AGENT_CMD}" \
-    --require-env ROBINHOOD_SESSION_TOKEN \
     --require-env ANTHROPIC_API_KEY \
     --require-env QC_BRIDGE_BIN \
     --halt-marker /var/lib/qc-live/state/HALT \
