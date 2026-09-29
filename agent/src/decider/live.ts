@@ -118,6 +118,31 @@ export interface LivePolicy {
   model?: string;
 }
 
+/** Runs `ai_gate.py <loop>` and returns its GITHUB_OUTPUT key=value lines; throws when it denies.
+ *  Shared by every decider that spends model calls (live, openrouter). */
+export function runAiGate(loop: string, mode: string, env: NodeJS.ProcessEnv = process.env): Record<string, string> {
+  const outDir = mkdtempSync(path.join(tmpdir(), "ai-gate-"));
+  const outFile = path.join(outDir, "output");
+  const result = spawnSync("python3", ["scripts/ci/ai_gate.py", loop], {
+    cwd: repoRoot(),
+    env: { ...env, GITHUB_OUTPUT: outFile },
+    encoding: "utf8",
+  });
+  if (result.status !== 0) {
+    const reason = (result.stdout ?? result.stderr ?? "").trim();
+    throw new Error(`${mode} mode refused: ai_gate.py denied ${loop}: ${reason}`);
+  }
+  return Object.fromEntries(
+    readFileSync(outFile, "utf8")
+      .split("\n")
+      .filter((line) => line.includes("="))
+      .map((line) => {
+        const idx = line.indexOf("=");
+        return [line.slice(0, idx), line.slice(idx + 1)];
+      }),
+  );
+}
+
 /**
  * Fail closed: live mode may run only with an API key present AND `ai_gate.py loop-agent-eval`
  * allowing it (autonomy/POLICY.yaml, disabled with a zero budget until a human sets real
@@ -128,26 +153,7 @@ export function resolveLivePolicy(env: NodeJS.ProcessEnv = process.env): LivePol
   if (!env.ANTHROPIC_API_KEY) {
     throw new Error("live mode refused: ANTHROPIC_API_KEY is not set");
   }
-  const outDir = mkdtempSync(path.join(tmpdir(), "ai-gate-"));
-  const outFile = path.join(outDir, "output");
-  const result = spawnSync("python3", ["scripts/ci/ai_gate.py", "loop-agent-eval"], {
-    cwd: repoRoot(),
-    env: { ...env, GITHUB_OUTPUT: outFile },
-    encoding: "utf8",
-  });
-  if (result.status !== 0) {
-    const reason = (result.stdout ?? result.stderr ?? "").trim();
-    throw new Error(`live mode refused: ai_gate.py denied loop-agent-eval: ${reason}`);
-  }
-  const output = Object.fromEntries(
-    readFileSync(outFile, "utf8")
-      .split("\n")
-      .filter((line) => line.includes("="))
-      .map((line) => {
-        const idx = line.indexOf("=");
-        return [line.slice(0, idx), line.slice(idx + 1)];
-      }),
-  );
+  const output = runAiGate("loop-agent-eval", "live", env);
   const maxTurns = Number(output.max_turns);
   const maxBudgetUsd = Number(output.max_budget_usd);
   const timeoutMinutes = Number(output.timeout_minutes);
