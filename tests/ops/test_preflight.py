@@ -210,6 +210,28 @@ def test_instrument_limits_passes_when_within_caps(tmp_path: Path) -> None:
     assert result.ok
 
 
+def test_real_spy_limits_fit_the_fifty_dollar_canary_caps() -> None:
+    """The committed spy limits pass the committed canary caps ($25/order, $50/day)."""
+    result = preflight.check_instrument_limits(REPO, REPO / "config/instruments/spy.toml")
+    assert result.ok, result.detail
+    canary = preflight.load_toml(REPO / "config/limits/default.toml")
+    assert canary["max_notional"] == "25"
+    assert canary["max_daily_notional"] == "50"
+
+
+def test_a_26_dollar_order_cap_fails_the_real_canary_caps(tmp_path: Path) -> None:
+    (tmp_path / "limits.toml").write_text(
+        (REPO / "config/limits/spy.toml")
+        .read_text()
+        .replace('max_notional = "25"', 'max_notional = "26"')
+    )
+    instrument = tmp_path / "instrument.toml"
+    instrument.write_text('limits = "limits.toml"\n')
+    result = preflight.check_instrument_limits(REPO, instrument)
+    assert not result.ok
+    assert "max_notional: instrument=26 > canary cap=25" in result.detail
+
+
 def test_instrument_limits_fails_closed_on_malformed_toml(tmp_path: Path) -> None:
     instrument_path = tmp_path / "config/instruments/instrument.toml"
     instrument_path.parent.mkdir(parents=True)

@@ -21,6 +21,26 @@ Robinhood from an authenticated agent session, it is *"final and binding"* (Cust
 already says this in its own comment: *"Robinhood's agentic accounts have no platform-side
 spending cap, so this is the only enforcement."*
 
+## Founder stated funding: $50 (2026-09-28)
+
+A founder stated on 2026-09-28 that the Robinhood Agentic account is funded with **$50 total**,
+and that this is the whole budget. The old placeholders let one day spend $2,000 and set the stop
+rule at the entire $50 account, so the caps were tightened to fit (tighten-only, root rule 4):
+
+| Field | File | Was | Now |
+|---|---|---|---|
+| `max_notional` (per order) | `config/limits/default.toml` (canary's `limits`), `config/limits/spy.toml` | $500 | $25 |
+| `max_daily_notional` | same two files | $2,000 | $50 |
+| `max_daily_loss` | same two files | $100 | $5 |
+| `max_drawdown_usd` (stop rule) | `scripts/reports/pnl_policy.toml` | $50 | $5 (10% of the account) |
+
+Every other key is unchanged. This note records a stated fact and the tightened numbers; it is not
+the founders' sign-off, and `fund/compliance/signoffs/budget-caps.md` still does not exist.
+
+One consequence: with $50 the agent cannot buy even one share of SPY with the whole-share limit
+orders it sends, so the first asset (#21) has to be a lower-priced ETF, chosen from live quotes in
+a follow-up. The table below is the state before this note.
+
 ## What's already in the code (placeholders, not decisions)
 
 | Field | File | Current value | Status |

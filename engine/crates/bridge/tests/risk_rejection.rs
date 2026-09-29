@@ -10,7 +10,7 @@ fn oversized_notional_is_rejected_and_never_routed() {
     let mut engine = support::engine_from(&support::small_book_csv(), 1);
     assert!(engine.next_decision_request().is_some(), "book is synced");
 
-    // 1000 units at ~99.8 is far past both max_notional (500) and max_position (0.01).
+    // 1000 units at ~99.8 is far past both max_notional (25) and max_position (0.01).
     let result = engine.submit_order_intent(
         "dr-1",
         Side::Buy,
@@ -32,12 +32,12 @@ fn oversized_position_is_rejected_when_notional_alone_would_pass() {
     let mut engine = support::engine_from(&support::small_book_csv(), 1);
     assert!(engine.next_decision_request().is_some());
 
-    // A cheap enough price keeps notional under the limit, but the size
-    // still blows through max_position (0.01).
+    // 0.02 units at ~99.8 (~$2) keeps notional under max_notional (25),
+    // but the size still blows through max_position (0.01).
     let result = engine.submit_order_intent(
         "dr-1",
         Side::Buy,
-        "1".parse().unwrap(),
+        "0.02".parse().unwrap(),
         "99.8".parse().unwrap(),
         OrderType::Limit,
     );

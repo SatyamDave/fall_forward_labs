@@ -16,6 +16,8 @@
 fee_bps = "10"
 
 [stop_rule]
-# Placeholder only, pending founders' decision #23.
-max_drawdown_usd = "50"
+# Placeholder only, pending founders' decision #23. The founder stated on 2026-09-28 that the
+# Robinhood Agentic account is funded with $50 total; $5 is 10% of it, so the stop rule trips
+# long before the account is gone (docs/decisions/0023-budget-and-caps.md).
+max_drawdown_usd = "5"
 max_consecutive_days_behind_buy_and_hold = 5

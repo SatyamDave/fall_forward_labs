@@ -127,7 +127,7 @@ def test_protected_edit_allowed_with_flag(repo: Path) -> None:
 
 
 def test_tightening_limit_allowed_with_flag(repo: Path) -> None:
-    payload = edit_limits(repo, 'max_notional = "500"', 'max_notional = "250.5"')
+    payload = edit_limits(repo, 'max_notional = "25"', 'max_notional = "12.5"')
     assert run_hook("guard-protected.sh", payload, env={"QC_ALLOW_PROTECTED": "1"}).returncode == 0
 
 
@@ -152,11 +152,11 @@ def test_loosening_via_write_blocked_with_flag(repo: Path) -> None:
     payload = tool_call(
         "Write",
         file_path=str(repo / "config/limits/default.toml"),
-        content=LIMITS.replace('"100"', '"1000"'),
+        content=LIMITS.replace('max_daily_loss = "5"', 'max_daily_loss = "1000"'),
     )
     result = run_hook("guard-protected.sh", payload, env={"QC_ALLOW_PROTECTED": "1"})
     assert result.returncode == 2
-    assert "max_daily_loss raised 100 -> 1000" in result.stderr
+    assert "max_daily_loss raised 5 -> 1000" in result.stderr
 
 
 @pytest.mark.parametrize(
@@ -328,7 +328,7 @@ def test_new_limits_file_looser_than_default_blocked(repo: Path, content: str) -
 
 
 def test_new_limits_file_tighter_than_default_allowed(repo: Path) -> None:
-    content = 'max_position = "0.005"\nmax_notional = "500"\nstale_data_ms = 500\n'
+    content = 'max_position = "0.005"\nmax_notional = "20"\nstale_data_ms = 500\n'
     assert write_new_limits(repo, "strat-x.toml", content).returncode == 0
 
 

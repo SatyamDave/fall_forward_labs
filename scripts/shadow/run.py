@@ -63,6 +63,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 AGENT_DIR = ROOT / "agent"
 DEFAULT_LIMITS = ROOT / "config/limits/default.toml"
+# One decision per 900 synced records: ~15 min at the recorder's 1 s poll, ~26 per 6.5 h session,
+# so a free model's daily request limit is not exceeded. qc-bridge's own default (50) is left
+# alone; ops/live/live.env.example passes the same value.
+REAL_RUN_DECIDE_EVERY = 900
 
 # Reuses scripts/eval/{bridge_sessions,live_agent}.py's own cargo-build and ai_gate.py helpers
 # (same binary path, same loop name, same fail-closed contract) instead of a second
@@ -412,8 +416,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                 "there is no safe default, and this repo's hard limit is no real Robinhood "
                 "connection anyway, so a real run needs real credentials this build never has."
             )
-    if args.decide_every is None and args.dry_run:
-        args.decide_every = 3
+    if args.decide_every is None:
+        args.decide_every = 3 if args.dry_run else REAL_RUN_DECIDE_EVERY
     if args.stop_after_idle_ms is None and args.dry_run:
         args.stop_after_idle_ms = 400
     return args

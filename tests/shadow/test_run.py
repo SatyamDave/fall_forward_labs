@@ -78,6 +78,7 @@ def test_a_real_run_accepts_an_explicit_request_budget_and_follows_forever_by_de
     args = shadow_run.parse_args(["--request-budget", "23400"])
     assert args.request_budget == 23400
     assert args.stop_after_idle_ms is None  # never gives up on its own
+    assert args.decide_every == 900  # ~one decision per 15 min at 1 s polls, not qc-bridge's 50
 
 
 def test_the_agent_waits_indefinitely_for_follow_mode_decisions(tmp_path: Path) -> None:
