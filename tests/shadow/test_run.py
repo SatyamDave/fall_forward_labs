@@ -80,6 +80,15 @@ def test_a_real_run_accepts_an_explicit_request_budget_and_follows_forever_by_de
     assert args.stop_after_idle_ms is None  # never gives up on its own
 
 
+def test_the_agent_waits_indefinitely_for_follow_mode_decisions(tmp_path: Path) -> None:
+    args = shadow_run.parse_args(["--dry-run"])
+    paths = shadow_run.paths_for("2026-01-02", root=tmp_path)
+    specs = shadow_run.build_specs(args, paths, "fake", tmp_path / "qc-bridge")
+    agent = next(s for s in specs if s.name == "agent")
+    assert "--follow" in agent.env["QC_BRIDGE_ARGS"].split()
+    assert agent.env["QC_BRIDGE_DECISION_TIMEOUT_MS"] == "0"
+
+
 # --- check_live_gate ---------------------------------------------------------------------------
 
 

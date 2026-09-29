@@ -25,13 +25,18 @@ export interface BridgeClientOptions {
   env?: NodeJS.ProcessEnv;
   /** Per-request timeout; a request that gets no matching response by then rejects. */
   timeoutMs?: number;
+  /** Timeout for `next_decision_request` only (default: `timeoutMs`); 0 waits indefinitely.
+   *  qc-bridge `--follow` holds that one response until the growing recording yields a decision,
+   *  which in a quiet market can take far longer than any fixed bound. A bridge that dies still
+   *  fails the call at once through the child's exit handler, whatever this is set to. */
+  decisionTimeoutMs?: number;
 }
 
 interface Pending {
   op: BridgeOp;
   resolve: (response: BridgeResponse) => void;
   reject: (error: Error) => void;
-  timer: NodeJS.Timeout;
+  timer: NodeJS.Timeout | undefined;
 }
 
 const DEFAULT_TIMEOUT_MS = 5_000;
@@ -74,11 +79,13 @@ export class BridgeClient implements BridgeReporter {
   private stdin: Writable | undefined;
   private readonly pending = new Map<string, Pending>();
   private readonly timeoutMs: number;
+  private readonly decisionTimeoutMs: number;
   private closed = false;
   private readonly marketClock = new MarketClock();
 
   constructor(private readonly opts: BridgeClientOptions) {
     this.timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.decisionTimeoutMs = opts.decisionTimeoutMs ?? this.timeoutMs;
   }
 
   /** The latest market/feed clock reading the bridge has reported (nanoseconds), for anything
@@ -198,7 +205,7 @@ export class BridgeClient implements BridgeReporter {
     entry.reject(err);
   }
 
-  private send(req: BridgeRequest): Promise<BridgeResponse> {
+  private send(req: BridgeRequest, timeoutMs = this.timeoutMs): Promise<BridgeResponse> {
     // Never throw synchronously from a Promise-returning method: reject instead, so every
     // caller can uniformly await/.catch() without also needing a try/catch.
     return new Promise<BridgeResponse>((resolve, reject) => {
@@ -208,17 +215,20 @@ export class BridgeClient implements BridgeReporter {
       }
       const stdin = this.stdin;
       validateOrThrow("bridge_request", req);
-      const timer = setTimeout(() => {
-        this.pending.delete(req.id);
-        reject(new Error(`bridge request ${req.op} (id=${req.id}) timed out after ${this.timeoutMs}ms`));
-      }, this.timeoutMs);
+      const timer =
+        timeoutMs > 0
+          ? setTimeout(() => {
+              this.pending.delete(req.id);
+              reject(new Error(`bridge request ${req.op} (id=${req.id}) timed out after ${timeoutMs}ms`));
+            }, timeoutMs)
+          : undefined;
       this.pending.set(req.id, { op: req.op, resolve, reject, timer });
       stdin.write(`${JSON.stringify(req)}\n`);
     });
   }
 
   nextDecisionRequest(): Promise<BridgeResponse> {
-    return this.send({ v: 1, id: randomUUID(), op: "next_decision_request" });
+    return this.send({ v: 1, id: randomUUID(), op: "next_decision_request" }, this.decisionTimeoutMs);
   }
 
   submitOrderIntent(intent: OrderIntent): Promise<BridgeResponse> {
