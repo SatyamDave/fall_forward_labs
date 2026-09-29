@@ -16,7 +16,9 @@ Gates, in the order the spec lists them:
   3. instrument_limits_within_canary -- the chosen instrument's config/limits/*.toml exists and
                                         every cap in it is <= the canary environment's own limits.
   4. policy_loop_agent_eval_enabled  -- autonomy/POLICY.yaml's loops.loop-agent-eval is enabled
-                                        with a positive daily_usd budget.
+                                        with a positive daily_usd budget (with --decider
+                                        openrouter: policy_loop_agent_openrouter_enabled, the
+                                        same check on loops.loop-agent-openrouter, ADR-0042).
   5. kill_file_configured            -- config/environments/canary.toml names a --kill-file path.
   6. kill_switch_test                -- engine/crates/bridge/tests/kill_file_watcher.rs (the real
                                         compiled qc-bridge binary, zero stdin traffic) passes.
@@ -33,6 +35,7 @@ Gates, in the order the spec lists them:
 Usage:
     scripts/ops/preflight.py                      # (also `just preflight-live`)
     scripts/ops/preflight.py --instrument config/instruments/spy.toml
+    scripts/ops/preflight.py --decider openrouter --instrument config/instruments/f.toml
 
 Exit code: 0 if every gate passes, 1 otherwise (never 2 -- a gate that could not even be checked
 is a failing gate, not a skip: "a check that could not run is not a check that passed").
@@ -92,6 +95,17 @@ CAP_KEYS = (
 # QC_ROBINHOOD_ACCOUNT_NUMBER is account data, not a credential, but it is handled like one:
 # agent/src/broker/robinhood.ts refuses to start external mode without it and never logs it.
 REQUIRED_SECRET_NAMES = ("ANTHROPIC_API_KEY", "QC_ROBINHOOD_ACCOUNT_NUMBER")
+
+# --decider -> (the autonomy/POLICY.yaml loop that must be enabled, the env names that must be
+# set). The OpenRouter decider (ADR-0042) never reads ANTHROPIC_API_KEY; it needs its own key and
+# model id instead (agent/src/decider/openrouter.ts's resolveOpenRouterConfig).
+DECIDERS: dict[str, tuple[str, tuple[str, ...]]] = {
+    "live": ("loop-agent-eval", REQUIRED_SECRET_NAMES),
+    "openrouter": (
+        "loop-agent-openrouter",
+        ("OPENROUTER_API_KEY", "QC_OPENROUTER_MODEL", "QC_ROBINHOOD_ACCOUNT_NUMBER"),
+    ),
+}
 
 # Must match agent/src/broker/robinhood-oauth.ts's tokenPath().
 ROBINHOOD_TOKEN_PATH_ENV = "QC_ROBINHOOD_TOKEN_PATH"  # noqa: S105 -- a variable name, not a secret
@@ -276,20 +290,18 @@ def check_instrument_limits(root: Path, instrument_path: Path) -> GateResult:
     )
 
 
-def check_policy_agent_eval(policy_path: Path) -> GateResult:
-    name = "policy_loop_agent_eval_enabled"
+def check_policy_agent_eval(policy_path: Path, loop_name: str = "loop-agent-eval") -> GateResult:
+    name = f"policy_{loop_name.replace('-', '_')}_enabled"
     try:
         classify = _load_classify_module()
         policy = classify.load_policy(policy_path)
     except Exception as exc:  # fail closed on any parse error, not just the expected ones
         return GateResult(name, False, f"could not parse {policy_path}: {exc}")
-    loop = policy.get("loops", {}).get("loop-agent-eval")
+    loop = policy.get("loops", {}).get(loop_name)
     if loop is None:
-        return GateResult(name, False, f"{policy_path} has no loops.loop-agent-eval entry")
+        return GateResult(name, False, f"{policy_path} has no loops.{loop_name} entry")
     if not loop.get("enabled"):
-        return GateResult(
-            name, False, "autonomy/POLICY.yaml loops.loop-agent-eval.enabled is false"
-        )
+        return GateResult(name, False, f"autonomy/POLICY.yaml loops.{loop_name}.enabled is false")
     daily_usd = loop.get("daily_usd", 0)
     is_positive_number = (
         isinstance(daily_usd, (int, float)) and not isinstance(daily_usd, bool) and daily_usd > 0
@@ -298,10 +310,10 @@ def check_policy_agent_eval(policy_path: Path) -> GateResult:
         return GateResult(
             name,
             False,
-            f"autonomy/POLICY.yaml loops.loop-agent-eval.daily_usd is {daily_usd!r}, "
+            f"autonomy/POLICY.yaml loops.{loop_name}.daily_usd is {daily_usd!r}, "
             "needs a positive budget",
         )
-    return GateResult(name, True, f"loop-agent-eval enabled with daily_usd={daily_usd}")
+    return GateResult(name, True, f"{loop_name} enabled with daily_usd={daily_usd}")
 
 
 def check_kill_file_configured(root: Path) -> GateResult:
@@ -455,7 +467,9 @@ def run_all_gates(
     robinhood_token: Path | None = None,
     kill_test_cmd: tuple[str, ...] = DEFAULT_KILL_TEST_CMD,
     kill_test_runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+    decider: str = "live",
 ) -> list[GateResult]:
+    policy_loop, secret_names = DECIDERS[decider]
     results = [check_adr_approved(root)]
     results += check_signoffs(signoffs_dir)
     results.append(
@@ -464,7 +478,7 @@ def run_all_gates(
             lambda: check_instrument_limits(root, instrument_path),
         )
     )
-    results.append(check_policy_agent_eval(policy_path))
+    results.append(check_policy_agent_eval(policy_path, policy_loop))
     results.append(_gate("kill_file_configured", lambda: check_kill_file_configured(root)))
     results.append(
         _gate(
@@ -473,7 +487,7 @@ def run_all_gates(
         )
     )
     results.append(check_reconcile_recent(root, reconcile_status, now_ns, max_reconcile_age_min))
-    results.append(check_secrets_present(env))
+    results.append(check_secrets_present(env, secret_names))
     token_path = robinhood_token if robinhood_token is not None else robinhood_token_path(env)
     results.append(_gate("robinhood_signin", lambda: check_robinhood_signin(token_path, now_ns)))
     results.append(check_latency_under_ttl(root, latency_results))
@@ -484,6 +498,7 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     p.add_argument("--root", type=Path, default=REPO_ROOT)
     p.add_argument("--instrument", type=Path, default=DEFAULT_INSTRUMENT)
+    p.add_argument("--decider", choices=sorted(DECIDERS), default="live")
     p.add_argument("--signoffs-dir", type=Path, default=DEFAULT_SIGNOFFS_DIR)
     p.add_argument("--policy", type=Path, default=None, help="default: <root>/autonomy/POLICY.yaml")
     p.add_argument("--reconcile-status", type=Path, default=DEFAULT_RECONCILE_STATUS)
@@ -513,6 +528,7 @@ def main(argv: list[str] | None = None) -> int:
         max_reconcile_age_min=args.max_reconcile_age_min,
         now_ns=now_ns,
         env=os.environ,
+        decider=args.decider,
     )
 
     failed = [r for r in results if not r.ok]
