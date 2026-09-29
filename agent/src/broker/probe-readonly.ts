@@ -8,16 +8,15 @@
 // Output 2, stdout: each requested symbol's last-trade price from get_equity_quotes. Market
 // prices are public, not account data; nothing else from any response is printed.
 //
-// The client is wrapped in recorder/allowlist.ts's readOnly(PROBE_TOOLS), so a place, cancel or
+// The client is wrapped in mcp-client.ts's allowOnly(PROBE_TOOLS), so a place, cancel or
 // preview call throws before it reaches the wire (agent/tests/broker/probe-readonly.test.ts).
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { repoRoot } from "../paths.js";
-import { readOnly } from "../recorder/allowlist.js";
 import { createMockRobinhoodServer, MOCK_ACCOUNT_NUMBER } from "../testkit/mock-robinhood-mcp.js";
-import { connectRobinhoodMcp, type CallToolResult, type McpClient } from "./mcp-client.js";
+import { allowOnly, connectRobinhoodMcp, type CallToolResult, type McpClient } from "./mcp-client.js";
 import { accountNumberFromEnv, PROBE_TOOLS, probeCalls } from "./robinhood.js";
 
 /** SPY plus low-priced broad-market ETF CANDIDATES for the first trade under the $25/order cap.
@@ -85,7 +84,7 @@ export interface ProbeResult {
 }
 
 export async function runProbe(client: McpClient, account: string, symbols: string[]): Promise<ProbeResult> {
-  const guarded = readOnly(client, PROBE_TOOLS);
+  const guarded = allowOnly(client, PROBE_TOOLS);
   const sensitive = new Set([account, ...symbols]);
   const shapes: ProbeResult["shapes"] = [];
   let quotesBody: unknown;

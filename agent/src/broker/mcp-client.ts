@@ -40,3 +40,39 @@ async function defaultTransport(): Promise<Transport> {
   }
   return storedAuthTransport(url);
 }
+
+export class OrderToolCalledError extends Error {
+  constructor(
+    public readonly tool: string,
+    allowed: ReadonlySet<string>,
+  ) {
+    super(
+      `attempted to call "${tool}", which is not on the read-only allowlist ` +
+        `(${[...allowed].join(", ")}). A read-only client must never place, cancel, or ` +
+        "preview an order -- refusing before the call reaches the wire.",
+    );
+    this.name = "OrderToolCalledError";
+  }
+}
+
+function toolName(params: unknown): string | undefined {
+  if (typeof params !== "object" || params === null) return undefined;
+  const name = (params as { name?: unknown }).name;
+  return typeof name === "string" ? name : undefined;
+}
+
+/** Wraps a client so a callTool() for any tool outside `allowed` throws before it reaches the
+ *  wire. The recorder (recorder/allowlist.ts) and the read-only probe (probe-readonly.ts) use it;
+ *  connect()/close() pass through untouched. */
+export function allowOnly(client: McpClient, allowed: ReadonlySet<string>): McpClient {
+  return {
+    connect: (...args: Parameters<McpClient["connect"]>) => client.connect(...args),
+    close: (...args: Parameters<McpClient["close"]>) => client.close(...args),
+    // async, so a refused call rejects the returned promise instead of throwing synchronously.
+    callTool: async (...args: Parameters<McpClient["callTool"]>) => {
+      const name = toolName(args[0]);
+      if (!name || !allowed.has(name)) throw new OrderToolCalledError(name ?? "<unnamed tool>", allowed);
+      return client.callTool(...args);
+    },
+  };
+}

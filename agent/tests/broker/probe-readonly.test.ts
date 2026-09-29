@@ -2,10 +2,9 @@
 // every value redacted, and last-trade prices, against the mock Robinhood MCP server.
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
 import { afterEach, describe, expect, it } from "vitest";
-import { connectRobinhoodMcp } from "../../src/broker/mcp-client.js";
+import { allowOnly, connectRobinhoodMcp, OrderToolCalledError } from "../../src/broker/mcp-client.js";
 import { DEFAULT_PROBE_SYMBOLS, lastTradePrices, parseProbeArgs, runProbe, shapeOf } from "../../src/broker/probe-readonly.js";
 import { PROBE_TOOLS, probeCalls } from "../../src/broker/robinhood.js";
-import { OrderToolCalledError, readOnly } from "../../src/recorder/allowlist.js";
 import { createMockRobinhoodServer, MOCK_ACCOUNT_NUMBER } from "../../src/testkit/mock-robinhood-mcp.js";
 
 let cleanup: (() => Promise<void>) | undefined;
@@ -45,7 +44,7 @@ describe("robinhood read-only probe", () => {
 
   it("refuses an order, cancel or preview tool before it reaches the wire", async () => {
     const calls: string[] = [];
-    const client = readOnly(await connected(calls), PROBE_TOOLS);
+    const client = allowOnly(await connected(calls), PROBE_TOOLS);
     for (const name of ["place_equity_order", "cancel_equity_order", "review_equity_order", "place_crypto_order"]) {
       await expect(client.callTool({ name, arguments: {} })).rejects.toThrow(OrderToolCalledError);
     }

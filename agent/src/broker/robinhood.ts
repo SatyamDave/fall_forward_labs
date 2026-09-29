@@ -158,7 +158,7 @@ const withCursor = (args: Record<string, unknown>, cursor: string | undefined) =
 const symbolsParams = (instrument: string) => ({ symbols: [instrument] });
 
 /** The only tools `just robinhood-probe-readonly` may call (probe-readonly.ts wraps its client in
- *  recorder/allowlist.ts's readOnly() with this list). */
+ *  mcp-client.ts's allowOnly() with this list). */
 export const PROBE_TOOLS: ReadonlySet<string> = new Set([ACCOUNT_TOOL, EQUITY.positions, EQUITY.orders, QUOTE_TOOLS.equity, EQUITY.book]);
 
 /** get_equity_price_book's schema: "max 4 per call". */
