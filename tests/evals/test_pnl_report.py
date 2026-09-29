@@ -78,6 +78,13 @@ def test_fee_is_realized_immediately_as_a_cash_cost() -> None:
     assert pos.avg_cost == D(100)  # fee never distorts cost basis
 
 
+def test_total_after_fees_counts_each_fee_once() -> None:
+    pos = apply_fill(Position(), "buy", D(10), D(100), D(10))  # fee 1.0
+    pos = apply_fill(pos, "sell", D(10), D(100), D(10))  # fee 1.0, flat, no trading P&L
+    assert pos.fees_paid == D("2.0")
+    assert pos.total_pnl_after_fees(D(100)) == D("-2.0")
+
+
 def test_unrealized_pnl_long_and_short() -> None:
     long = Position(qty=D(2), avg_cost=D(100))
     assert long.unrealized_pnl(D(110)) == D(20)

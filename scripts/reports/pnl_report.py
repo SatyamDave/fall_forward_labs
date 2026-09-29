@@ -88,7 +88,8 @@ class Position:
         return (self.avg_cost - mark) * -self.qty
 
     def total_pnl_after_fees(self, mark: Decimal) -> Decimal:
-        return self.realized_pnl - self.fees_paid + self.unrealized_pnl(mark)
+        # realized_pnl is already net of fees: apply_fill takes each fee out as it happens.
+        return self.realized_pnl + self.unrealized_pnl(mark)
 
 
 def apply_fill(
