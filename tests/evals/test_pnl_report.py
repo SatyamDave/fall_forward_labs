@@ -194,13 +194,14 @@ def test_buy_and_hold_not_computed_when_agent_never_trades() -> None:
 # --- evaluate_stop_rule -----------------------------------------------------------------------
 
 
-def _policy(max_drawdown: str, max_days: int) -> dict:
-    return {
-        "stop_rule": {
-            "max_drawdown_usd": max_drawdown,
-            "max_consecutive_days_behind_buy_and_hold": max_days,
-        }
+def _policy(max_drawdown: str, max_days: int, take_profit: str | None = None) -> dict:
+    stop_rule = {
+        "max_drawdown_usd": max_drawdown,
+        "max_consecutive_days_behind_buy_and_hold": max_days,
     }
+    if take_profit is not None:
+        stop_rule["take_profit_usd"] = take_profit
+    return {"stop_rule": stop_rule}
 
 
 def test_stop_rule_triggers_on_consecutive_days_behind_buy_and_hold() -> None:
@@ -231,6 +232,54 @@ def test_stop_rule_thresholds_are_labelled_placeholder() -> None:
     assert "#23" in stop["thresholds_source"]
 
 
+# --- take-profit (founder rule, 2026-09-29): stop for good at $400 cumulative profit -----------
+
+
+def _take_profit_entries(mark_final: str) -> list[dict]:
+    # Buys 1@100 (no fee), then a later no_trade entry marks the position at `mark_final`:
+    # total_pnl_after_fees == mark_final - 100 exactly, with realized_pnl and fees both zero.
+    return [
+        _entry(
+            "dr-0",
+            0,
+            "buy",
+            "100",
+            {"accepted": True, "client_order_id": 1},
+            0.0,
+            qty="1",
+            limit_price="100",
+        ),
+        _entry("dr-1", ONE_DAY_NS, "no_trade", mark_final, None, 0.0),
+    ]
+
+
+def test_stop_rule_does_not_trigger_take_profit_below_target() -> None:
+    result, curve = pnl_report.compute(_take_profit_entries("499.99"), fee_bps=D(0))
+    assert result.agent["total_pnl_after_fees_usd"] == "399.99"
+    stop = pnl_report.evaluate_stop_rule(result, curve, _policy("1000", 999, take_profit="400"))
+    assert stop["triggered"] is False
+    assert stop["take_profit_reached"] is False
+
+
+def test_stop_rule_triggers_take_profit_at_target() -> None:
+    result, curve = pnl_report.compute(_take_profit_entries("500"), fee_bps=D(0))
+    assert result.agent["total_pnl_after_fees_usd"] == "400"
+    stop = pnl_report.evaluate_stop_rule(result, curve, _policy("1000", 999, take_profit="400"))
+    assert stop["triggered"] is True
+    assert stop["take_profit_reached"] is True
+    assert any("take-profit" in r for r in stop["reasons"])
+    assert stop["thresholds"]["take_profit_usd"] == "400"
+
+
+def test_stop_rule_take_profit_is_optional_for_policies_without_it() -> None:
+    # A policy dict from before this rule existed (e.g. every other test in this file) must still
+    # parse: no KeyError, and no threshold reported for a rule that was never configured.
+    result, curve = pnl_report.compute(FIXTURE_LEDGER, fee_bps=D(0))
+    stop = pnl_report.evaluate_stop_rule(result, curve, _policy("1000", 999))
+    assert stop["take_profit_reached"] is False
+    assert "take_profit_usd" not in stop["thresholds"]
+
+
 # --- the committed pnl_policy.toml parses and is internally consistent ------------------------
 
 
@@ -239,6 +288,7 @@ def test_committed_policy_file_loads() -> None:
     assert Decimal(str(policy["fees"]["fee_bps"])) >= 0
     assert Decimal(str(policy["stop_rule"]["max_drawdown_usd"])) > 0
     assert int(policy["stop_rule"]["max_consecutive_days_behind_buy_and_hold"]) > 0
+    assert Decimal(str(policy["stop_rule"]["take_profit_usd"])) == Decimal("400")
 
 
 # --- append-only daily records -----------------------------------------------------------------

@@ -110,6 +110,7 @@ RUNBOOKS = {
     "repeated_risk_rejects": "docs/runbooks/repeated-risk-rejects.md",
     "spend_cap": "docs/runbooks/spend-cap.md",
     "stop_rule": "docs/runbooks/stop-rule-tripped.md",
+    "take_profit_reached": "docs/runbooks/stop-rule-tripped.md",
     "recording_stalled": "docs/runbooks/recording-stalled.md",
 }
 
@@ -305,6 +306,27 @@ def check_stop_rule(pnl_report: dict[str, object] | None) -> list[Alert]:
     return [
         Alert(
             "stop_rule", "critical", f"stop rule tripped for {date}: {reasons}", f"stop_rule:{date}"
+        )
+    ]
+
+
+def check_take_profit_reached(pnl_report: dict[str, object] | None) -> list[Alert]:
+    """Founder rule (2026-09-29): a distinct, named alert (separate from the generic `stop_rule`
+    one above, which also fires for this) so a human sees at a glance that trading stopped because
+    the account made its target, not because something went wrong. Same "None/malformed fails
+    loud" contract as `check_stop_rule`."""
+    if pnl_report is None:
+        return []
+    stop_rule = pnl_report.get("stop_rule")
+    if not isinstance(stop_rule, dict) or not stop_rule.get("take_profit_reached"):
+        return []
+    date = pnl_report.get("date", "unknown-date")
+    return [
+        Alert(
+            "take_profit_reached",
+            "critical",
+            f"take-profit target reached for {date}: trading halted for good",
+            f"take_profit_reached:{date}",
         )
     ]
 

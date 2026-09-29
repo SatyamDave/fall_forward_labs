@@ -31,8 +31,12 @@ for that day, not pretending it has already arrived.
 Writes the broker-sourced daily P&L record (`scripts/reports/pnl_report.py --source broker`) with
 that day's reconciliation verdict embedded, then runs the same checks
 `scripts/ops/alerts.py` runs on a live host (halts, kill switch, repeated risk rejects, spend cap)
-plus the new stop-rule check, against the just-written record -- so a reconcile mismatch or a
-stop-rule trip alert exactly the way any other live-host condition already does.
+plus the stop-rule check, against the just-written record -- so a reconcile mismatch or a
+stop-rule trip alerts exactly the way any other live-host condition already does. Unlike a
+drawdown or days-behind trip, `stop_rule.take_profit_reached` (the founder's 2026-09-29 "stop
+trading for good at $400 cumulative profit" rule) also writes `--halt-marker`
+(`ops/live/supervisor.py`'s own file and format): the account made its target, so nothing should
+restart it automatically, only a human clearing the marker by hand.
 
 Exit code: nonzero if `--reconcile-cmd` failed, the day's reconciliation verdict is not `"ok"`,
 the stop rule tripped, or any other alert fired. 0 only when every one of those is clean -- so a
@@ -56,11 +60,14 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "scripts/reports"))
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(ROOT / "ops/live"))
 import alerts  # noqa: E402
 import pnl_report  # noqa: E402
+import supervisor  # noqa: E402 - reuses write_halt_marker: one halt-marker writer, not two
 
 DEFAULT_BRIDGE_LOG = ROOT / "ops/live/logs/agent.log"
 DEFAULT_STATE_FILE = ROOT / "ops/live/state/alerts-seen.json"
+DEFAULT_HALT_MARKER = ROOT / "ops/live/state/HALT"
 
 
 def _day(ts_ns: int) -> str:
@@ -154,7 +161,17 @@ def close_day(args: argparse.Namespace) -> int:
         alert_list += alerts.check_spend_cap(
             ledger_entries, now_ns, args.daily_cap_usd, args.spend_ratio
         )
-    alert_list += alerts.check_stop_rule(json.loads(path.read_text(encoding="utf-8")))
+    written_record = json.loads(path.read_text(encoding="utf-8"))
+    alert_list += alerts.check_stop_rule(written_record)
+    alert_list += alerts.check_take_profit_reached(written_record)
+    if result.stop_rule.get("take_profit_reached"):
+        # Permanent, not a retry-after-backoff halt like a crash-loop: the account hit its target,
+        # so no new session may start until a human clears this by hand (same contract
+        # ops/live/supervisor.py's own preflight() and scripts/ops/live_canary.py's start refusal
+        # already give every other halt-marker reason).
+        supervisor.write_halt_marker(
+            args.halt_marker, f"take-profit target reached: {result.stop_rule['reasons'][-1]}"
+        )
 
     notifier: alerts.Notifier = (
         alerts.WebhookNotifier(args.webhook_url) if args.webhook_url else alerts.ConsoleNotifier()
@@ -190,6 +207,13 @@ def parse_args(argv: list[str] | None) -> argparse.Namespace:
         help="defaults to --ledger's value (the same decision ledger the spend-cap check reads)",
     )
     p.add_argument("--state-file", type=Path, default=DEFAULT_STATE_FILE)
+    p.add_argument(
+        "--halt-marker",
+        type=Path,
+        default=DEFAULT_HALT_MARKER,
+        help="written (ops/live/supervisor.py's format) when the take-profit rule reaches its "
+        "target, so the supervisor and `just live-canary` both refuse to start a new session",
+    )
     p.add_argument("--webhook-url", help="POST alerts here instead of printing (no default)")
     p.add_argument(
         "--reconcile-cmd",
