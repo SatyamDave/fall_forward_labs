@@ -178,15 +178,17 @@ describe("resolveOpenRouterConfig refuses to start", () => {
   it("with a bad timeout", async () => {
     await expect(resolveOpenRouterConfig({ ...base, QC_OPENROUTER_TIMEOUT_MS: "soon" })).rejects.toThrow(/positive integer/);
   });
-  it("while ai_gate.py denies loop-agent-openrouter (POLICY.yaml default: disabled)", async () => {
+  // AUTONOMY_ENABLED=false makes the real ai_gate.py deny whatever POLICY.yaml says (#114
+  // enabled loop-agent-openrouter there, so these tests no longer rely on the file).
+  it("while ai_gate.py denies loop-agent-openrouter", async () => {
     await expect(
-      resolveOpenRouterConfig({ ...process.env, ...base, AUTONOMY_ENABLED: "true" }),
+      resolveOpenRouterConfig({ ...process.env, ...base, AUTONOMY_ENABLED: "false" }),
     ).rejects.toThrow(/ai_gate\.py denied loop-agent-openrouter/);
   });
   it("a \":free\" model never fetches the models list, even pointed at an address that would fail", async () => {
     // Any URL works here since it must never be requested; a bad one proves it.
     await expect(
-      resolveOpenRouterConfig({ ...process.env, ...base, AUTONOMY_ENABLED: "true" }, "http://127.0.0.1:1/unused"),
+      resolveOpenRouterConfig({ ...process.env, ...base, AUTONOMY_ENABLED: "false" }, "http://127.0.0.1:1/unused"),
     ).rejects.toThrow(/ai_gate\.py denied loop-agent-openrouter/);
   });
 });
