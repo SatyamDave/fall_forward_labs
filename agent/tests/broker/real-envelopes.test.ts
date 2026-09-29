@@ -8,7 +8,7 @@ import type { McpClient } from "../../src/broker/mcp-client.js";
 import { lastTradePrices, shapeOf } from "../../src/broker/probe-readonly.js";
 import { getAccountState, getBook, getOrderById, getQuote, listAgenticOrders, verifyAgenticAccount } from "../../src/broker/robinhood.js";
 import { repoRoot } from "../../src/paths.js";
-import { pollBook } from "../../src/recorder/poll.js";
+import { MAX_BOOK_LEVELS, pollBook } from "../../src/recorder/poll.js";
 
 type Body = Record<string, unknown>;
 const FIXTURE = JSON.parse(readFileSync(path.join(repoRoot(), "agent", "fixtures", "robinhood", "real-envelopes.json"), "utf8")) as Record<string, Body>;
@@ -76,6 +76,18 @@ describe("real Robinhood response envelopes", () => {
     for (const quantity of [1.5, -1, Number.MAX_SAFE_INTEGER + 1]) {
       await expect(getBook(fixtureClient({ get_equity_price_book: book([{ price: "15.88", quantity }]) }), "equity", "SPY")).rejects.toThrow(/price\/quantity/);
     }
+  });
+
+  it("pollBook keeps only the best MAX_BOOK_LEVELS per side, as qc-bridge requires", async () => {
+    const levels = (n: number, start: number, step: number) =>
+      Array.from({ length: n }, (_, i) => ({ price: (start + i * step).toFixed(2), quantity: 100 }));
+    const deep = { data: { books: [{ symbol: "SPY", updated_at: "t", bids: levels(543, 15.88, -0.01), asks: levels(1428, 15.89, 0.01) }] }, guide: "g" };
+    const sample = await pollBook(fixtureClient({ get_equity_price_book: deep }), "equity", "SPY");
+    expect(sample.depth).toBe("l2");
+    expect(sample.bids).toHaveLength(MAX_BOOK_LEVELS);
+    expect(sample.asks).toHaveLength(MAX_BOOK_LEVELS);
+    expect(sample.bids[0]).toMatchObject({ price: "15.88" });
+    expect(sample.asks[0]).toMatchObject({ price: "15.89" });
   });
 
   it("get_equity_price_book: empty real levels fall back to the flagged top of book from the quote, never invented levels", async () => {

@@ -63,6 +63,9 @@ export interface BookSample {
   raw: Record<string, unknown>;
 }
 
+/** Mirrors qc_orderbook::MAX_LEVELS (engine/crates/orderbook/src/lib.rs). */
+export const MAX_BOOK_LEVELS = 256;
+
 /** Polls the full order book for `instrument` when the venue publishes one for this asset class,
  *  or falls back to a single top-of-book level built from the quote tool when it doesn't. See
  *  the module header for which errors trigger the fallback and which still propagate. */
@@ -71,7 +74,12 @@ export async function pollBook(client: McpClient, assetClass: AssetClass, instru
   try {
     const book = await getBook(client, assetClass, instrument);
     if (book.bids.length > 0 && book.asks.length > 0) {
-      return { bids: book.bids, asks: book.asks, depth: "l2", exchangeTsNs: localTsNs, localTsNs, raw: book.raw };
+      // The real SOFI book had 543 bids and 1428 asks (2026-09-29); qc-bridge rejects a snapshot
+      // with more than qc_orderbook::MAX_LEVELS per side, so keep the best levels (they arrive
+      // best-first).
+      const bids = book.bids.slice(0, MAX_BOOK_LEVELS);
+      const asks = book.asks.slice(0, MAX_BOOK_LEVELS);
+      return { bids, asks, depth: "l2", exchangeTsNs: localTsNs, localTsNs, raw: book.raw };
     }
   } catch (err) {
     if (!(err instanceof BookUnsupportedError)) throw err;
