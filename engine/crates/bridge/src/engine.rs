@@ -25,6 +25,7 @@ use serde_json::{Map, Value, json};
 use crate::approval::{self, CancelFields, OrderFields};
 use crate::eventlog;
 use crate::instrument::Instrument;
+use crate::usage::UsageLog;
 
 /// The only instrument the v1 bridge trades, and its label on the wire.
 pub const INSTRUMENT: InstrumentId = InstrumentId(1);
@@ -199,6 +200,9 @@ pub struct BridgeEngine {
     /// one-off agent-requested cancel. A `BTreeSet`, not a `HashMap` (root
     /// rule), bounded by however many orders were ever open at once.
     halt_cancelled: BTreeSet<u64>,
+    /// `--usage-file`: where accepted notional and post-fill P&L are appended so a restart
+    /// cannot grant a fresh daily budget (see `usage.rs`).
+    usage_log: Option<UsageLog>,
 }
 
 impl BridgeEngine {
@@ -268,6 +272,7 @@ impl BridgeEngine {
             kill_file,
             instrument_cfg,
             halt_cancelled: BTreeSet::new(),
+            usage_log: None,
         }
     }
 
@@ -293,6 +298,25 @@ impl BridgeEngine {
     /// otherwise need the fuller [`Self::with_instrument`] constructor).
     pub fn set_kill_file(&mut self, path: PathBuf) {
         self.kill_file = Some(path);
+    }
+
+    /// Sets `--usage-file`'s append handle. Pass limits already lowered by
+    /// [`crate::usage::seed_limits`] to the constructor.
+    pub fn set_usage_log(&mut self, log: UsageLog) {
+        self.usage_log = Some(log);
+    }
+
+    /// Appends one usage line; a failed write halts, since an unrecorded spend would come
+    /// back as fresh budget after the next restart.
+    fn record_usage(&mut self, write: impl FnOnce(&UsageLog) -> std::io::Result<()>) -> bool {
+        let Some(log) = &self.usage_log else {
+            return true;
+        };
+        if let Err(e) = write(log) {
+            self.kill(&format!("usage file write failed: {e}"));
+            return false;
+        }
+        true
     }
 
     /// `hello` response body (protocol v1.2): the protocol version this
@@ -547,6 +571,8 @@ impl BridgeEngine {
             // gateway-reported), not on submit.
             self.risk
                 .record_fill(order.request.instrument, order.request.side, price, qty, ts);
+            let pnl = self.daily_pnl();
+            self.record_usage(|log| log.pnl(pnl));
         }
         Ok(state)
     }
@@ -898,6 +924,15 @@ impl BridgeEngine {
         }
         if self.oms.insert(order).is_err() {
             return json!({"accepted": false, "risk_reject": "invalid_order"});
+        }
+        // Counted once risk accepts it, before any approval or route exists, matching the
+        // risk engine's own daily-notional counter. Risk already proved it fits; the fallback
+        // overcounts rather than undercounts.
+        let notional = limit_price
+            .notional(qty)
+            .unwrap_or(Price::from_raw(i64::MAX));
+        if !self.record_usage(|log| log.order(notional)) {
+            return json!({"accepted": false, "halted": "kill_switch"});
         }
         let side_str = match side {
             Side::Buy => "buy",

@@ -3,16 +3,18 @@
 
 Refuses (exit 1, before starting anything) unless `scripts/ops/preflight.py`'s every gate passes
 for this symbol's instrument file with the OpenRouter decider (ADR-0042), the environment names
-the agent and recorder need are set, and neither the kill file nor the supervisor's halt marker
-exists. Then, for today's regular session (America/New_York):
+the agent and recorder need are set, neither the kill file nor the supervisor's halt marker
+exists, and no other live run holds ops/live/state/live.lock. Then, for today's regular session
+(America/New_York):
 
   1. the recorder (`agent/src/recorder/cli.ts`, read-only tool allowlist) polls ROBINHOOD_MCP_URL
      once a second into a fresh data/raw/live/<date>-<HHMMSS>.csv;
   2. ops/live/supervisor.py (halt marker, secret checks, logs in ops/live/logs/) runs the agent
      in openrouter mode, which spawns qc-bridge `--follow --venue external --instrument <file>
-     --kill-file <canary kill_file> --decide-every 900` on that recording and executes approved
-     orders through the real gateway. `--max-restarts 0`: any agent exit halts rather than
-     restarting, because a restarted bridge would re-read the recording from its first line;
+     --kill-file <canary kill_file> --decide-every 900 --usage-file <USAGE_FILE>` on that
+     recording and executes approved orders through the real gateway. `--max-restarts 0`: any
+     agent exit halts rather than restarting, because a restarted bridge would re-read the
+     recording from its first line;
   3. this script heartbeats to out/live/<date>/heartbeat.jsonl and raises the recording-stalled
      alert (scripts/ops/alerts.py) during market hours;
   4. at the session close (16:00 ET, or the calendar's early close), or once the halt marker
@@ -40,6 +42,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import fcntl
 import json
 import os
 import shlex
@@ -57,6 +60,10 @@ AGENT_DIR = ROOT / "agent"
 TSX = AGENT_DIR / "node_modules" / ".bin" / "tsx"
 HALT_MARKER = ROOT / "ops/live/state/HALT"
 LOG_DIR = ROOT / "ops/live/logs"
+# Account-wide daily usage (accepted notional, post-fill P&L) that every qc-bridge start reads,
+# so a restart cannot grant a fresh daily budget. Append-only; see bridge/src/usage.rs.
+USAGE_FILE = ROOT / "ops/live/state/daily-usage.jsonl"
+LIVE_LOCK = "ops/live/state/live.lock"
 ET = ZoneInfo("America/New_York")
 # One poll per second across the 6.5 h regular session; Robinhood's MCP rate limit is
 # UNVERIFIED (#27), so the recorder stops rather than exceed this.
@@ -203,6 +210,8 @@ def build_specs(
         str(kill),
         "--decide-every",
         str(shadow.REAL_RUN_DECIDE_EVERY),
+        "--usage-file",
+        str(USAGE_FILE),
     ]
     # agent/src/cli.ts splits QC_BRIDGE_ARGS on spaces.
     if any(" " in a for a in [*bridge_args, str(bridge_bin)]):
@@ -430,7 +439,17 @@ def main(
             f"mock: preflight satisfied by fixtures in {root}; running the mock chain", flush=True
         )
         return run_mock(symbol, mock_dir / "chain")
-    return start(instrument, args)
+    # Held for the whole run and released by the OS when this process exits, so two live runs
+    # can never spend the same daily budget or send duplicate orders.
+    lock_path = root / LIVE_LOCK
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    with lock_path.open("a") as lock:
+        try:
+            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError:
+            print(f"refusing: another live run holds {lock_path}", file=sys.stderr)
+            return 1
+        return start(instrument, args)
 
 
 if __name__ == "__main__":

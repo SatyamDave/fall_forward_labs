@@ -168,6 +168,54 @@ def test_refuses_while_a_kill_or_halt_marker_exists(h: Harness, marker: str) -> 
     assert h.started == []
 
 
+def test_a_second_live_run_is_refused_while_the_first_holds_the_lock(h: Harness) -> None:
+    second: list[int] = []
+
+    def start(instrument: object, _args: object) -> int:
+        h.started.append(instrument.symbol)  # type: ignore[attr-defined]
+        second.append(h.run())  # a second start while this run is live
+        return 0
+
+    code = lc.main(
+        ["F"],
+        root=h.root,
+        env=h.env,
+        now_ns=lc.MOCK_NOW_NS,
+        kill_test_runner=h.runner,
+        robinhood_token=h.token,
+        start=start,
+    )
+    assert code == 0
+    assert second == [1]
+    assert h.started == ["F"], "the second run never started"
+    # Released once the first run ends: the next day's start is not blocked.
+    assert h.run() == 0
+    assert h.started == ["F", "F"]
+
+
+def test_refuses_while_another_process_holds_the_lock(h: Harness) -> None:
+    lock = h.root / lc.LIVE_LOCK
+    holder = subprocess.Popen(  # noqa: S603 - fixed interpreter and inline script
+        [
+            sys.executable,
+            "-c",
+            "import fcntl,sys; f=open(sys.argv[1],'a'); fcntl.flock(f, fcntl.LOCK_EX); "
+            "print('held', flush=True); sys.stdin.read()",
+            str(lock),
+        ],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        text=True,
+    )
+    try:
+        assert holder.stdout is not None and holder.stdout.readline() == "held\n"
+        assert h.run() == 1
+        assert h.started == []
+    finally:
+        holder.communicate("")
+    assert h.run() == 0
+
+
 def test_refuses_a_malformed_symbol_or_one_without_an_instrument_file(h: Harness) -> None:
     assert h.run(["f"]) == 1
     assert h.run(["SOFI"]) == 1  # no config/instruments/sofi.toml in the fixture tree
@@ -193,6 +241,7 @@ def test_live_children_are_wired_for_external_venue_openrouter_and_the_kill_file
         ("--instrument", str(instrument.path)),
         ("--kill-file", str(kill)),
         ("--decide-every", "900"),
+        ("--usage-file", str(lc.USAGE_FILE)),
     ):
         assert bridge[bridge.index(flag) + 1] == value
     assert "--follow" in bridge

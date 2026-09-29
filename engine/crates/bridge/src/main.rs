@@ -1,7 +1,7 @@
 //! `qc-bridge <recording> [--limits <path>] [--decide-every <n>] [--tick <decimal>]
 //!            [--model <path> --model-sha256 <hex>] [--venue sim|external]
 //!            [--kill-file <path>] [--instrument <path.toml>]
-//!            [--follow [--stop-after-idle-ms <n>]]`
+//!            [--follow [--stop-after-idle-ms <n>]] [--usage-file <path>]`
 //!
 //! Reads protocol v1 requests as JSON Lines on stdin, writes one JSON Lines
 //! response per request on stdout, and exits after `shutdown` or end of
@@ -25,6 +25,7 @@ use serde_json::Value;
 use qc_bridge::engine::{BridgeEngine, LoadedModel, VenueMode};
 use qc_bridge::feed::FollowReader;
 use qc_bridge::instrument::Instrument;
+use qc_bridge::usage::{self, UsageLog};
 use qc_inference::linear::LinearModel;
 use qc_risk::{KillSwitch, Limits};
 
@@ -86,6 +87,7 @@ struct Args {
     instrument: Option<String>,
     follow: bool,
     stop_after_idle_ms: Option<u64>,
+    usage_file: Option<PathBuf>,
 }
 
 const DEFAULT_LIMITS: &str = "../config/limits/default.toml";
@@ -106,6 +108,7 @@ fn parse_args(mut rest: impl Iterator<Item = String>) -> Result<Args, String> {
         instrument: None,
         follow: false,
         stop_after_idle_ms: None,
+        usage_file: None,
     };
     while let Some(flag) = rest.next() {
         let mut value = || rest.next().ok_or(format!("{flag} needs a value"));
@@ -123,6 +126,7 @@ fn parse_args(mut rest: impl Iterator<Item = String>) -> Result<Args, String> {
             "--kill-file" => args.kill_file = Some(PathBuf::from(value()?)),
             "--instrument" => args.instrument = Some(value()?),
             "--follow" => args.follow = true,
+            "--usage-file" => args.usage_file = Some(PathBuf::from(value()?)),
             "--stop-after-idle-ms" => {
                 args.stop_after_idle_ms = Some(value()?.parse().map_err(|_| {
                     "--stop-after-idle-ms must be a non-negative integer".to_owned()
@@ -188,7 +192,7 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
             "{e}\nusage: qc-bridge <recording> [--limits <path>] [--decide-every <n>] \
              [--tick <decimal>] [--model <path> --model-sha256 <hex>] [--venue sim|external] \
              [--kill-file <path>] [--instrument <path.toml>] \
-             [--follow [--stop-after-idle-ms <n>]]"
+             [--follow [--stop-after-idle-ms <n>]] [--usage-file <path>]"
         )
     })?;
     let instrument = args
@@ -199,7 +203,12 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
     let limits_path = instrument
         .as_ref()
         .map_or_else(|| PathBuf::from(&args.limits), |i| i.limits_path.clone());
-    let limits: Limits = toml::from_str(&std::fs::read_to_string(&limits_path)?)?;
+    let mut limits: Limits = toml::from_str(&std::fs::read_to_string(&limits_path)?)?;
+    // Refuses to start on a usage file it cannot parse (fail closed).
+    if let Some(path) = &args.usage_file {
+        let used = usage::load(path, usage::today())?;
+        limits = usage::seed_limits(limits, &used);
+    }
     let tick = args.tick.parse().map_err(|e| format!("bad --tick: {e}"))?;
     // `--follow`: `feed::FollowReader` owns reading `<recording>` from byte 0,
     // including whatever is already there -- so the engine starts empty and
@@ -237,6 +246,9 @@ fn run() -> Result<(), Box<dyn std::error::Error>> {
         args.kill_file,
         instrument,
     );
+    if let Some(path) = args.usage_file {
+        engine.set_usage_log(UsageLog::new(path));
+    }
 
     let stdin = std::io::stdin();
     let stdout = std::io::stdout();
