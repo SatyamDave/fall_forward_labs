@@ -11,6 +11,10 @@
 > `qc-bridge`/`agent` binaries are exercised by `just agent-sim`, not by this ops tooling's tests.
 > Owner: Rohit ([issue #63](https://github.com/SatyamDave/fall_forward_labs/issues/63)).
 
+`just live-canary SYMBOL` (`scripts/ops/live_canary.py`) runs preflight, the recorder, this
+supervisor and the daily close as one command; see
+[docs/runbooks/first-trading-day.md](../../docs/runbooks/first-trading-day.md).
+
 ## Host
 
 **Recommendation: one small always-on Linux VM (or a dedicated Mac mini) per environment**
