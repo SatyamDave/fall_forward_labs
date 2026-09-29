@@ -21,7 +21,8 @@ Starts four things for one calendar day's session (`--date`, default: today UTC)
   4. this script's own heartbeat: a liveness line every few seconds to
      out/shadow/<date>/heartbeat.jsonl, and a distinct event the moment one child exits
      unexpectedly (non-zero) while the other is still running -- issue #48's "any downtime
-     documented."
+     documented." -- and a `recording_stalled` event (plus a console alert, via
+     scripts/ops/alerts.py's own check) when the recording stops growing during market hours.
 
 Writes out/shadow/<date>/ledger.jsonl (the decision ledger) and, once both children have
 exited, a daily report via scripts/reports/{ledger,pnl}_report.py (forward metrics vs no-trade
@@ -55,6 +56,7 @@ import signal
 import subprocess
 import sys
 import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -69,6 +71,9 @@ DEFAULT_LIMITS = ROOT / "config/limits/default.toml"
 sys.path.insert(0, str(ROOT / "scripts" / "eval"))
 import bridge_sessions  # noqa: E402
 import live_agent  # noqa: E402
+
+sys.path.insert(0, str(ROOT / "scripts" / "ops"))
+import alerts  # noqa: E402
 
 DEFAULT_HEARTBEAT_INTERVAL_SEC = 2.0
 # Bounded, so a stuck child can't hang `just shadow` forever once a stop was requested.
@@ -138,10 +143,45 @@ def _write_line(path: Path, payload: dict[str, object]) -> None:
         f.write(json.dumps(payload, sort_keys=True) + "\n")
 
 
+def recording_stall_watch(
+    recording: Path,
+    instrument: Path,
+    stall_after_sec: float,
+    clock_ns: Callable[[], int] = time.time_ns,
+) -> Callable[[], list[dict[str, object]]]:
+    """A per-heartbeat check that returns one `recording_stalled` event when the recording
+    starts stalling (not on every heartbeat while it stays stalled). The first stall_after_sec
+    after the watch starts is a grace period: the recorder has not written its first row yet."""
+    started_ns = clock_ns()
+    stalled = False
+    notifier = alerts.ConsoleNotifier()
+
+    def check() -> list[dict[str, object]]:
+        nonlocal stalled
+        now_ns = clock_ns()
+        if now_ns - started_ns < stall_after_sec * alerts.SECOND_NS:
+            return []
+        found = alerts.check_recording_stalled(recording, instrument, now_ns, stall_after_sec)
+        was_stalled, stalled = stalled, bool(found)
+        if not found or was_stalled:
+            return []
+        notifier.send(found[0])
+        return [
+            {
+                "ts": dt.datetime.now(dt.UTC).isoformat(),
+                "event": "recording_stalled",
+                "message": found[0].message,
+            }
+        ]
+
+    return check
+
+
 def run_children(
     specs: list[ChildSpec],
     heartbeat_log: Path,
     poll_interval_sec: float = DEFAULT_HEARTBEAT_INTERVAL_SEC,
+    on_heartbeat: Callable[[], list[dict[str, object]]] | None = None,
 ) -> RunResult:
     """Starts every child, heartbeats (poll + sleep, never busy-spin) until all of them have
     exited, and documents (issue #48's "any downtime documented") the moment any one of them
@@ -187,6 +227,9 @@ def run_children(
                         },
                     },
                 )
+                for event in on_heartbeat() if on_heartbeat else []:
+                    downtime.append(event)
+                    _write_line(heartbeat_log, event)
                 still_running = [name for name, code in statuses.items() if code is None]
                 for name, code in statuses.items():
                     if code is not None and name not in reported_exit:
@@ -348,6 +391,13 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     p.add_argument("--request-budget", type=int, default=None)
     p.add_argument("--decide-every", type=int, default=None)
     p.add_argument("--stop-after-idle-ms", type=int, default=None)
+    p.add_argument(
+        "--instrument-config",
+        type=Path,
+        default=alerts.DEFAULT_INSTRUMENT,
+        help="instrument TOML whose trading_hours/calendar decide when a stalled recording alerts",
+    )
+    p.add_argument("--stall-after-sec", type=float, default=alerts.DEFAULT_STALL_AFTER_SEC)
     args = p.parse_args(argv)
 
     if args.poll_interval_ms is None:
@@ -389,9 +439,15 @@ def main(argv: list[str] | None = None) -> int:
         print(f"cargo build -p qc-bridge failed: {e}", file=sys.stderr)
         return 1
 
+    # Read the instrument calendar once before any child starts: a bad file must fail here, not
+    # raise mid-run from the heartbeat loop and orphan the children.
+    alerts.market_open(args.instrument_config, time.time_ns())
     specs = build_specs(args, paths, mode, bridge_bin)
     print(f"shadow {date}: mode={mode} recording={paths.recording} ledger={paths.ledger}")
-    result = run_children(specs, paths.heartbeat_log)
+    stall_watch = recording_stall_watch(
+        paths.recording, args.instrument_config, args.stall_after_sec
+    )
+    result = run_children(specs, paths.heartbeat_log, on_heartbeat=stall_watch)
     if result.downtime:
         print(f"downtime documented: {len(result.downtime)} event(s) -- see {paths.heartbeat_log}")
 

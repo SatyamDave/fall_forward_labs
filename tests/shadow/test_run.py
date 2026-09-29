@@ -177,6 +177,43 @@ def test_both_children_exiting_nonzero_together_is_not_reported_as_downtime(tmp_
     assert result.downtime == []
 
 
+# --- recording_stall_watch (#48: a dead recorder must not look like a quiet market) -----------
+
+MON_OPEN_NS = 1790618400 * 1_000_000_000  # 2026-09-28T18:00Z = Mon 14:00 America/New_York
+SPY = ROOT / "config/instruments/spy.toml"
+
+
+def test_stall_watch_reports_a_stall_once_after_the_grace_period(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    clock = [MON_OPEN_NS]
+    recording = tmp_path / "2026-09-28.csv"  # never written: the recorder died at startup
+    watch = shadow_run.recording_stall_watch(recording, SPY, 120.0, clock_ns=lambda: clock[0])
+
+    assert watch() == []  # recorder startup grace
+    clock[0] += 121 * 1_000_000_000
+    events = watch()
+    assert [e["event"] for e in events] == ["recording_stalled"]
+    assert "recording_stalled" in capsys.readouterr().out
+    clock[0] += 2 * 1_000_000_000
+    assert watch() == []  # still stalled: not re-reported every heartbeat
+
+
+def test_run_children_logs_heartbeat_events_as_downtime(tmp_path: Path) -> None:
+    a = shadow_run.ChildSpec(
+        "a", write_script(tmp_path, "a.py", "sys.exit(0)"), tmp_path, {}, tmp_path / "a.log"
+    )
+    heartbeat = tmp_path / "heartbeat.jsonl"
+    event = {"event": "recording_stalled", "message": "m"}
+
+    result = shadow_run.run_children(
+        [a], heartbeat, poll_interval_sec=0.02, on_heartbeat=lambda: [event]
+    )
+
+    assert event in result.downtime
+    assert '"recording_stalled"' in heartbeat.read_text()
+
+
 # --- write_reports (real scripts/reports/*, no Node/Rust needed) -------------------------------
 
 
