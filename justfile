@@ -281,7 +281,9 @@ bench-latency *args:
     python3 scripts/bench/latency.py {{args}}
 
 # Issue #48 (A5 Shadow, infrastructure): recorder -> qc-bridge --follow (sim venue only) -> agent
-# (fake unless --live, gated by scripts/ci/ai_gate.py) -> daily report, all as one command for
+# (`--decider fake|live|openrouter`, default fake; live and openrouter gated by
+# scripts/ci/ai_gate.py; `--live` = `--decider live`; `--symbol X` gives qc-bridge
+# config/instruments/<x>.toml) -> daily report, all as one command for
 # one calendar day (`--date`, default today UTC). `--dry-run` runs the whole pipeline against
 # the mock Robinhood MCP server with a small, fast budget; a real run needs real credentials
 # this build never has (hard limit: no real Robinhood connection) plus an explicit
@@ -290,3 +292,17 @@ bench-latency *args:
 # fund/track-record/daily/ -- that path is the real broker-sourced track record).
 shadow *args:
     python3 scripts/shadow/run.py {{args}}
+
+# Writes config/instruments/<symbol>.toml for one US stock: spy.toml's shape (tick 0.01, whole
+# shares, NYSE hours and calendar), the next free id, and spy.toml's own limits file, so caps can
+# never be looser than SPY's. SYMBOL: 1-6 uppercase letters, optional dot suffix (BRK.B).
+new-equity-instrument symbol:
+    python3 scripts/ops/new_equity_instrument.py {{symbol}}
+
+# Live canary trading of one stock with real orders (docs/runbooks/first-trading-day.md). Runs
+# every preflight gate first (--decider openrouter) and refuses unless all pass; then recorder +
+# supervisor -> agent (openrouter) -> qc-bridge --venue external --kill-file ops/live/state/KILL
+# until the 16:00 ET close, then the daily close. `--mock` runs the same gates on fixtures and
+# the chain against the mock Robinhood MCP and a mock OpenRouter server only.
+live-canary symbol *args:
+    python3 scripts/ops/live_canary.py {{symbol}} {{args}}

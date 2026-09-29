@@ -84,10 +84,46 @@ def test_a_real_run_accepts_an_explicit_request_budget_and_follows_forever_by_de
 def test_the_agent_waits_indefinitely_for_follow_mode_decisions(tmp_path: Path) -> None:
     args = shadow_run.parse_args(["--dry-run"])
     paths = shadow_run.paths_for("2026-01-02", root=tmp_path)
-    specs = shadow_run.build_specs(args, paths, "fake", tmp_path / "qc-bridge")
+    spy = shadow_run.load_instrument("SPY")
+    specs = shadow_run.build_specs(args, paths, "fake", tmp_path / "qc-bridge", spy)
     agent = next(s for s in specs if s.name == "agent")
     assert "--follow" in agent.env["QC_BRIDGE_ARGS"].split()
     assert agent.env["QC_BRIDGE_DECISION_TIMEOUT_MS"] == "0"
+
+
+def test_the_bridge_gets_the_symbols_instrument_file_and_the_recorder_its_id(
+    tmp_path: Path,
+) -> None:
+    args = shadow_run.parse_args(["--dry-run", "--decider", "openrouter"])
+    paths = shadow_run.paths_for("2026-01-02", root=tmp_path)
+    spy = shadow_run.load_instrument("SPY")
+    specs = shadow_run.build_specs(args, paths, "openrouter", tmp_path / "qc-bridge", spy)
+    agent = next(s for s in specs if s.name == "agent")
+    recorder = next(s for s in specs if s.name == "recorder")
+    bridge_args = agent.env["QC_BRIDGE_ARGS"].split()
+    assert bridge_args[bridge_args.index("--instrument") + 1] == str(SPY.resolve())
+    assert bridge_args[bridge_args.index("--venue") + 1] == "sim"
+    assert "--limits" not in bridge_args  # the instrument file's own limits apply
+    assert recorder.cmd[recorder.cmd.index("--instrument-id") + 1] == "2"  # spy.toml's id
+    assert agent.env["QC_AGENT_MODE"] == "openrouter"
+    assert agent.env["QC_INSTRUMENT"] == "SPY"
+
+
+def test_a_symbol_without_an_instrument_file_names_the_command_that_makes_one() -> None:
+    with pytest.raises(ValueError, match="just new-equity-instrument ZZZZZ"):
+        shadow_run.load_instrument("ZZZZZ")
+
+
+def test_an_instrument_file_for_another_symbol_is_refused() -> None:
+    with pytest.raises(ValueError, match="not 'QQQ'"):
+        shadow_run.load_instrument("QQQ", SPY)
+
+
+def test_decider_defaults_to_fake_and_live_is_an_alias() -> None:
+    assert shadow_run.parse_args(["--dry-run"]).decider == "fake"
+    assert shadow_run.parse_args(["--dry-run", "--live"]).decider == "live"
+    with pytest.raises(SystemExit):
+        shadow_run.parse_args(["--dry-run", "--live", "--decider", "openrouter"])
 
 
 # --- check_live_gate ---------------------------------------------------------------------------
@@ -100,6 +136,12 @@ def test_live_gate_denies_today_because_loop_agent_eval_is_disabled_zero_budget(
     allowed, reason = shadow_run.check_live_gate(root=ROOT)
     assert allowed is False
     assert "loop-agent-eval" in reason or "POLICY" in reason
+
+
+def test_main_refuses_openrouter_while_its_gate_is_disabled() -> None:
+    exit_code = shadow_run.main(["--dry-run", "--decider", "openrouter", "--date", "2026-09-17"])
+    assert exit_code == 1
+    assert not shadow_run.paths_for("2026-09-17", root=ROOT).ledger.exists()
 
 
 def test_main_refuses_live_rather_than_silently_running_fake() -> None:
