@@ -203,6 +203,17 @@ impl RiskEngine {
         }
     }
 
+    /// `max_daily_notional` less what accepted orders already used today (check 8), never
+    /// below zero. A read-only view for callers that report headroom (qc-bridge's
+    /// `DecisionRequest.limits`); it changes no state and no check.
+    #[must_use]
+    pub fn remaining_daily_notional(&self, now: Timestamp) -> Price {
+        let left = (i128::from(self.limits.max_daily_notional.raw())
+            - self.daily_notional_so_far(now))
+        .max(0);
+        Price::from_raw(i64::try_from(left).unwrap_or(i64::MAX))
+    }
+
     fn check_static(&self, order: &OrderRequest, ctx: &RiskContext) -> Result<(), RiskReject> {
         let l = &self.limits;
         if order.price <= Price::ZERO || order.qty <= Qty::ZERO {

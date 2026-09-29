@@ -120,6 +120,11 @@
         "remaining_daily_loss": {
           "type": "string",
           "pattern": "^-?[0-9]+(\\.[0-9]{1,8})?$"
+        },
+        "remaining_daily_notional": {
+          "description": "Protocol v1.3, optional: max_daily_notional less the notional of orders risk already accepted today, filled or not.",
+          "type": "string",
+          "pattern": "^-?[0-9]+(\\.[0-9]{1,8})?$"
         }
       }
     },

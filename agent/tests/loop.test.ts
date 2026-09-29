@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import type { BridgeClient } from "../src/bridge.js";
 import { FakeDecider } from "../src/decider/fake.js";
+import type { IntentResult } from "../src/types.js";
 import { ledgerSha256 } from "../src/ledger.js";
 import { runLoop } from "../src/loop.js";
 import { SCENARIO_FIXTURE, startFakeBridge } from "./helpers/fakeBridge.js";
@@ -38,6 +39,24 @@ describe("runLoop against the fake bridge (offline, deterministic)", () => {
     // scenario.json: req-1 signals up with high confidence (a trade), req-2 signals flat (no_trade).
     expect(decisions).toBe(2);
     expect(noTrades).toBe(1);
+  });
+
+  it("reports each decision's IntentResult (null for no_trade) to a decider that observes", async () => {
+    const bridge = startFakeBridge({ scenario: SCENARIO_FIXTURE });
+    bridges.push(bridge);
+    const seen: (IntentResult | null)[] = [];
+    const fake = new FakeDecider();
+    await runLoop({
+      bridge,
+      decider: { decide: (r) => fake.decide(r), observe: (res) => seen.push(res) },
+      mode: "fake",
+      promptVersion: "v1",
+      model: "fake-rule-v1",
+      ledgerPath: path.join(mkdtempSync(path.join(tmpdir(), "agent-loop-")), "ledger.jsonl"),
+    });
+    expect(seen).toHaveLength(2);
+    expect(seen[0]).toMatchObject({ accepted: expect.any(Boolean) });
+    expect(seen[1]).toBeNull();
   });
 
   it("produces an identical ledger sha256 across two independent runs of the same feed", async () => {

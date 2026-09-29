@@ -19,6 +19,7 @@ import { connectRobinhoodMcp } from "./broker/mcp-client.js";
 import { accountNumberFromEnv } from "./broker/robinhood.js";
 import type { AssetClass } from "./broker/types.js";
 import { BridgeClient } from "./bridge.js";
+import { defaultRuleConfigPath, ExperimentalRuleDecider, loadRuleConfig } from "./decider/experimental-rule.js";
 import { EnsembleDecider, type EnsembleMember, parseEnsembleEnv, splitBudgetEqually } from "./decider/ensemble.js";
 import { FakeDecider } from "./decider/fake.js";
 import { LiveDecider, PROMPT_VERSION, resolveLivePolicy, resolvePromptVersion } from "./decider/live.js";
@@ -87,6 +88,8 @@ function resolveDecisionTimeoutMs(raw: string | undefined): number | undefined {
 
 function resolveMode(raw: string | undefined): LedgerMode {
   // The ledger schema's mode enum has no "openrouter"; the model field says which provider.
+  // experimental-rule is deterministic with no model call, so it records "fake" with an
+  // "experimental-rule:" model id and raw.experimental = true.
   if (raw === "live" || raw === "openrouter") return "live";
   if (raw === "replay") return "replay";
   return "fake";
@@ -174,7 +177,17 @@ async function main(): Promise<void> {
     let promptVersion: string;
     // Only live mode's ledger label reflects QC_PROMPT_VERSION -- fake/replay never read a
     // prompt file at all, so PROMPT_VERSION is today's unchanged static label for them either way.
-    if (process.env.QC_AGENT_MODE === "openrouter") {
+    if (process.env.QC_AGENT_MODE === "experimental-rule") {
+      if (ensembleConfig) throw new Error("QC_ENSEMBLE_SIZE is not supported with QC_AGENT_MODE=experimental-rule");
+      // Fail closed: an unvalidated rule never reaches a real broker by setting one env var.
+      if (external && process.env.QC_EXPERIMENTAL_RULE_ALLOW_EXTERNAL !== "yes") {
+        throw new Error("QC_AGENT_MODE=experimental-rule refuses venue_mode external unless QC_EXPERIMENTAL_RULE_ALLOW_EXTERNAL=yes");
+      }
+      const rule = new ExperimentalRuleDecider(loadRuleConfig(process.env.QC_RULE_CONFIG ?? defaultRuleConfigPath()));
+      decider = rule;
+      model = rule.label;
+      promptVersion = rule.label; // no prompt; the config's name and version identify the rule
+    } else if (process.env.QC_AGENT_MODE === "openrouter") {
       if (ensembleConfig) throw new Error("QC_ENSEMBLE_SIZE is not supported with QC_AGENT_MODE=openrouter");
       const openrouter = new OpenRouterDecider({ config: await resolveOpenRouterConfig() });
       decider = openrouter;
