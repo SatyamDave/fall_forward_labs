@@ -79,6 +79,47 @@ function placeParams(order: ApprovedOrder): Record<string, unknown> {
   };
 }
 
+// UNVERIFIED shapes -- see module header. Named so expectedToolParams() below reads the exact
+// arguments each call sends instead of a second, hand-copied list that could drift.
+const cancelParams = (instrument: string, clientOrderId: number) => ({ symbol: instrument, client_order_id: String(clientOrderId) });
+const statusParams = (clientOrderId: number) => ({ client_order_id: String(clientOrderId) });
+const symbolsParams = (instrument: string) => ({ symbols: [instrument] });
+const positionParams = (instrument: string) => ({ symbol: instrument });
+
+/** JSON Schema type name of one argument value this module sends. */
+export type SentParamType = "string" | "array";
+
+/**
+ * Every tool this module calls, with each argument it sends and that argument's JSON type --
+ * built by running the real argument builders above on sample values, so it cannot disagree
+ * with what callTool() actually puts on the wire. Read by schema-check.ts (#26) to compare
+ * against the tool list a live server reports.
+ */
+export function expectedToolParams(): Map<string, Record<string, SentParamType>> {
+  const sample: ApprovedOrder = { client_order_id: 1, instrument: "X", side: "buy", qty: "1", limit_price: "1", time_in_force: "ioc", request_id: "r" };
+  const expected = new Map<string, Record<string, SentParamType>>();
+  const add = (tool: string, args: Record<string, unknown>) => {
+    const params = expected.get(tool) ?? {};
+    for (const [name, value] of Object.entries(args)) {
+      if (Array.isArray(value)) params[name] = "array";
+      else if (typeof value === "string") params[name] = "string";
+      else throw new Error(`expectedToolParams: ${tool}.${name} is a ${typeof value}; extend SentParamType`);
+    }
+    expected.set(tool, params);
+  };
+  for (const tools of Object.values(TOOLS)) {
+    add(tools.place, placeParams(sample));
+    add(tools.preview, placeParams(sample));
+    add(tools.cancel, cancelParams("X", 1));
+    add(tools.status, statusParams(1));
+    add(tools.quote, symbolsParams("X"));
+    add(tools.positions, positionParams("X"));
+    if (tools.book) add(tools.book, symbolsParams("X"));
+  }
+  add(ACCOUNT_TOOL, {});
+  return expected;
+}
+
 export interface CallOptions {
   /** Per-call request timeout in ms. A placeOrder/getOrderStatus call that exceeds this throws
    *  -- the gateway treats that the same as any other transport failure: outcome unknown,
@@ -171,7 +212,7 @@ export async function cancelOrder(
 ): Promise<CancelOrderResult> {
   const tool = TOOLS[assetClass].cancel;
   // UNVERIFIED shape -- see module header.
-  const raw = unwrap(tool, await callTool(client, tool, { symbol: instrument, client_order_id: String(clientOrderId) }, opts));
+  const raw = unwrap(tool, await callTool(client, tool, cancelParams(instrument, clientOrderId), opts));
   const state = raw.state;
   const status = state === "canceled" ? "canceled" : state === "cancel_rejected" ? "cancel_rejected" : undefined;
   if (!status) throw new RobinhoodToolError(tool, `unrecognized cancel state: ${JSON.stringify(state)}`);
@@ -192,7 +233,7 @@ export async function getOrderStatus(
   opts?: CallOptions,
 ): Promise<OrderStatusResult> {
   const tool = TOOLS[assetClass].status;
-  const raw = unwrap(tool, await callTool(client, tool, { client_order_id: String(clientOrderId) }, opts));
+  const raw = unwrap(tool, await callTool(client, tool, statusParams(clientOrderId), opts));
   const orders = Array.isArray(raw.orders) ? raw.orders : [];
   const match = orders.find(
     (o): o is Record<string, unknown> => typeof o === "object" && o !== null && (o as Record<string, unknown>).client_order_id === String(clientOrderId),
@@ -218,7 +259,7 @@ export async function getQuote(
   opts?: CallOptions,
 ): Promise<Record<string, unknown>> {
   const tool = TOOLS[assetClass].quote;
-  return unwrap(tool, await callTool(client, tool, { symbols: [instrument] }, opts));
+  return unwrap(tool, await callTool(client, tool, symbolsParams(instrument), opts));
 }
 
 /** Thrown by getBook() for an asset class with no `book` entry in TOOLS (crypto/options today --
@@ -277,7 +318,7 @@ export async function getBook(
 ): Promise<BookResult> {
   const tool = TOOLS[assetClass].book;
   if (!tool) throw new BookUnsupportedError(assetClass);
-  const raw = unwrap(tool, await callTool(client, tool, { symbols: [instrument] }, opts));
+  const raw = unwrap(tool, await callTool(client, tool, symbolsParams(instrument), opts));
   const books = Array.isArray(raw.books) ? raw.books : [];
   const match = books.find(
     (b): b is Record<string, unknown> => typeof b === "object" && b !== null && (b as Record<string, unknown>).symbol === instrument,
@@ -340,7 +381,7 @@ export async function getAccountState(
   opts?: CallOptions,
 ): Promise<AccountState> {
   const positionsTool = TOOLS[assetClass].positions;
-  const positionsRaw = unwrap(positionsTool, await callTool(client, positionsTool, { symbol: instrument }, opts));
+  const positionsRaw = unwrap(positionsTool, await callTool(client, positionsTool, positionParams(instrument), opts));
   const positions = Array.isArray(positionsRaw.positions) ? positionsRaw.positions : [];
   const match = positions.find(
     (p): p is Record<string, unknown> => typeof p === "object" && p !== null && (p as Record<string, unknown>).symbol === instrument,

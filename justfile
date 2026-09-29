@@ -250,6 +250,13 @@ agent-sim-external:
 record-quotes *args:
     cd {{agent}} && node_modules/.bin/tsx src/recorder/cli.ts {{args}}
 
+# Issue #26: lists the tools a Robinhood MCP server reports (tools/list only, never a tool call,
+# so it cannot place an order), writes names + input schemas to out/robinhood/, and checks them
+# against agent/src/broker/robinhood.ts. Exit 0 only if every tool and parameter we send matches.
+# Default is the in-process mock; `--target real` (plus ROBINHOOD_MCP_URL) is the real server.
+robinhood-schema-check *args:
+    cd {{agent}} && node_modules/.bin/tsx src/broker/schema-check-cli.ts {{args}}
+
 # Issues #31/#55: per-decision latency (raw bridge round trip, agent decide step, full loop) in
 # fake and replay mode, N decisions each (default 1000). Prints p50/p95/p99/max/throughput and
 # writes out/bench/latency-results.json (gitignored). See docs/reports/latency.md for the last
