@@ -380,13 +380,32 @@ def evaluate_stop_rule(
                 f"{streak} consecutive day(s) behind buy-and-hold (threshold {max_days})"
             )
 
+    # Founder rule (2026-09-29): stop trading for good once cumulative realized+unrealized profit
+    # (after fees -- the same total the equity curve and drawdown above are built from) reaches the
+    # target. Optional: `thresholds.get` so a caller's policy dict from before this rule existed
+    # (e.g. this function's own tests) still parses. `daily_close.py` is what turns
+    # `take_profit_reached` into a permanent halt; this function only detects it.
+    take_profit_threshold = thresholds.get("take_profit_usd")
+    take_profit_reached = False
+    thresholds_out = {
+        "max_drawdown_usd": str(max_dd),
+        "max_consecutive_days_behind_buy_and_hold": max_days,
+    }
+    if take_profit_threshold is not None:
+        take_profit = Decimal(str(take_profit_threshold))
+        thresholds_out["take_profit_usd"] = str(take_profit)
+        cumulative_pnl = Decimal(result.agent["total_pnl_after_fees_usd"])
+        if cumulative_pnl >= take_profit:
+            take_profit_reached = True
+            reasons.append(
+                f"cumulative profit ${cumulative_pnl} reached the ${take_profit} take-profit target"
+            )
+
     return {
         "triggered": bool(reasons),
         "reasons": reasons,
-        "thresholds": {
-            "max_drawdown_usd": str(max_dd),
-            "max_consecutive_days_behind_buy_and_hold": max_days,
-        },
+        "take_profit_reached": take_profit_reached,
+        "thresholds": thresholds_out,
         "thresholds_source": (
             "placeholder pending founders' decision #23, see scripts/reports/pnl_policy.toml"
         ),

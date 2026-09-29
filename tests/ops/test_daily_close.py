@@ -300,6 +300,87 @@ def test_close_exits_nonzero_on_stop_rule_trip(
     assert "stop_rule:" in out
 
 
+def _take_profit_policy(path: Path, take_profit_usd: str = "400") -> Path:
+    # Isolates the take-profit check: drawdown and days-behind thresholds are set so loose they
+    # cannot also trip, so a triggered result below is only ever the take-profit rule.
+    path.write_text(
+        '[fees]\nfee_bps = "0"\n'
+        '[stop_rule]\nmax_drawdown_usd = "100000"\n'
+        f'max_consecutive_days_behind_buy_and_hold = 999\ntake_profit_usd = "{take_profit_usd}"\n'
+    )
+    return path
+
+
+def test_close_writes_halt_marker_and_alerts_when_take_profit_reached(
+    workspace: dict[str, Path], capsys: pytest.CaptureFixture[str]
+) -> None:
+    policy = _take_profit_policy(workspace["out"].parent / "take_profit_policy.toml")
+    # Bought 1@100 (broker-filled at 100, no fee), then marked at 500: total_pnl == 500-100 == 400.
+    workspace["ledger"].write_text(
+        _ledger_entry(1, "1", "100") + "\n" + _no_trade_entry(TS0 + ONE_DAY_NS, "500") + "\n"
+    )
+    workspace["journal"].write_text(
+        _journal_resolved(1, "filled", filled_qty="1", avg_price="100") + "\n"
+    )
+    halt_marker = workspace["out"].parent / "HALT"
+    code = daily_close.main(
+        _argv(workspace, reconcile_cmd=OK_CMD, policy=str(policy), halt_marker=str(halt_marker))
+    )
+    out = capsys.readouterr().out
+    written = json.loads((workspace["out"] / f"{DATE0}.json").read_text())
+    assert written["agent"]["total_pnl_after_fees_usd"] == "400"
+    assert written["stop_rule"]["take_profit_reached"] is True
+    assert code == 1
+    assert halt_marker.exists()
+    assert "take_profit_reached:" in out
+    assert json.loads(halt_marker.read_text())["reason"]  # supervisor.py's own halt-marker format
+
+
+def test_close_does_not_write_halt_marker_below_take_profit_target(
+    workspace: dict[str, Path],
+) -> None:
+    policy = _take_profit_policy(workspace["out"].parent / "take_profit_policy.toml")
+    # Same shape, one cent short of the target: total_pnl == 499.99-100 == 399.99.
+    workspace["ledger"].write_text(
+        _ledger_entry(1, "1", "100") + "\n" + _no_trade_entry(TS0 + ONE_DAY_NS, "499.99") + "\n"
+    )
+    workspace["journal"].write_text(
+        _journal_resolved(1, "filled", filled_qty="1", avg_price="100") + "\n"
+    )
+    halt_marker = workspace["out"].parent / "HALT"
+    code = daily_close.main(
+        _argv(workspace, reconcile_cmd=OK_CMD, policy=str(policy), halt_marker=str(halt_marker))
+    )
+    assert code == 0
+    assert not halt_marker.exists()
+
+
+def test_close_does_not_write_halt_marker_for_a_drawdown_only_trip(
+    workspace: dict[str, Path],
+) -> None:
+    # The existing max_drawdown stop rule is unchanged: a drawdown-only trip still only alerts
+    # and exits nonzero, it must not also start writing the permanent halt marker.
+    tight_policy = workspace["out"].parent / "tight_policy.toml"
+    tight_policy.write_text(
+        '[fees]\nfee_bps = "0"\n'
+        '[stop_rule]\nmax_drawdown_usd = "0.01"\nmax_consecutive_days_behind_buy_and_hold = 999\n'
+    )
+    workspace["ledger"].write_text(
+        _no_trade_entry(TS0, "100") + "\n" + _ledger_entry(1, "1", "100") + "\n"
+    )
+    workspace["journal"].write_text(
+        _journal_resolved(1, "filled", filled_qty="1", avg_price="150") + "\n"
+    )
+    halt_marker = workspace["out"].parent / "HALT"
+    code = daily_close.main(
+        _argv(
+            workspace, reconcile_cmd=OK_CMD, policy=str(tight_policy), halt_marker=str(halt_marker)
+        )
+    )
+    assert code == 1
+    assert not halt_marker.exists()
+
+
 def test_close_is_idempotent_for_an_unchanged_day(workspace: dict[str, Path]) -> None:
     argv = _argv(workspace, reconcile_cmd=OK_CMD)
     first = daily_close.main(argv)
