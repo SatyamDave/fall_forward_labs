@@ -5,6 +5,8 @@
 // module's job is to gather the venue-side snapshot honestly and to fail loudly, never silently,
 // when the bridge reports a mismatch -- root CLAUDE.md rule 10: "neither side is silently
 // trusted over the other."
+import { mkdirSync, renameSync, writeFileSync } from "node:fs";
+import path from "node:path";
 import type { CallOptions } from "./robinhood.js";
 import * as robinhood from "./robinhood.js";
 import type { McpClient } from "./mcp-client.js";
@@ -51,6 +53,23 @@ export interface ReconcileDeps {
   assetClass: AssetClass;
   instrument: string;
   callOpts?: CallOptions;
+  /** Where each pass records its verdict for scripts/ops/preflight.py's reconcile_recent gate
+   *  (its DEFAULT_RECONCILE_STATUS). Omitted, nothing is written, and preflight fails closed on
+   *  the missing file. */
+  statusPath?: string;
+}
+
+/** Writes preflight's contract, `{"ts_ns":int,"ok":bool,"discrepancies":[str]}`, atomically
+ *  (temp file + rename) so preflight never reads a half-written file. `ts_ns` is wall-clock
+ *  time, not the bridge's market clock, because preflight compares it against its own
+ *  `time.time_ns()`; it is serialized from a bigint since nanoseconds exceed 2^53. */
+export function writeReconcileStatus(statusPath: string, ok: boolean, discrepancies: string[]): void {
+  const tsNs = BigInt(Date.now()) * 1_000_000n;
+  const body = `{"ts_ns":${tsNs},"ok":${ok},"discrepancies":${JSON.stringify(discrepancies)}}\n`;
+  mkdirSync(path.dirname(statusPath), { recursive: true });
+  const tmp = `${statusPath}.${process.pid}.tmp`;
+  writeFileSync(tmp, body, "utf8");
+  renameSync(tmp, statusPath);
 }
 
 /** The bridge's reconcile schema only knows about live ("open") or terminal venue states;
@@ -72,6 +91,24 @@ function toVenueOrderSnapshot(order: robinhood.VenueOrder): VenueOrderSnapshot |
  *  three trigger points to this same function, so there is exactly one place that decides what
  *  "reconciled" means. */
 export async function reconcileWithBroker(deps: ReconcileDeps): Promise<void> {
+  try {
+    await compareWithBroker(deps);
+  } catch (err) {
+    // Any failure, including a broker read that never reached the bridge, replaces the last
+    // recorded verdict: an older clean result must not keep preflight passing after this.
+    if (deps.statusPath !== undefined) {
+      const discrepancies =
+        err instanceof ReconciliationHalted && Array.isArray(err.detail?.discrepancies)
+          ? (err.detail.discrepancies as string[])
+          : [err instanceof Error ? err.message : String(err)];
+      writeReconcileStatus(deps.statusPath, false, discrepancies);
+    }
+    throw err;
+  }
+  if (deps.statusPath !== undefined) writeReconcileStatus(deps.statusPath, true, []);
+}
+
+async function compareWithBroker(deps: ReconcileDeps): Promise<void> {
   const [orders, account] = await Promise.all([
     robinhood.listOrders(deps.mcp, deps.assetClass, deps.callOpts),
     robinhood.getAccountState(deps.mcp, deps.assetClass, deps.instrument, deps.callOpts),
@@ -89,7 +126,11 @@ export async function reconcileWithBroker(deps: ReconcileDeps): Promise<void> {
     // clean-comparison-but-mismatched result, which lands in the branch below.
     throw new ReconciliationHalted(resp.error?.message ?? "the reconcile request itself failed", { error: resp.error });
   }
-  if (resp.reconcile && !resp.reconcile.ok) {
+  if (!resp.reconcile) {
+    // The real bridge always nests its verdict (wire.rs); a response without one is not clean.
+    throw new ReconciliationHalted("the bridge answered reconcile without a verdict", { response: resp });
+  }
+  if (!resp.reconcile.ok) {
     throw new ReconciliationHalted(resp.reconcile.discrepancies.join("; ") || "the bridge reported a discrepancy", {
       discrepancies: resp.reconcile.discrepancies,
     });
