@@ -102,10 +102,13 @@ const NYSE_EARLY_CLOSES_2026_2027: &[(&str, i128, u32, u32)] = &[
     ("Day after Thanksgiving 2027", 2027, 11, 26),
 ];
 
+/// Priced near $20 so one whole share fits `config/limits/spy.toml`'s $25
+/// per-order cap (the account is funded with $50); a real $100+ share is
+/// rejected, see `a_one_share_order_above_the_per_order_cap_is_rejected`.
 fn spy_csv() -> String {
     format!(
-        "S,2,10,{IN_HOURS_NS},{IN_HOURS_NS},100.00@1;99.99@1,100.02@1;100.03@1\n\
-         D,2,11,B,99.98,1,{AFTER_CLOSE_NS},{AFTER_CLOSE_NS}\n"
+        "S,2,10,{IN_HOURS_NS},{IN_HOURS_NS},20.00@1;19.99@1,20.02@1;20.03@1\n\
+         D,2,11,B,19.98,1,{AFTER_CLOSE_NS},{AFTER_CLOSE_NS}\n"
     )
 }
 
@@ -146,7 +149,7 @@ fn submit_is_accepted_in_hours_and_rejected_outside_hours() {
         "dr-1",
         Side::Buy,
         "1".parse().unwrap(),
-        "100.00".parse().unwrap(),
+        "20.00".parse().unwrap(),
         OrderType::Limit,
     );
     assert_eq!(ok["accepted"], true, "{ok:#}");
@@ -159,7 +162,7 @@ fn submit_is_accepted_in_hours_and_rejected_outside_hours() {
         "dr-2",
         Side::Buy,
         "1".parse().unwrap(),
-        "100.00".parse().unwrap(),
+        "20.00".parse().unwrap(),
         OrderType::Limit,
     );
     assert_eq!(rejected["accepted"], false);
@@ -174,7 +177,7 @@ fn submit_is_rejected_for_a_qty_that_is_not_a_whole_share() {
         "dr-1",
         Side::Buy,
         "0.5".parse().unwrap(),
-        "100.00".parse().unwrap(),
+        "20.00".parse().unwrap(),
         OrderType::Limit,
     );
     assert_eq!(resp["accepted"], false);
@@ -189,7 +192,7 @@ fn submit_is_rejected_for_a_price_finer_than_a_cent() {
         "dr-1",
         Side::Buy,
         "1".parse().unwrap(),
-        "100.001".parse().unwrap(),
+        "20.001".parse().unwrap(),
         OrderType::Limit,
     );
     assert_eq!(resp["accepted"], false);
@@ -202,17 +205,33 @@ fn wire_level_intent_must_match_the_configured_symbol() {
     assert!(engine.next_decision_request().is_some());
     let wrong_symbol = r#"{"v":1,"id":"1","op":"submit_order_intent","intent":
         {"request_id":"dr-1","instrument":"1","side":"buy","qty":"1",
-         "limit_price":"100.00","time_in_force":"gtc","reason":"test"}}"#;
+         "limit_price":"20.00","time_in_force":"gtc","reason":"test"}}"#;
     let resp = call(&mut engine, wrong_symbol);
     assert_eq!(resp["ok"], false);
     assert_eq!(resp["error"]["code"], "invalid_fields");
 
     let right_symbol = r#"{"v":1,"id":"2","op":"submit_order_intent","intent":
         {"request_id":"dr-1","instrument":"SPY","side":"buy","qty":"1",
-         "limit_price":"100.00","time_in_force":"gtc","reason":"test"}}"#;
+         "limit_price":"20.00","time_in_force":"gtc","reason":"test"}}"#;
     let resp = call(&mut engine, right_symbol);
     assert_eq!(resp["ok"], true);
     assert_eq!(resp["result"]["accepted"], true, "{resp:#}");
+}
+
+#[test]
+fn a_one_share_order_above_the_per_order_cap_is_rejected() {
+    let csv = format!("S,2,10,{IN_HOURS_NS},{IN_HOURS_NS},100.00@1;99.99@1,100.02@1;100.03@1\n");
+    let mut engine = support::engine_with_instrument(&csv, 1);
+    assert!(engine.next_decision_request().is_some());
+    let resp = engine.submit_order_intent(
+        "dr-1",
+        Side::Buy,
+        "1".parse().unwrap(),
+        "100.00".parse().unwrap(),
+        OrderType::Limit,
+    );
+    assert_eq!(resp["accepted"], false);
+    assert_eq!(resp["risk_reject"], "max_notional");
 }
 
 // -- Wave3/calendar: NYSE holidays and early closes (config/instruments/calendars/nyse.toml). --

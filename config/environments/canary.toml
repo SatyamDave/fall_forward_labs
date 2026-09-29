@@ -7,6 +7,9 @@
 
 name = "canary"
 real_orders = true
+# Canary caps live in that file: $25 per order (max_notional) and $50 per day
+# (max_daily_notional), matching the $50 the founder stated funds the account (2026-09-28,
+# docs/decisions/0023-budget-and-caps.md).
 limits = "config/limits/default.toml"
 kill_switch_max_ms = 1000
 
