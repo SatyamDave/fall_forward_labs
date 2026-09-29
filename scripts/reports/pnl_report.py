@@ -20,13 +20,16 @@ is treated as fully filled at its own `limit_price` and `qty` — an *assumption
 fill. `source` in the written record is `"decision_ledger_estimate"`.
 
 `--source broker` (new): reads the gateway's broker journal (`agent/src/broker/journal.ts`'s
-output, default `out/agent/broker-journal.jsonl`) and, for each accepted decision whose
-`client_order_id` the journal has resolved to `"filled"`/`"partially_filled"`, uses the broker's
+output, default `out/agent/broker-journal.jsonl`) and, for each accepted decision whose order
+the journal has resolved to `"filled"`/`"partially_filled"`, uses the broker's
 own `filled_qty`/`avg_price` — what Robinhood actually reported via `report_execution` — instead
 of the decision's estimate. A decision whose order was rejected, canceled, or never resolved by
 the broker contributes no fill at all (not a zero-price one); `fills` in the written record counts
 `accepted_orders` vs `matched_fills` so a lagging or incomplete journal is visible, not silently
-papered over. `source` in the written record is `"reconciled"` (matching
+papered over. A decision is matched to its journal entries by the order's `ref_id`, derived from
+the approval payload the ledger records, never by `client_order_id` alone: qc-bridge restarts
+`client_order_id` at 0 in every process, so the same id names a different order in every
+bridge session the journal spans. `source` in the written record is `"reconciled"` (matching
 fund/track-record/README.md's documented contract), and `reconciliation` optionally carries the
 day's broker reconciliation-check outcome when the caller (`scripts/ops/daily_close.py`) supplies
 one — this script itself does not talk to a broker or a bridge.
@@ -40,6 +43,7 @@ import argparse
 import datetime as dt
 import json
 import tomllib
+import uuid
 from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from decimal import Decimal
@@ -55,6 +59,8 @@ SOURCE_DECISION_LEDGER = "decision_ledger_estimate"
 SOURCE_RECONCILED = (
     "reconciled"  # fund/track-record/README.md: the label once #45's output feeds this
 )
+# agent/src/broker/robinhood.ts's REF_ID_NAMESPACE: ref_id is the UUIDv5 of the approval payload.
+REF_ID_NAMESPACE = uuid.UUID("6f1c1d0e-8a3b-4c7e-9d2f-5a6b7c8d9e0f")
 SOURCE = SOURCE_DECISION_LEDGER  # back-compat alias: scripts/eval/{live_agent,promote,scenarios}.py
 
 # A fill resolver takes one decision-ledger entry and returns (side, qty, price) if it produced a
@@ -126,16 +132,22 @@ def load_entries(ledger: Path) -> list[dict[str, Any]]:
     return entries
 
 
-def load_broker_journal(path: Path) -> dict[int, dict[str, Any]]:
-    """Mirrors `agent/src/broker/journal.ts`'s `replayJournal()`: the last entry for a given
-    `client_order_id` wins, and only a `"resolved"` entry (a real `PlaceOrderResult`) is kept --
-    an `"attempt"` with no later `"resolved"` line means the broker never confirmed an outcome
-    for that order, which this resolves to "no fill" (dropping the id), never "filled." A
-    corrupt or unrecognized line fails closed (raises) rather than silently under-counting fills,
-    matching the TS reader and root CLAUDE.md rule 12."""
+def ref_id_for_approval(payload: str) -> str:
+    """Same value as `agent/src/broker/robinhood.ts`'s `refIdForApproval()`."""
+    return str(uuid.uuid5(REF_ID_NAMESPACE, payload))
+
+
+def load_broker_journal(path: Path) -> dict[str, dict[str, Any]]:
+    """Mirrors `agent/src/broker/journal.ts`'s `replayJournal()`, keyed by `ref_id` (unique per
+    approved order across bridge sessions, unlike `client_order_id`): the last entry for a given
+    `ref_id` wins, and only a `"resolved"` entry (a real `PlaceOrderResult`) is kept -- an
+    `"attempt"` with no later `"resolved"` line means the broker never confirmed an outcome for
+    that order, which this resolves to "no fill" (dropping it), never "filled." A corrupt or
+    unrecognized line, including one without a `ref_id`, fails closed (raises) rather than
+    silently under-counting fills, matching the TS reader and root CLAUDE.md rule 12."""
     if not path.exists():
         return {}
-    out: dict[int, dict[str, Any]] = {}
+    out: dict[str, dict[str, Any]] = {}
     for line in path.read_text().splitlines():
         if not line.strip():
             continue
@@ -145,13 +157,14 @@ def load_broker_journal(path: Path) -> dict[int, dict[str, Any]]:
             raise ValueError(
                 f"{path}: journal entry missing an integer client_order_id: {line[:200]}"
             )
+        ref_id = entry.get("ref_id")
+        if not isinstance(ref_id, str):
+            raise ValueError(f"{path}: journal entry missing a string ref_id: {line[:200]}")
         phase = entry.get("phase")
         if phase == "attempt":
-            out.pop(
-                client_order_id, None
-            )  # supersede any earlier resolved line: outcome unknown again
+            out.pop(ref_id, None)  # supersede any earlier resolved line: outcome unknown again
         elif phase == "resolved" and isinstance(entry.get("result"), dict):
-            out[client_order_id] = entry["result"]
+            out[ref_id] = entry["result"]
         else:
             raise ValueError(f"{path}: journal entry has an unrecognized shape: {line[:200]}")
     return out
@@ -168,11 +181,13 @@ def _decision_ledger_fill(entry: dict[str, Any]) -> tuple[str, Decimal, Decimal]
     return None
 
 
-def make_broker_fill_resolver(journal: dict[int, dict[str, Any]]) -> FillResolver:
-    """Resolver backing `--source broker`: only a `client_order_id` the journal has resolved to a
+def make_broker_fill_resolver(journal: dict[str, dict[str, Any]]) -> FillResolver:
+    """Resolver backing `--source broker`: only an order the journal has resolved to a
     real fill (`"filled"`, `"partially_filled"`, or `"canceled"` after a partial fill, with a
     nonzero `filled_qty` and an `avg_price`) counts -- a rejected, unfilled canceled, or
-    still-unresolved order contributes nothing, never a zero or an assumed fill."""
+    still-unresolved order contributes nothing, never a zero or an assumed fill. The order is
+    found by the `ref_id` of the approval the ledger entry records; an entry without one (sim
+    mode) has no broker order and contributes nothing."""
 
     def resolve(entry: dict[str, Any]) -> tuple[str, Decimal, Decimal] | None:
         decision = entry.get("decision", {})
@@ -182,10 +197,11 @@ def make_broker_fill_resolver(journal: dict[int, dict[str, Any]]) -> FillResolve
             return None
         if not isinstance(result, dict) or result.get("accepted") is not True:
             return None
-        client_order_id = result.get("client_order_id")
-        if not isinstance(client_order_id, int):
+        approval = result.get("approval")
+        payload = approval.get("payload") if isinstance(approval, dict) else None
+        if not isinstance(payload, str):
             return None
-        resolved = journal.get(client_order_id)
+        resolved = journal.get(ref_id_for_approval(payload))
         # "canceled" too: the gateway emulates IOC as gfd + cancel, so a partial fill ends
         # canceled with a nonzero filled_qty.
         if resolved is None or resolved.get("status") not in (
