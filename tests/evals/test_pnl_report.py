@@ -260,9 +260,16 @@ def _payload(client_order_id: int, session: str = "a") -> str:
     # An approval payload as the bridge signs it; `session` stands in for what differs between
     # two bridge processes' approvals for the same client_order_id (request_id, expiry).
     return json.dumps(
-        {"client_order_id": client_order_id, "expires_ts_ns": 5_000_000_000, "instrument": "SPY",
-         "limit_price": "110", "qty": "1", "request_id": f"dr-{client_order_id}-{session}",
-         "side": "buy", "time_in_force": "ioc"},
+        {
+            "client_order_id": client_order_id,
+            "expires_ts_ns": 5_000_000_000,
+            "instrument": "SPY",
+            "limit_price": "110",
+            "qty": "1",
+            "request_id": f"dr-{client_order_id}-{session}",
+            "side": "buy",
+            "time_in_force": "ioc",
+        },
         separators=(",", ":"),
     )
 
@@ -276,8 +283,14 @@ def _ref(client_order_id: int, session: str = "a") -> str:
     return pnl_report.ref_id_for_approval(_payload(client_order_id, session))
 
 
-def _journal_line(client_order_id: int, phase: str, session: str = "a", **result_fields: object) -> str:
-    entry: dict = {"client_order_id": client_order_id, "ref_id": _ref(client_order_id, session), "phase": phase}
+def _journal_line(
+    client_order_id: int, phase: str, session: str = "a", **result_fields: object
+) -> str:
+    entry: dict = {
+        "client_order_id": client_order_id,
+        "ref_id": _ref(client_order_id, session),
+        "phase": phase,
+    }
     if phase == "resolved":
         entry["result"] = {"raw": {}, **result_fields}
     return json.dumps(entry)
@@ -406,14 +419,24 @@ def test_load_broker_journal_last_entry_per_client_order_id_wins(tmp_path: Path)
         + "\n"
     )
     journal = pnl_report.load_broker_journal(path)
-    assert journal == {_ref(1): {"status": "filled", "filled_qty": "1", "avg_price": "100", "raw": {}}}
+    assert journal == {
+        _ref(1): {"status": "filled", "filled_qty": "1", "avg_price": "100", "raw": {}}
+    }
 
 
 def test_ref_id_matches_the_gateways_ref_id() -> None:
     # agent/src/broker/robinhood.ts refIdForApproval() on the same payload.
     payload = json.dumps(
-        {"client_order_id": 1, "expires_ts_ns": 5000000000, "instrument": "SPY", "limit_price": "110",
-         "qty": "1", "request_id": "dr-1", "side": "buy", "time_in_force": "ioc"},
+        {
+            "client_order_id": 1,
+            "expires_ts_ns": 5000000000,
+            "instrument": "SPY",
+            "limit_price": "110",
+            "qty": "1",
+            "request_id": "dr-1",
+            "side": "buy",
+            "time_in_force": "ioc",
+        },
         separators=(",", ":"),
     )
     assert pnl_report.ref_id_for_approval(payload) == "1c551b89-e02d-50d7-8a89-b1267d9f3d43"
@@ -429,14 +452,20 @@ def test_broker_journal_spanning_a_bridge_restart_matches_each_order_to_its_own_
         "\n".join(
             [
                 _journal_line(1, "attempt", session="old"),
-                _journal_line(1, "resolved", session="old", status="filled", filled_qty="1", avg_price="100"),
+                _journal_line(
+                    1, "resolved", session="old", status="filled", filled_qty="1", avg_price="100"
+                ),
                 _journal_line(1, "attempt", session="new"),
-                _journal_line(1, "resolved", session="new", status="filled", filled_qty="1", avg_price="111"),
+                _journal_line(
+                    1, "resolved", session="new", status="filled", filled_qty="1", avg_price="111"
+                ),
             ]
         )
         + "\n"
     )
-    entries = [_entry("dr-1", 0, "buy", "110", _accepted(1, "new"), 0.0, qty="1", limit_price="110")]
+    entries = [
+        _entry("dr-1", 0, "buy", "110", _accepted(1, "new"), 0.0, qty="1", limit_price="110")
+    ]
     resolver = pnl_report.make_broker_fill_resolver(pnl_report.load_broker_journal(path))
     result, _curve = pnl_report.compute(entries, fee_bps=D(0), resolve_fill=resolver)
     assert result.agent["unrealized_pnl_usd"] == "-1"  # bought at 111, marked at 110
