@@ -6,7 +6,7 @@ Regenerated automatically by `.github/workflows/docs-status.yml` on every merge 
 Narrative docs: [project guide](guide/quant-core-guide.html) ·
 [base status](reports/base-status.md) · [NOW](NOW.md).
 
-Generated from `main` at **b6f3e98 2026-09-29**. Latest CI on `main`: **failure on b6f3e98**.
+Generated from `main` at **8da53e6 2026-10-01**. Latest CI on `main`: **failure on b6f3e98**.
 Paid AI loops: **on**.
 
 ## Open pull requests (6)
@@ -44,6 +44,7 @@ Paid AI loops: **on**.
 
 | Commit | Date | Subject |
 |---|---|---|
+| `8da53e6` | 2026-10-01 | docs(status): regenerate live status from b6f3e98 [skip ci] |
 | `b6f3e98` | 2026-09-29 | Merge pull request #121 from SatyamDave/rohit/keychain-secrets |
 | `fa0011d` | 2026-09-29 | test(autonomy): update loop and policy enabled assertions for ADR-0042 |
 | `2503c76` | 2026-09-29 | feat(ops/live): implement macOS Keychain secrets provider (issue #63) |
@@ -55,7 +56,6 @@ Paid AI loops: **on**.
 | `a0f7f4f` | 2026-09-29 | Merge pull request #113 from SatyamDave/ops/take-profit-stop |
 | `15d0662` | 2026-09-29 | Add a take-profit stop rule: halt for good at $400 cumulative profit |
 | `a6502e3` | 2026-09-29 | Merge pull request #112 from SatyamDave/broker/real-response-shapes |
-| `6ee7e4f` | 2026-09-29 | docs(agent): note the empty-book fallback in agent/CLAUDE.md |
 
 ## Decisions (ADRs)
 
