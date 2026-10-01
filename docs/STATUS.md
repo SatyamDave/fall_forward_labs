@@ -6,7 +6,7 @@ Regenerated automatically by `.github/workflows/docs-status.yml` on every merge 
 Narrative docs: [project guide](guide/quant-core-guide.html) ·
 [base status](reports/base-status.md) · [NOW](NOW.md).
 
-Generated from `main` at **adef1b0 2026-10-01**. Latest CI on `main`: **failure on b6f3e98**.
+Generated from `main` at **a46b648 2026-10-01**. Latest CI on `main`: **failure on b6f3e98**.
 Paid AI loops: **on**.
 
 ## Open pull requests (6)
@@ -44,6 +44,7 @@ Paid AI loops: **on**.
 
 | Commit | Date | Subject |
 |---|---|---|
+| `a46b648` | 2026-10-01 | docs(status): regenerate live status from adef1b0 [skip ci] |
 | `adef1b0` | 2026-10-01 | docs(status): regenerate live status from 62adf3c [skip ci] |
 | `62adf3c` | 2026-10-01 | docs(status): regenerate live status from 8da53e6 [skip ci] |
 | `8da53e6` | 2026-10-01 | docs(status): regenerate live status from b6f3e98 [skip ci] |
@@ -55,7 +56,6 @@ Paid AI loops: **on**.
 | `ecd2be6` | 2026-09-29 | fix(broker): accept the real book's integer share quantity |
 | `ab5ce09` | 2026-09-29 | Merge pull request #114 from SatyamDave/founder/enable-openrouter |
 | `63b4a09` | 2026-09-29 | Enable the free OpenRouter decider and accept ADR-0042 |
-| `a0f7f4f` | 2026-09-29 | Merge pull request #113 from SatyamDave/ops/take-profit-stop |
 
 ## Decisions (ADRs)
 
