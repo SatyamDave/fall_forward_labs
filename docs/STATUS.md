@@ -6,53 +6,56 @@ Regenerated automatically by `.github/workflows/docs-status.yml` on every merge 
 Narrative docs: [project guide](guide/quant-core-guide.html) ·
 [base status](reports/base-status.md) · [NOW](NOW.md).
 
-Generated from `main` at **04b8eeb 2026-09-28**. Latest CI on `main`: **queued on 04b8eeb**.
-Paid AI loops: **off**.
+Generated from `main` at **b6f3e98 2026-09-29**. Latest CI on `main`: **failure on b6f3e98**.
+Paid AI loops: **on**.
 
-## Open pull requests (3)
+## Open pull requests (6)
 
 | PR | Title | Author | Draft |
 |---|---|---|---|
-| [#95](https://github.com/SatyamDave/fall_forward_labs/pull/95) | Test whether a panel of agents beats one, at the same budget | SatyamDave | no |
-| [#94](https://github.com/SatyamDave/fall_forward_labs/pull/94) | Run the agent in shadow mode on live prices with one command | SatyamDave | no |
-| [#92](https://github.com/SatyamDave/fall_forward_labs/pull/92) | Profit is measured from what the broker actually filled, checked every day | SatyamDave | no |
+| [#122](https://github.com/SatyamDave/fall_forward_labs/pull/122) | docs(compliance): Rohit signs off on first asset (SPY) and budget caps | SatyamDave | no |
+| [#120](https://github.com/SatyamDave/fall_forward_labs/pull/120) | Add an experimental dip-reversion rule decider for shadow runs | SatyamDave | no |
+| [#119](https://github.com/SatyamDave/fall_forward_labs/pull/119) | Persist daily risk usage across bridge restarts and lock live runs | SatyamDave | no |
+| [#118](https://github.com/SatyamDave/fall_forward_labs/pull/118) | Add just report-progress for the live account | SatyamDave | no |
+| [#117](https://github.com/SatyamDave/fall_forward_labs/pull/117) | Count each fee once in the P&L report's total | SatyamDave | no |
+| [#116](https://github.com/SatyamDave/fall_forward_labs/pull/116) | Fix the live-canary and shadow tests that assumed the OpenRouter loop is off | SatyamDave | no |
 
 ## Recently merged
 
 | PR | Title | Merged |
 |---|---|---|
-| [#91](https://github.com/SatyamDave/fall_forward_labs/pull/91) | Live trading refuses to start until every go-live check passes | 2026-09-28 |
-| [#93](https://github.com/SatyamDave/fall_forward_labs/pull/93) | Keep the sample SPY limits inside the canary caps | 2026-09-28 |
-| [#90](https://github.com/SatyamDave/fall_forward_labs/pull/90) | Never send an order when the market is closed | 2026-09-28 |
-| [#89](https://github.com/SatyamDave/fall_forward_labs/pull/89) | Record the full order book, not just the best price | 2026-09-28 |
-| [#88](https://github.com/SatyamDave/fall_forward_labs/pull/88) | Bring the docs and roadmap up to date with what's built | 2026-09-28 |
-| [#87](https://github.com/SatyamDave/fall_forward_labs/pull/87) | The kill switch cancels everything at the broker, even if the agent is stuck | 2026-09-28 |
-| [#86](https://github.com/SatyamDave/fall_forward_labs/pull/86) | The PR checklist check accepts sections written as headings | 2026-09-28 |
-| [#84](https://github.com/SatyamDave/fall_forward_labs/pull/84) | Wire the gateway to protocol v1.2: reconciliation, cancel, market clock | 2026-09-28 |
-| [#85](https://github.com/SatyamDave/fall_forward_labs/pull/85) | External kill switch, real instrument, and protocol v1.2 for qc-bridge | 2026-09-28 |
-| [#83](https://github.com/SatyamDave/fall_forward_labs/pull/83) | Turn real trades into lessons, and only promote agent changes that prove better | 2026-09-28 |
-| [#82](https://github.com/SatyamDave/fall_forward_labs/pull/82) | Record real Robinhood price data for our asset | 2026-09-28 |
-| [#81](https://github.com/SatyamDave/fall_forward_labs/pull/81) | Measure real per-decision latency (bridge, decide, full loop) | 2026-09-28 |
-| [#78](https://github.com/SatyamDave/fall_forward_labs/pull/78) | Redo study 0001 favorite-longshot v2, bounded population, real sample | 2026-09-28 |
-| [#77](https://github.com/SatyamDave/fall_forward_labs/pull/77) | ops: give live trading a safe home and alert on it breaking | 2026-09-28 |
-| [#79](https://github.com/SatyamDave/fall_forward_labs/pull/79) | Baseline-checked evals, decision/PnL reports, and a stop rule | 2026-09-28 |
+| [#121](https://github.com/SatyamDave/fall_forward_labs/pull/121) | Rohit/keychain secrets | 2026-09-29 |
+| [#115](https://github.com/SatyamDave/fall_forward_labs/pull/115) | Let the recorder run on the real order book: integer quantities and a 256-level cap | 2026-09-29 |
+| [#114](https://github.com/SatyamDave/fall_forward_labs/pull/114) | Enable the free OpenRouter decider and accept ADR-0042 | 2026-09-29 |
+| [#113](https://github.com/SatyamDave/fall_forward_labs/pull/113) | Stop trading for good once profit reaches  | 2026-09-29 |
+| [#112](https://github.com/SatyamDave/fall_forward_labs/pull/112) | Read Robinhood's real response envelope so quotes, accounts and orders parse | 2026-09-29 |
+| [#111](https://github.com/SatyamDave/fall_forward_labs/pull/111) | Run shadow and live canary trading for a chosen stock with one command each | 2026-09-29 |
+| [#110](https://github.com/SatyamDave/fall_forward_labs/pull/110) | Keep each bridge session's orders separate in the journal and close the review gaps in the order path | 2026-09-29 |
+| [#109](https://github.com/SatyamDave/fall_forward_labs/pull/109) | Accept OpenRouter models listed at zero price, not only ":free" ids | 2026-09-29 |
+| [#108](https://github.com/SatyamDave/fall_forward_labs/pull/108) | Record the $50 to $500 monthly target as a scoreboard that never loosens limits | 2026-09-29 |
+| [#107](https://github.com/SatyamDave/fall_forward_labs/pull/107) | Match our Robinhood order mapping to the real tool schemas | 2026-09-29 |
+| [#105](https://github.com/SatyamDave/fall_forward_labs/pull/105) | Let the agent decide with a free OpenRouter model so a $50 account isn't spent on AI | 2026-09-29 |
+| [#106](https://github.com/SatyamDave/fall_forward_labs/pull/106) | Cap trading at $25 per order and $50 a day to match the $50 account | 2026-09-29 |
+| [#104](https://github.com/SatyamDave/fall_forward_labs/pull/104) | Let only one process refresh the Robinhood sign-in at a time | 2026-09-29 |
+| [#103](https://github.com/SatyamDave/fall_forward_labs/pull/103) | Alert when the price recording stops growing during market hours | 2026-09-29 |
+| [#102](https://github.com/SatyamDave/fall_forward_labs/pull/102) | Rohit approves ADR-0040 agentic decision pipeline | 2026-09-29 |
 
 ## Recent commits on main
 
 | Commit | Date | Subject |
 |---|---|---|
-| `04b8eeb` | 2026-09-28 | Merge pull request #91 from SatyamDave/wave3/preflight |
-| `6f0c5b4` | 2026-09-28 | docs(status): regenerate live status from ebb8db5 [skip ci] |
-| `5dac560` | 2026-09-28 | Merge main into wave3/preflight before merging #91 |
-| `ebb8db5` | 2026-09-28 | Merge pull request #93 from SatyamDave/fix/spy-limits-within-canary |
-| `7d46c30` | 2026-09-28 | Merge main into fix/spy-limits-within-canary before merging #93 |
-| `b0b8df7` | 2026-09-28 | fix(limits): keep the sample SPY limits inside the canary caps |
-| `44bdf96` | 2026-09-28 | docs(status): regenerate live status from b44607a [skip ci] |
-| `b44607a` | 2026-09-28 | Merge pull request #90 from SatyamDave/wave3/calendar |
-| `130a5f5` | 2026-09-28 | Merge main into wave3/calendar before merging #90 |
-| `0cb401b` | 2026-09-28 | docs(status): regenerate live status from d7d8254 [skip ci] |
-| `d7d8254` | 2026-09-28 | Merge pull request #89 from SatyamDave/wave3/level2 |
-| `40ecd57` | 2026-09-28 | docs(status): regenerate live status from e564b3d [skip ci] |
+| `b6f3e98` | 2026-09-29 | Merge pull request #121 from SatyamDave/rohit/keychain-secrets |
+| `fa0011d` | 2026-09-29 | test(autonomy): update loop and policy enabled assertions for ADR-0042 |
+| `2503c76` | 2026-09-29 | feat(ops/live): implement macOS Keychain secrets provider (issue #63) |
+| `dfcbb5b` | 2026-09-29 | Merge pull request #115 from SatyamDave/broker/book-integer-quantity |
+| `e29a4c5` | 2026-09-29 | fix(recorder): keep the best 256 book levels per side for qc-bridge |
+| `ecd2be6` | 2026-09-29 | fix(broker): accept the real book's integer share quantity |
+| `ab5ce09` | 2026-09-29 | Merge pull request #114 from SatyamDave/founder/enable-openrouter |
+| `63b4a09` | 2026-09-29 | Enable the free OpenRouter decider and accept ADR-0042 |
+| `a0f7f4f` | 2026-09-29 | Merge pull request #113 from SatyamDave/ops/take-profit-stop |
+| `15d0662` | 2026-09-29 | Add a take-profit stop rule: halt for good at $400 cumulative profit |
+| `a6502e3` | 2026-09-29 | Merge pull request #112 from SatyamDave/broker/real-response-shapes |
+| `6ee7e4f` | 2026-09-29 | docs(agent): note the empty-book fallback in agent/CLAUDE.md |
 
 ## Decisions (ADRs)
 
@@ -69,10 +72,11 @@ Paid AI loops: **off**.
 | [0013-learning-speeds.md](adr/0013-learning-speeds.md) | ADR-0013: Learning speeds (L0-L3) and their authority | Proposed (2026-09-27) |
 | [0020-first-vertical.md](adr/0020-first-vertical.md) | ADR-0020: First vertical | Proposed |
 | [0040-agentic-decision.md](adr/0040-agentic-decision.md) | ADR-0040: Agentic trading decision (final trade call moves to an AI agent) | Accepted by Satyam 2026-09-28 |
+| [0042-openrouter-decider.md](adr/0042-openrouter-decider.md) | ADR-0042: Decide with a free OpenRouter model instead of the paid Claude decider | Accepted by Satyam (@SatyamDave), 2026-09-29 |
 
 ## Code and research
 
 - Engine crates: `bridge`, `core`, `gateway`, `inference`, `oms`, `orderbook`, `replay`, `risk`, `strategy-runtime`, `telemetry`
-- Rust #[test] functions: 144
-- Python test functions: 289
+- Rust #[test] functions: 148
+- Python test functions: 397
 - Registry trials: `demo` 4, `study-0001-favorite-longshot` 1, `study-0002-favorite-longshot-v2` 1
