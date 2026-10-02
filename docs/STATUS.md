@@ -6,7 +6,7 @@ Regenerated automatically by `.github/workflows/docs-status.yml` on every merge 
 Narrative docs: [project guide](guide/quant-core-guide.html) ·
 [base status](reports/base-status.md) · [NOW](NOW.md).
 
-Generated from `main` at **53607d3 2026-10-02**. Latest CI on `main`: **failure on b6f3e98**.
+Generated from `main` at **4e5e3ab 2026-10-02**. Latest CI on `main`: **failure on b6f3e98**.
 Paid AI loops: **on**.
 
 ## Open pull requests (6)
@@ -44,6 +44,7 @@ Paid AI loops: **on**.
 
 | Commit | Date | Subject |
 |---|---|---|
+| `4e5e3ab` | 2026-10-02 | docs(status): regenerate live status from 53607d3 [skip ci] |
 | `53607d3` | 2026-10-02 | docs(status): regenerate live status from eeae207 [skip ci] |
 | `eeae207` | 2026-10-02 | docs(status): regenerate live status from 375aeed [skip ci] |
 | `375aeed` | 2026-10-01 | docs(status): regenerate live status from a46b648 [skip ci] |
@@ -55,7 +56,6 @@ Paid AI loops: **on**.
 | `fa0011d` | 2026-09-29 | test(autonomy): update loop and policy enabled assertions for ADR-0042 |
 | `2503c76` | 2026-09-29 | feat(ops/live): implement macOS Keychain secrets provider (issue #63) |
 | `dfcbb5b` | 2026-09-29 | Merge pull request #115 from SatyamDave/broker/book-integer-quantity |
-| `e29a4c5` | 2026-09-29 | fix(recorder): keep the best 256 book levels per side for qc-bridge |
 
 ## Decisions (ADRs)
 
