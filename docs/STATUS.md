@@ -6,7 +6,7 @@ Regenerated automatically by `.github/workflows/docs-status.yml` on every merge 
 Narrative docs: [project guide](guide/quant-core-guide.html) ·
 [base status](reports/base-status.md) · [NOW](NOW.md).
 
-Generated from `main` at **375aeed 2026-10-01**. Latest CI on `main`: **failure on b6f3e98**.
+Generated from `main` at **eeae207 2026-10-02**. Latest CI on `main`: **failure on b6f3e98**.
 Paid AI loops: **on**.
 
 ## Open pull requests (6)
@@ -44,6 +44,7 @@ Paid AI loops: **on**.
 
 | Commit | Date | Subject |
 |---|---|---|
+| `eeae207` | 2026-10-02 | docs(status): regenerate live status from 375aeed [skip ci] |
 | `375aeed` | 2026-10-01 | docs(status): regenerate live status from a46b648 [skip ci] |
 | `a46b648` | 2026-10-01 | docs(status): regenerate live status from adef1b0 [skip ci] |
 | `adef1b0` | 2026-10-01 | docs(status): regenerate live status from 62adf3c [skip ci] |
@@ -55,7 +56,6 @@ Paid AI loops: **on**.
 | `dfcbb5b` | 2026-09-29 | Merge pull request #115 from SatyamDave/broker/book-integer-quantity |
 | `e29a4c5` | 2026-09-29 | fix(recorder): keep the best 256 book levels per side for qc-bridge |
 | `ecd2be6` | 2026-09-29 | fix(broker): accept the real book's integer share quantity |
-| `ab5ce09` | 2026-09-29 | Merge pull request #114 from SatyamDave/founder/enable-openrouter |
 
 ## Decisions (ADRs)
 
