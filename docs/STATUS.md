@@ -6,7 +6,7 @@ Regenerated automatically by `.github/workflows/docs-status.yml` on every merge 
 Narrative docs: [project guide](guide/quant-core-guide.html) ·
 [base status](reports/base-status.md) · [NOW](NOW.md).
 
-Generated from `main` at **3848005 2026-10-03**. Latest CI on `main`: **failure on b6f3e98**.
+Generated from `main` at **008e17d 2026-10-03**. Latest CI on `main`: **failure on b6f3e98**.
 Paid AI loops: **on**.
 
 ## Open pull requests (6)
@@ -44,6 +44,7 @@ Paid AI loops: **on**.
 
 | Commit | Date | Subject |
 |---|---|---|
+| `008e17d` | 2026-10-03 | docs(status): regenerate live status from 3848005 [skip ci] |
 | `3848005` | 2026-10-03 | docs(status): regenerate live status from 415dd41 [skip ci] |
 | `415dd41` | 2026-10-02 | docs(status): regenerate live status from f0c51d7 [skip ci] |
 | `f0c51d7` | 2026-10-02 | docs(status): regenerate live status from 4e5e3ab [skip ci] |
@@ -55,7 +56,6 @@ Paid AI loops: **on**.
 | `adef1b0` | 2026-10-01 | docs(status): regenerate live status from 62adf3c [skip ci] |
 | `62adf3c` | 2026-10-01 | docs(status): regenerate live status from 8da53e6 [skip ci] |
 | `8da53e6` | 2026-10-01 | docs(status): regenerate live status from b6f3e98 [skip ci] |
-| `b6f3e98` | 2026-09-29 | Merge pull request #121 from SatyamDave/rohit/keychain-secrets |
 
 ## Decisions (ADRs)
 
