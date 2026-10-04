@@ -40,7 +40,7 @@ jobs:
           working-directory: research
           enable-cache: true
           cache-dependency-glob: research/uv.lock
-      - uses: taiki-e/install-action@4cef1412cce204788f482e778a0b9187f9626a29 # v2.87.21
+      - uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2.87.22
         with:
           tool: just
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
@@ -80,7 +80,7 @@ jobs:
           working-directory: research
           enable-cache: true
           cache-dependency-glob: research/uv.lock
-      - uses: taiki-e/install-action@4cef1412cce204788f482e778a0b9187f9626a29 # v2.87.21
+      - uses: taiki-e/install-action@83ac0ad63c0167e6f06796fab0fce28db1bf3db0 # v2.87.22
         with:
           tool: just
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
