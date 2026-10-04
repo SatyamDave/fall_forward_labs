@@ -6,13 +6,17 @@ Regenerated automatically by `.github/workflows/docs-status.yml` on every merge 
 Narrative docs: [project guide](guide/quant-core-guide.html) ·
 [base status](reports/base-status.md) · [NOW](NOW.md).
 
-Generated from `main` at **1082e6f 2026-10-04**. Latest CI on `main`: **failure on b6f3e98**.
+Generated from `main` at **989bf46 2026-10-04**. Latest CI on `main`: **failure on b6f3e98**.
 Paid AI loops: **on**.
 
-## Open pull requests (6)
+## Open pull requests (10)
 
 | PR | Title | Author | Draft |
 |---|---|---|---|
+| [#126](https://github.com/SatyamDave/fall_forward_labs/pull/126) | build(deps): Bump the actions group with 3 updates | app/dependabot | no |
+| [#125](https://github.com/SatyamDave/fall_forward_labs/pull/125) | build(deps-dev): Bump ruff from 0.16.9 to 0.16.10 in /research in the python group | app/dependabot | no |
+| [#124](https://github.com/SatyamDave/fall_forward_labs/pull/124) | build(deps): Bump the cargo group in /engine with 3 updates | app/dependabot | no |
+| [#123](https://github.com/SatyamDave/fall_forward_labs/pull/123) | build(deps): Bump https://github.com/astral-sh/ruff-pre-commit from v0.16.9 to 0.16.10 in the pre-commit group | app/dependabot | no |
 | [#122](https://github.com/SatyamDave/fall_forward_labs/pull/122) | docs(compliance): Rohit signs off on first asset (SPY) and budget caps | SatyamDave | no |
 | [#120](https://github.com/SatyamDave/fall_forward_labs/pull/120) | Add an experimental dip-reversion rule decider for shadow runs | SatyamDave | no |
 | [#119](https://github.com/SatyamDave/fall_forward_labs/pull/119) | Persist daily risk usage across bridge restarts and lock live runs | SatyamDave | no |
@@ -44,6 +48,7 @@ Paid AI loops: **on**.
 
 | Commit | Date | Subject |
 |---|---|---|
+| `989bf46` | 2026-10-04 | docs(status): regenerate live status from 1082e6f [skip ci] |
 | `1082e6f` | 2026-10-04 | docs(status): regenerate live status from 3d9cd8b [skip ci] |
 | `3d9cd8b` | 2026-10-04 | docs(status): regenerate live status from b03bbc7 [skip ci] |
 | `b03bbc7` | 2026-10-04 | docs(status): regenerate live status from b48d694 [skip ci] |
@@ -55,7 +60,6 @@ Paid AI loops: **on**.
 | `415dd41` | 2026-10-02 | docs(status): regenerate live status from f0c51d7 [skip ci] |
 | `f0c51d7` | 2026-10-02 | docs(status): regenerate live status from 4e5e3ab [skip ci] |
 | `4e5e3ab` | 2026-10-02 | docs(status): regenerate live status from 53607d3 [skip ci] |
-| `53607d3` | 2026-10-02 | docs(status): regenerate live status from eeae207 [skip ci] |
 
 ## Decisions (ADRs)
 
