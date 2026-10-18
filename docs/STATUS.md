@@ -6,18 +6,17 @@ Regenerated automatically by `.github/workflows/docs-status.yml` on every merge 
 Narrative docs: [project guide](guide/quant-core-guide.html) ·
 [base status](reports/base-status.md) · [NOW](NOW.md).
 
-Generated from `main` at **3e3eab8 2026-10-18**. Latest CI on `main`: **failure on b6f3e98**.
+Generated from `main` at **eb72142 2026-10-18**. Latest CI on `main`: **failure on b6f3e98**.
 Paid AI loops: **on**.
 
-## Open pull requests (11)
+## Open pull requests (10)
 
 | PR | Title | Author | Draft |
 |---|---|---|---|
-| [#130](https://github.com/SatyamDave/fall_forward_labs/pull/130) | build(deps): Bump the actions group across 1 directory with 9 updates | app/dependabot | no |
-| [#129](https://github.com/SatyamDave/fall_forward_labs/pull/129) | build(deps-dev): Bump the python group across 1 directory with 2 updates | app/dependabot | no |
-| [#128](https://github.com/SatyamDave/fall_forward_labs/pull/128) | build(deps): Bump the cargo group across 1 directory with 4 updates | app/dependabot | no |
-| [#127](https://github.com/SatyamDave/fall_forward_labs/pull/127) | build(deps): Bump rust from `93ce27a` to `114c7a4` in /.devcontainer in the docker group | app/dependabot | no |
-| [#123](https://github.com/SatyamDave/fall_forward_labs/pull/123) | build(deps): Bump https://github.com/astral-sh/ruff-pre-commit from v0.16.9 to 0.16.10 in the pre-commit group across 1 directory | app/dependabot | no |
+| [#133](https://github.com/SatyamDave/fall_forward_labs/pull/133) | build(deps): Bump the actions group across 1 directory with 12 updates | app/dependabot | no |
+| [#132](https://github.com/SatyamDave/fall_forward_labs/pull/132) | build(deps): Bump the python group across 1 directory with 4 updates | app/dependabot | no |
+| [#131](https://github.com/SatyamDave/fall_forward_labs/pull/131) | build(deps): Bump the cargo group across 1 directory with 5 updates | app/dependabot | no |
+| [#123](https://github.com/SatyamDave/fall_forward_labs/pull/123) | build(deps): Bump https://github.com/astral-sh/ruff-pre-commit from v0.16.9 to 0.17.1 in the pre-commit group across 1 directory | app/dependabot | no |
 | [#122](https://github.com/SatyamDave/fall_forward_labs/pull/122) | docs(compliance): Rohit signs off on first asset (SPY) and budget caps | SatyamDave | no |
 | [#120](https://github.com/SatyamDave/fall_forward_labs/pull/120) | Add an experimental dip-reversion rule decider for shadow runs | SatyamDave | no |
 | [#119](https://github.com/SatyamDave/fall_forward_labs/pull/119) | Persist daily risk usage across bridge restarts and lock live runs | SatyamDave | no |
@@ -49,6 +48,7 @@ Paid AI loops: **on**.
 
 | Commit | Date | Subject |
 |---|---|---|
+| `eb72142` | 2026-10-18 | docs(status): regenerate live status from 3e3eab8 [skip ci] |
 | `3e3eab8` | 2026-10-18 | docs(status): regenerate live status from 8b036dc [skip ci] |
 | `8b036dc` | 2026-10-18 | docs(status): regenerate live status from 79a4abc [skip ci] |
 | `79a4abc` | 2026-10-18 | docs(status): regenerate live status from a8dfb9b [skip ci] |
@@ -60,7 +60,6 @@ Paid AI loops: **on**.
 | `cb6a599` | 2026-10-17 | docs(status): regenerate live status from f25840d [skip ci] |
 | `f25840d` | 2026-10-17 | docs(status): regenerate live status from 51e63a7 [skip ci] |
 | `51e63a7` | 2026-10-17 | docs(status): regenerate live status from 6322d11 [skip ci] |
-| `6322d11` | 2026-10-17 | docs(status): regenerate live status from 5af4204 [skip ci] |
 
 ## Decisions (ADRs)
 
