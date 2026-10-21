@@ -6,7 +6,7 @@ Regenerated automatically by `.github/workflows/docs-status.yml` on every merge 
 Narrative docs: [project guide](guide/quant-core-guide.html) ·
 [base status](reports/base-status.md) · [NOW](NOW.md).
 
-Generated from `main` at **9188eae 2026-10-21**. Latest CI on `main`: **failure on b6f3e98**.
+Generated from `main` at **9e23402 2026-10-21**. Latest CI on `main`: **failure on b6f3e98**.
 Paid AI loops: **on**.
 
 ## Open pull requests (10)
@@ -48,6 +48,7 @@ Paid AI loops: **on**.
 
 | Commit | Date | Subject |
 |---|---|---|
+| `9e23402` | 2026-10-21 | docs(status): regenerate live status from 9188eae [skip ci] |
 | `9188eae` | 2026-10-21 | docs(status): regenerate live status from 19ed762 [skip ci] |
 | `19ed762` | 2026-10-21 | docs(status): regenerate live status from 766e0c4 [skip ci] |
 | `766e0c4` | 2026-10-21 | docs(status): regenerate live status from c4039de [skip ci] |
@@ -59,7 +60,6 @@ Paid AI loops: **on**.
 | `ca0eaed` | 2026-10-20 | docs(status): regenerate live status from ff58a60 [skip ci] |
 | `ff58a60` | 2026-10-20 | docs(status): regenerate live status from d70354f [skip ci] |
 | `d70354f` | 2026-10-19 | docs(status): regenerate live status from e27a176 [skip ci] |
-| `e27a176` | 2026-10-19 | docs(status): regenerate live status from bdb46d6 [skip ci] |
 
 ## Decisions (ADRs)
 
