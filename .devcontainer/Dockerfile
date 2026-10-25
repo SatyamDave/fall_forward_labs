@@ -8,7 +8,7 @@
 #         https://registry-1.docker.io/v2/library/rust/manifests/1-bookworm -D - -o /dev/null
 # `docker` itself is not available in this environment, so this Dockerfile has not been built or
 # tested locally — only the base-image lookup and the tool install commands were verified.
-FROM rust:1-bookworm@sha256:93ce27a88655056a51dbdd8f5f2d7ddc071c7b0070fb288a37b5a285fc83971e
+FROM rust:1-bookworm@sha256:48b7f435b8fc6378ce43b44f15e3a47fd8919b2825f835c39bd4bd3da50af5b8
 
 ENV CARGO_HOME=/usr/local/cargo \
     RUSTUP_HOME=/usr/local/rustup \
