@@ -6,18 +6,17 @@ Regenerated automatically by `.github/workflows/docs-status.yml` on every merge 
 Narrative docs: [project guide](guide/quant-core-guide.html) ·
 [base status](reports/base-status.md) · [NOW](NOW.md).
 
-Generated from `main` at **823025f 2026-11-08**. Latest CI on `main`: **failure on b6f3e98**.
+Generated from `main` at **e0a2923 2026-11-08**. Latest CI on `main`: **failure on b6f3e98**.
 Paid AI loops: **on**.
 
-## Open pull requests (11)
+## Open pull requests (10)
 
 | PR | Title | Author | Draft |
 |---|---|---|---|
-| [#136](https://github.com/SatyamDave/fall_forward_labs/pull/136) | Bump the python group across 1 directory with 5 updates | app/dependabot | no |
+| [#137](https://github.com/SatyamDave/fall_forward_labs/pull/137) | Bump the python group across 1 directory with 6 updates | app/dependabot | no |
 | [#135](https://github.com/SatyamDave/fall_forward_labs/pull/135) | Bump the actions group across 1 directory with 13 updates | app/dependabot | no |
-| [#134](https://github.com/SatyamDave/fall_forward_labs/pull/134) | Bump rust from `93ce27a` to `9181b56` in /.devcontainer in the docker group across 1 directory | app/dependabot | no |
 | [#131](https://github.com/SatyamDave/fall_forward_labs/pull/131) | Bump the cargo group across 1 directory with 5 updates | app/dependabot | no |
-| [#123](https://github.com/SatyamDave/fall_forward_labs/pull/123) | Bump https://github.com/astral-sh/ruff-pre-commit from v0.16.9 to 0.17.3 in the pre-commit group across 1 directory | app/dependabot | no |
+| [#123](https://github.com/SatyamDave/fall_forward_labs/pull/123) | Bump https://github.com/astral-sh/ruff-pre-commit from v0.16.9 to 0.17.4 in the pre-commit group across 1 directory | app/dependabot | no |
 | [#122](https://github.com/SatyamDave/fall_forward_labs/pull/122) | docs(compliance): Rohit signs off on first asset (SPY) and budget caps | SatyamDave | no |
 | [#120](https://github.com/SatyamDave/fall_forward_labs/pull/120) | Add an experimental dip-reversion rule decider for shadow runs | SatyamDave | no |
 | [#119](https://github.com/SatyamDave/fall_forward_labs/pull/119) | Persist daily risk usage across bridge restarts and lock live runs | SatyamDave | no |
@@ -49,6 +48,7 @@ Paid AI loops: **on**.
 
 | Commit | Date | Subject |
 |---|---|---|
+| `e0a2923` | 2026-11-08 | docs(status): regenerate live status from 823025f [skip ci] |
 | `823025f` | 2026-11-08 | docs(status): regenerate live status from 4a0dc2c [skip ci] |
 | `4a0dc2c` | 2026-11-08 | docs(status): regenerate live status from 8a6a8ed [skip ci] |
 | `8a6a8ed` | 2026-11-07 | docs(status): regenerate live status from 10b6cc7 [skip ci] |
@@ -60,7 +60,6 @@ Paid AI loops: **on**.
 | `b7a3263` | 2026-11-06 | docs(status): regenerate live status from 42ae18a [skip ci] |
 | `42ae18a` | 2026-11-06 | docs(status): regenerate live status from 6e50a4e [skip ci] |
 | `6e50a4e` | 2026-11-06 | docs(status): regenerate live status from 73dd4b1 [skip ci] |
-| `73dd4b1` | 2026-11-05 | docs(status): regenerate live status from 76a3003 [skip ci] |
 
 ## Decisions (ADRs)
 
