@@ -6,17 +6,18 @@ Regenerated automatically by `.github/workflows/docs-status.yml` on every merge 
 Narrative docs: [project guide](guide/quant-core-guide.html) ·
 [base status](reports/base-status.md) · [NOW](NOW.md).
 
-Generated from `main` at **b2c5140 2026-11-22**. Latest CI on `main`: **failure on b6f3e98**.
+Generated from `main` at **5631659 2026-11-22**. Latest CI on `main`: **failure on b6f3e98**.
 Paid AI loops: **on**.
 
-## Open pull requests (10)
+## Open pull requests (11)
 
 | PR | Title | Author | Draft |
 |---|---|---|---|
+| [#138](https://github.com/SatyamDave/fall_forward_labs/pull/138) | Bump rust from `93ce27a` to `ade39a7` in /.devcontainer in the docker group | app/dependabot | no |
 | [#137](https://github.com/SatyamDave/fall_forward_labs/pull/137) | Bump the python group across 1 directory with 6 updates | app/dependabot | no |
 | [#135](https://github.com/SatyamDave/fall_forward_labs/pull/135) | Bump the actions group across 1 directory with 13 updates | app/dependabot | no |
 | [#131](https://github.com/SatyamDave/fall_forward_labs/pull/131) | Bump the cargo group across 1 directory with 5 updates | app/dependabot | no |
-| [#123](https://github.com/SatyamDave/fall_forward_labs/pull/123) | Bump https://github.com/astral-sh/ruff-pre-commit from v0.16.9 to 0.17.5 in the pre-commit group across 1 directory | app/dependabot | no |
+| [#123](https://github.com/SatyamDave/fall_forward_labs/pull/123) | Bump https://github.com/astral-sh/ruff-pre-commit from v0.16.9 to 0.17.6 in the pre-commit group across 1 directory | app/dependabot | no |
 | [#122](https://github.com/SatyamDave/fall_forward_labs/pull/122) | docs(compliance): Rohit signs off on first asset (SPY) and budget caps | SatyamDave | no |
 | [#120](https://github.com/SatyamDave/fall_forward_labs/pull/120) | Add an experimental dip-reversion rule decider for shadow runs | SatyamDave | no |
 | [#119](https://github.com/SatyamDave/fall_forward_labs/pull/119) | Persist daily risk usage across bridge restarts and lock live runs | SatyamDave | no |
@@ -48,6 +49,7 @@ Paid AI loops: **on**.
 
 | Commit | Date | Subject |
 |---|---|---|
+| `5631659` | 2026-11-22 | docs(status): regenerate live status from b2c5140 [skip ci] |
 | `b2c5140` | 2026-11-22 | docs(status): regenerate live status from be7cbe2 [skip ci] |
 | `be7cbe2` | 2026-11-22 | docs(status): regenerate live status from fa78f26 [skip ci] |
 | `fa78f26` | 2026-11-21 | docs(status): regenerate live status from ceeb383 [skip ci] |
@@ -59,7 +61,6 @@ Paid AI loops: **on**.
 | `dff8624` | 2026-11-20 | docs(status): regenerate live status from 33f99ea [skip ci] |
 | `33f99ea` | 2026-11-19 | docs(status): regenerate live status from b0652ab [skip ci] |
 | `b0652ab` | 2026-11-19 | docs(status): regenerate live status from 7c616d0 [skip ci] |
-| `7c616d0` | 2026-11-19 | docs(status): regenerate live status from 24a58c9 [skip ci] |
 
 ## Decisions (ADRs)
 
